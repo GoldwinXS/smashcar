@@ -40,6 +40,20 @@
   #hud .label { color: var(--muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
   #combo { color: var(--cyan); font-weight: 700; min-width: 0; transition: transform .12s; }
 
+  /* Turn / objective banner */
+  #banner {
+    position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
+    pointer-events: none; text-align: center; width: max-content; max-width: 92vw;
+  }
+  #banner .who {
+    font-size: 17px; font-weight: 700; letter-spacing: .02em;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 999px; padding: 7px 18px; display: inline-block;
+    transition: color .15s, border-color .15s;
+  }
+  #banner .who.danger { color: #ff6b6b; border-color: #ff6b6b; }
+  #banner .sub { display: block; margin-top: 7px; color: var(--muted); font-size: 13px; }
+
   /* Overlays */
   .overlay {
     position: fixed; inset: 0; display: none; place-items: center;
@@ -88,17 +102,22 @@
   <div class="pill"><span class="label">Score</span> <span id="score">0</span></div>
 </div>
 
+<div id="banner" style="display:none">
+  <span class="who" id="bannerWho">Your shot</span>
+  <span class="sub" id="bannerSub">Drag back from your comet to launch</span>
+</div>
+
 <!-- Start menu -->
 <div class="overlay show" id="menu">
   <div class="card">
     <p class="tag">Mini-golf &times; Sumo &middot; in orbit</p>
     <h1>Comet Court</h1>
-    <p>Slingshot your <b>comet</b> and bump every rival out of the shrinking ring. Gravity wells bend your shot — use them.</p>
+    <p><b>Goal: be the last comet on the platform.</b> You are the <b style="color:#36e2ff">cyan</b> comet. Slingshot yourself into the 3 rivals and shove them off the edge — but don't get shoved off yourself.</p>
     <ul>
-      <li><b>Aim:</b> press &amp; drag back from your comet, release to launch (like a slingshot).</li>
-      <li><b>Read the curve:</b> dotted line previews your path through gravity.</li>
-      <li><b>Sumo rule:</b> any comet pushed outside the ring is out. Last one in wins the round.</li>
-      <li><b>Combo:</b> knock out several with one shot to multiply your score.</li>
+      <li><b>Aim:</b> press &amp; drag <b>back</b> from your cyan comet, release to launch (like a slingshot). Pull farther = more power.</li>
+      <li><b>Knock them off:</b> hit a rival on its inner side so it flies out past the glowing edge. That's a knockout.</li>
+      <li><b>The swirls are hazards,</b> not goals — gravity wells curve every shot. The dotted line shows your path.</li>
+      <li><b>Take turns:</b> you flick, then each rival flicks. Last comet standing wins the round; the platform then shrinks.</li>
     </ul>
     <div class="row"><button class="btn-primary" id="startBtn">Start match</button></div>
   </div>
@@ -145,7 +164,8 @@ const CFG = {
   restitution: 0.92,      // base bounciness of comet collisions
   ringShrink: 0.93,       // ring radius multiplier each round
   simCap: 9 * 60,         // max frames a single shot may simulate
-  aiPower: 0.78,          // fraction of max power AI uses
+  aiPower: 0.9,           // fraction of max power AI uses
+  aiSpread: 0.14,         // AI aim inaccuracy (radians, smaller = sharper)
 };
 
 const PALETTE = {
@@ -175,7 +195,23 @@ const game = {
   simFrames: 0,
   playerPerks: [],
   comboFlashes: [],
+  particles: [],
+  shake: 0,
 };
+
+// ---- Juice: particles + screen shake --------------------------
+function burst(x, y, color, n, spread) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = Math.random() * spread;
+    game.particles.push({
+      x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+      life: 1, decay: 0.02 + Math.random() * 0.03,
+      r: 1.5 + Math.random() * 2.5, color,
+    });
+  }
+}
+function addShake(mag) { game.shake = Math.min(game.shake + mag, 22); }
 
 // ---- Vector helpers -------------------------------------------
 const len = (x, y) => Math.hypot(x, y);
@@ -191,7 +227,7 @@ function resize() {
   cv.style.height = H + "px";
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   cx = W / 2; cy = H / 2;
-  ringR0 = size * 0.42;
+  ringR0 = size * 0.46;
   unit = ringR0;
   // keep current ring proportional if mid-game
   ringR = ringR0 * Math.pow(CFG.ringShrink, game.round - 1);
@@ -212,12 +248,13 @@ function makeStars() {
 }
 
 // ---- Comet factory --------------------------------------------
-function makeComet(color, isPlayer) {
+function makeComet(color, isPlayer, name) {
   return {
     x: 0, y: 0, vx: 0, vy: 0,
-    r: unit * 0.052,
+    r: unit * 0.05,
     mass: 1,
     color,
+    name: name || "You",
     isPlayer: !!isPlayer,
     alive: true,
     powerMult: 1,
@@ -246,16 +283,17 @@ function rollPerks(n) {
 }
 
 // ---- Match setup ----------------------------------------------
+const AI_NAMES = ["Red", "Gold", "Violet", "Mint"];
 function placeComets(count) {
   game.comets = [];
-  const player = makeComet(PALETTE.player, true);
+  const player = makeComet(PALETTE.player, true, "You");
   game.comets.push(player);
   for (let i = 0; i < count - 1; i++) {
-    game.comets.push(makeComet(PALETTE.ai[i % PALETTE.ai.length], false));
+    game.comets.push(makeComet(PALETTE.ai[i % PALETTE.ai.length], false, AI_NAMES[i % AI_NAMES.length]));
   }
   // arrange on a circle inside the ring
   const ringNow = ringR0 * Math.pow(CFG.ringShrink, game.round - 1);
-  const rad = ringNow * 0.62;
+  const rad = ringNow * 0.66;
   const start = -Math.PI / 2;
   game.comets.forEach((c, i) => {
     const a = start + (i / count) * Math.PI * 2;
@@ -268,14 +306,14 @@ function placeComets(count) {
 function placeWells() {
   game.wells = [];
   const ringNow = ringR0 * Math.pow(CFG.ringShrink, game.round - 1);
-  // one central-ish well, sometimes a second offset one on later rounds
-  game.wells.push({ x: cx, y: cy, r: unit * 0.06, mass: 1 });
+  // Wells are OFF-CENTER on purpose: a glowing dot dead-center reads as a
+  // "bullseye goal". Off-center swirls read as hazards to route around.
+  const base = Math.random() * Math.PI * 2;
+  const d = ringNow * 0.34;
+  game.wells.push({ x: cx + Math.cos(base) * d, y: cy + Math.sin(base) * d, r: unit * 0.055, mass: 1 });
   if (game.round >= 2) {
-    const a = Math.random() * Math.PI * 2;
-    const d = ringNow * 0.4;
-    game.wells[0].x = cx + Math.cos(a) * d * 0.5;
-    game.wells[0].y = cy + Math.sin(a) * d * 0.5;
-    game.wells.push({ x: cx - Math.cos(a) * d, y: cy - Math.sin(a) * d, r: unit * 0.05, mass: 0.8 });
+    const a2 = base + Math.PI + (Math.random() - 0.5) * 1.2;
+    game.wells.push({ x: cx + Math.cos(a2) * d, y: cy + Math.sin(a2) * d, r: unit * 0.05, mass: 0.85 });
   }
 }
 
@@ -289,6 +327,7 @@ function startMatch() {
 }
 
 function beginRound(askPerk) {
+  hideBanner();
   ringR = ringR0 * Math.pow(CFG.ringShrink, game.round - 1);
   const count = 4;
   placeComets(count);
@@ -318,6 +357,7 @@ function beginPlayerTurn() {
   game.turnQueue = aliveComets();
   game.turnIdx = 0;
   game.state = "aim";
+  showBanner();
 }
 
 function launch(comet, vx, vy) {
@@ -349,25 +389,23 @@ function nextTurn() {
 
 function aiTakeTurn(c) {
   game.state = "ai";
-  // small think delay for readability
+  showBanner(c);
+  // small think delay so the player can see whose turn it is
   setTimeout(() => {
     if (!c.alive) { nextTurn(); return; }
-    // pick a target: prefer the comet nearest the ring edge (easiest eject)
+    // pick a target: prefer the comet nearest the edge (easiest eject)
     const targets = aliveComets().filter(t => t !== c);
     if (!targets.length) { nextTurn(); return; }
     targets.sort((a, b) => distFromCenter(b) - distFromCenter(a));
     const tgt = targets[0];
-    // aim from the center-side of the target so we shove it outward
+    // aim from the center-side of the target so impact shoves it outward
     const outAng = Math.atan2(tgt.y - cy, tgt.x - cx);
-    // approach point: slightly center-side of target
-    const aimX = tgt.x, aimY = tgt.y;
-    let ang = Math.atan2(aimY - c.y, aimX - c.x);
-    // bias the aim outward along the target's radial so impact ejects it
-    ang = ang * 0.7 + outAng * 0.3;
-    ang += (Math.random() - 0.5) * 0.22; // inaccuracy
-    const power = CFG.maxLaunch * CFG.aiPower * c.powerMult * (0.85 + Math.random() * 0.15);
+    let ang = Math.atan2(tgt.y - c.y, tgt.x - c.x);
+    ang = ang * 0.6 + outAng * 0.4;
+    ang += (Math.random() - 0.5) * CFG.aiSpread; // inaccuracy
+    const power = CFG.maxLaunch * CFG.aiPower * c.powerMult * (0.9 + Math.random() * 0.1);
     launch(c, Math.cos(ang) * power, Math.sin(ang) * power);
-  }, 480);
+  }, 620);
 }
 
 function distFromCenter(c) { return len(c.x - cx, c.y - cy); }
@@ -407,6 +445,8 @@ function stepPhysics() {
     if (distFromCenter(c) - c.r > ringR) {
       c.alive = false;
       justOut++;
+      burst(c.x, c.y, c.color, 26, 6);
+      addShake(c.isPlayer ? 16 : 12);
       if (!c.isPlayer) {
         // award knockout to whoever is taking the current shot
         const shooter = game.turnQueue[game.turnIdx];
@@ -446,6 +486,13 @@ function resolveCollision(a, b) {
   const ix = jImp * nx, iy = jImp * ny;
   a.vx -= ix / a.mass; a.vy -= iy / a.mass;
   b.vx += ix / b.mass; b.vy += iy / b.mass;
+  // impact feedback scaled by how hard the hit was
+  const impact = Math.min(Math.abs(vn), 14);
+  if (impact > 2) {
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    burst(mx, my, "#ffffff", Math.round(impact), impact * 0.5);
+    addShake(impact * 0.5);
+  }
 }
 
 function registerKnockout(c) {
@@ -455,6 +502,8 @@ function registerKnockout(c) {
   game.comboPeak = Math.max(game.comboPeak, game.combo);
   game.score += base * game.combo;
   game.comboFlashes.push({ x: c.x, y: c.y, t: 1, mult: game.combo });
+  burst(c.x, c.y, PALETTE.player, 14, 7);
+  addShake(8);
   pulse(comboEl);
 }
 
@@ -478,6 +527,7 @@ function checkRoundOver() {
 // ---- Round / match resolution ---------------------------------
 function endRound(playerWon) {
   game.state = "result";
+  hideBanner();
   if (playerWon) {
     game.score += 250 * game.round;
     game.round++;
@@ -567,30 +617,63 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
-  // ring (the court)
+  // ---- screen shake (world-space only; starfield stays put) ----
+  const sh = game.shake;
+  const ox = sh ? (Math.random() - 0.5) * sh : 0;
+  const oy = sh ? (Math.random() - 0.5) * sh : 0;
   ctx.save();
-  const grd = ctx.createRadialGradient(cx, cy, ringR * 0.2, cx, cy, ringR);
-  grd.addColorStop(0, "rgba(54,226,255,0.05)");
-  grd.addColorStop(1, "rgba(54,226,255,0.0)");
-  ctx.fillStyle = grd;
-  ctx.beginPath(); ctx.arc(cx, cy, ringR, 0, Math.PI * 2); ctx.fill();
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = PALETTE.ring;
-  ctx.setLineDash([6, 10]);
-  ctx.beginPath(); ctx.arc(cx, cy, ringR, 0, Math.PI * 2); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.restore();
+  ctx.translate(ox, oy);
 
-  // gravity wells
+  // ---- the platform (a disc floating in the void) ----
+  // soft shadow so it reads as a raised surface, NOT a flat target ring
+  const voidg = ctx.createRadialGradient(cx, cy, ringR * 0.92, cx, cy, ringR * 1.55);
+  voidg.addColorStop(0, "rgba(0,0,0,0.55)");
+  voidg.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = voidg;
+  ctx.beginPath(); ctx.arc(cx, cy, ringR * 1.55, 0, Math.PI * 2); ctx.fill();
+
+  // surface — one smooth off-axis gradient, no concentric "bullseye" rings
+  const surf = ctx.createRadialGradient(cx - ringR * 0.3, cy - ringR * 0.3, ringR * 0.1, cx, cy, ringR);
+  surf.addColorStop(0, "#1a2747");
+  surf.addColorStop(1, "#0a1124");
+  ctx.fillStyle = surf;
+  ctx.beginPath(); ctx.arc(cx, cy, ringR, 0, Math.PI * 2); ctx.fill();
+
+  // danger rim just inside the edge — falling off here = death
+  ctx.lineWidth = ringR * 0.045;
+  ctx.strokeStyle = "rgba(255,107,107,0.16)";
+  ctx.beginPath(); ctx.arc(cx, cy, ringR - ringR * 0.022, 0, Math.PI * 2); ctx.stroke();
+
+  // bright solid edge (the platform rim)
+  ctx.lineWidth = 3.5;
+  ctx.strokeStyle = "#5be3ff";
+  ctx.shadowColor = "#36e2ff"; ctx.shadowBlur = 18;
+  ctx.beginPath(); ctx.arc(cx, cy, ringR, 0, Math.PI * 2); ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // ---- gravity wells: swirling vortices (hazards, not goals) ----
+  const tw = performance.now() / 1000;
   for (const w of game.wells) {
-    const g = ctx.createRadialGradient(w.x, w.y, 0, w.x, w.y, w.r * 4.5);
-    g.addColorStop(0, "rgba(124,92,255,0.55)");
-    g.addColorStop(0.4, "rgba(124,92,255,0.18)");
+    const R = w.r * 5.0;
+    const g = ctx.createRadialGradient(w.x, w.y, 0, w.x, w.y, R);
+    g.addColorStop(0, "rgba(124,92,255,0.5)");
+    g.addColorStop(0.45, "rgba(124,92,255,0.16)");
     g.addColorStop(1, "rgba(124,92,255,0)");
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(w.x, w.y, w.r * 4.5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#b9a8ff";
-    ctx.beginPath(); ctx.arc(w.x, w.y, w.r * 0.7, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(w.x, w.y, R, 0, Math.PI * 2); ctx.fill();
+    // rotating spiral arms make it read as a sucking vortex
+    ctx.save();
+    ctx.translate(w.x, w.y);
+    ctx.rotate(tw * 1.4);
+    ctx.strokeStyle = "rgba(190,170,255,0.5)";
+    ctx.lineWidth = 2;
+    for (let k = 0; k < 3; k++) {
+      ctx.rotate((Math.PI * 2) / 3);
+      ctx.beginPath(); ctx.arc(0, 0, w.r * 2.1, 0, Math.PI * 0.9); ctx.stroke();
+    }
+    ctx.restore();
+    ctx.fillStyle = "#d7ccff";
+    ctx.beginPath(); ctx.arc(w.x, w.y, w.r * 0.6, 0, Math.PI * 2); ctx.fill();
   }
 
   // comets + trails
@@ -616,11 +699,31 @@ function draw() {
     ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.beginPath(); ctx.arc(c.x - c.r * 0.28, c.y - c.r * 0.28, c.r * 0.32, 0, Math.PI * 2); ctx.fill();
-    // marker for the player
+    // player ring + YOU label + edge-danger pulse
     if (c.isPlayer) {
       ctx.strokeStyle = "rgba(255,255,255,0.9)";
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(c.x, c.y, c.r * 1.5, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.92)";
+      ctx.font = "bold 12px Segoe UI, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("YOU", c.x, c.y + c.r * 3.0);
+      if (distFromCenter(c) > ringR * 0.76) {
+        const pl = 0.5 + 0.5 * Math.sin(performance.now() / 120);
+        ctx.strokeStyle = "rgba(255,80,80," + (0.4 + pl * 0.5) + ")";
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(c.x, c.y, c.r * (1.9 + pl * 0.5), 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    // whose-turn chevron above the current shooter
+    const shooter = game.turnQueue[game.turnIdx];
+    if (c === shooter && (game.state === "aim" || game.state === "ai")) {
+      const bob = Math.sin(performance.now() / 220) * 4;
+      const ay = c.y - c.r * 2.7 + bob;
+      ctx.fillStyle = c.color;
+      ctx.beginPath();
+      ctx.moveTo(c.x, ay + 9); ctx.lineTo(c.x - 7, ay); ctx.lineTo(c.x + 7, ay);
+      ctx.closePath(); ctx.fill();
     }
   }
 
@@ -658,6 +761,14 @@ function draw() {
     ctx.globalAlpha = 1;
   }
 
+  // particles (impacts + knockout bursts)
+  for (const pt of game.particles) {
+    ctx.globalAlpha = Math.max(0, pt.life);
+    ctx.fillStyle = pt.color;
+    ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
   // combo flashes
   for (const f of game.comboFlashes) {
     ctx.globalAlpha = Math.max(0, f.t);
@@ -667,12 +778,36 @@ function draw() {
     ctx.fillText("x" + f.mult + "!", f.x, f.y - (1 - f.t) * 40);
     ctx.globalAlpha = 1;
   }
+
+  ctx.restore(); // end screen shake
 }
 
 // ---- HUD -------------------------------------------------------
 const roundEl = document.getElementById("roundNum");
 const comboEl = document.getElementById("combo");
 const scoreEl = document.getElementById("score");
+const bannerEl = document.getElementById("banner");
+const bannerWho = document.getElementById("bannerWho");
+const bannerSub = document.getElementById("bannerSub");
+function rivalsLeft() { return game.comets.filter(c => c.alive && !c.isPlayer).length; }
+function showBanner(aiComet) {
+  bannerEl.style.display = "block";
+  const n = rivalsLeft();
+  if (aiComet) {
+    bannerWho.textContent = aiComet.name + " is taking a shot";
+    bannerWho.classList.remove("danger");
+    bannerSub.textContent = "Watch where it aims";
+  } else {
+    const p = game.comets.find(c => c.isPlayer);
+    const danger = p && distFromCenter(p) > ringR * 0.76;
+    bannerWho.textContent = "Your shot";
+    bannerWho.classList.toggle("danger", !!danger);
+    bannerSub.innerHTML = danger
+      ? "You're near the edge &mdash; careful!"
+      : "Drag back from your comet to launch &middot; " + n + " rival" + (n === 1 ? "" : "s") + " to knock off";
+  }
+}
+function hideBanner() { bannerEl.style.display = "none"; }
 function pulse(el) { el.style.transform = "scale(1.35)"; setTimeout(() => el.style.transform = "scale(1)", 130); }
 function syncHud() {
   roundEl.textContent = game.round;
@@ -689,6 +824,12 @@ function frame() {
   if (game.state === "sim") stepPhysics();
   for (const f of game.comboFlashes) f.t -= 0.012;
   game.comboFlashes = game.comboFlashes.filter(f => f.t > 0);
+  // advance particles + decay shake
+  for (const pt of game.particles) {
+    pt.x += pt.vx; pt.y += pt.vy; pt.vx *= 0.92; pt.vy *= 0.92; pt.life -= pt.decay;
+  }
+  game.particles = game.particles.filter(pt => pt.life > 0);
+  game.shake *= 0.86; if (game.shake < 0.4) game.shake = 0;
   draw();
   syncHud();
   requestAnimationFrame(frame);

@@ -4,8 +4,8 @@
     {
       "name": "comet-court",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8000"],
-      "port": 8000
+      "runtimeArgs": ["-m", "http.server", "8111"],
+      "port": 8111
     }
   ]
 }
