@@ -1,15 +1,16 @@
-# WATERSHED
+# SIGNAL
 
-**A minimalist spatial-strategy game.** One verb, one elegant mathematical
-engine, escalating pressure — built deliberately so there is no single
-"solved" strategy.
+**A minimalist network-coverage strategy game** (formerly "WATERSHED" — same
+engine, clearer theme). One verb, one elegant mathematical engine, escalating
+pressure — built deliberately so there is no single "solved" strategy.
 
-**Springs** (warm dots, demand) each flow to the **nearest well** you place.
-A well drains the demand it covers, but its capacity is a budget spent
-against *distance* — near demand is cheap to serve, far demand is expensive.
-Sit a well on its demand and it clears; let demand drift away and the
-backlog piles up and **floods**, draining your reserve. Keep the network
-balanced as demand keeps rising.
+Crowds of **devices** (warm dots) connect to the **nearest tower** you place.
+Signal weakens with distance, so a device far from its tower **clogs** it —
+its capacity is a service budget spent against *distance*. Park a tower on its
+crowd and it serves cleanly; let the crowd drift away and load climbs until
+the tower **congests** and drops connections, costing **uptime**. You have
+**fewer towers than crowds**, so you're always triaging — keep the city
+connected as demand keeps rising.
 
 ## Why it's built this way (the research)
 

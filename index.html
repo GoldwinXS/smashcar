@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>WATERSHED — keep the network balanced</title>
+<title>SIGNAL — keep the city connected</title>
 <style>
   :root {
     --bg0:#05060f; --bg1:#0b1024; --ink:#e8f0ff; --muted:#8aa0c8;
@@ -44,30 +44,30 @@
 <body>
 <div id="app">
   <div id="hud">
-    <div class="pill"><span class="label">Turn</span> <span id="turnVal">1</span></div>
-    <div class="pill"><span class="label" id="reserveLabel">Reserve</span> <span id="intHearts"></span></div>
-    <div class="pill"><span class="label">Wells</span> <span id="wellsVal">3</span></div>
-    <div class="pill"><span class="label">Score</span> <span id="scoreVal">0</span></div>
+    <div class="pill"><span class="label">Hour</span> <span id="turnVal">1</span></div>
+    <div class="pill"><span class="label" id="reserveLabel">Uptime</span> <span id="intHearts"></span></div>
+    <div class="pill"><span class="label">Towers</span> <span id="wellsVal">3</span></div>
+    <div class="pill"><span class="label">Data</span> <span id="scoreVal">0</span></div>
   </div>
   <div id="banner"></div>
   <canvas id="field"></canvas>
   <div id="controls">
-    <button class="btn-primary" id="advBtn">Advance turn</button>
+    <button class="btn-primary" id="advBtn">Advance hour</button>
   </div>
 </div>
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">A spatial-partition strategy game</p>
-    <h1>WATERSHED</h1>
-    <p><b>Springs</b> (warm dots) each flow to the <b>nearest well</b> you place. A well can only carry so much flow — push too much through it and it <b>floods</b>, draining your reserve.</p>
+    <p class="tag">A network-coverage strategy game</p>
+    <h1>SIGNAL</h1>
+    <p>Crowds of <b>devices</b> (warm dots) connect to the <b>nearest tower</b>. Signal weakens with distance, so a device far from its tower <b>clogs</b> it — too much load and the tower <b>congests</b>, dropping connections and costing you uptime.</p>
     <ul>
-      <li><b>One move:</b> drag wells around the field to re-divide it. The whole map re-slices to whatever is nearest — so every well you move changes <i>everyone's</i> boundaries.</li>
-      <li><b>Adapt vs. commit:</b> moving a well <b>unsettles</b> it — its capacity drops, then recharges over a few turns while it sits still.</li>
-      <li><b>Plan ahead:</b> each turn the springs grow and new ones bloom. Next turn's growth is shown as faint ghosts <i>before</i> you commit — arrange for what's coming.</li>
-      <li><b>Survive:</b> keep wells from flooding. Demand never stops rising; last as long as you can.</li>
+      <li><b>You have fewer towers than crowds</b> — so you can't blanket everything. Drag towers to cover the heaviest demand and decide what to leave thin.</li>
+      <li><b>Distance is the whole game:</b> park a tower <i>on</i> its crowd and it serves them cleanly; let the crowd drift away and its load climbs. Moving a tower also <b>re-links</b> it — its capacity dips briefly, then recovers.</li>
+      <li><b>Plan ahead:</b> crowds grow and new ones gather every hour — next hour's surge is shown as faint <b>ghosts</b> before you commit.</li>
+      <li><b>Stay up:</b> keep towers out of the red. Demand never stops rising; keep the city connected as long as you can.</li>
     </ul>
-    <p class="note">Why this should stay interesting: the best layout is a nearest-point partition that's genuinely hard to optimise and shifts every turn as demand drifts — so there's no single trick that wins, only ever-better reading of the board. (Design grounded in published work on game "depth": Lantz et al. 2017; Nealen et al. 2011.)</p>
+    <p class="note">Why it should stay interesting: covering drifting demand with too-few towers is a nearest-point (facility-location) problem that's genuinely hard and shifts every hour — no single trick wins, only ever-better reading of the map. (Grounded in research on game "depth": Lantz et al. 2017; Nealen et al. 2011.)</p>
     <div class="row"><button class="btn-primary" id="startBtn">Start</button></div>
   </div>
 </div>
@@ -96,16 +96,19 @@ let cv, ctx, W = 0, H = 0, DPR = 1;
 let nextId = 1;
 
 const CFG = {
-  startWells: 3, maxWells: 8, newWellEvery: 4,
+  startWells: 3, maxWells: 6, newWellEvery: 5,   // towers stay scarcer than crowds
   baseCap: 16,                 // capacity at full charge
   capFloorFrac: 0.45,          // capacity at zero charge = baseCap * this
-  chargeGain: 0.26,            // recharge per turn (slower = moving costs more)
-  moveReset: 0.35,             // charge a well drops to when moved
-  startReserve: 5, maxReserve: 5,
+  chargeGain: 0.3,             // re-link recharge per hour
+  moveReset: 0.45,             // charge a tower drops to when moved
+  startReserve: 100, maxReserve: 100,  // uptime % (proportional, forgiving)
   step: 20,                    // Voronoi sample size (px)
-  drainBudget: 28,             // drain budget per capacity point (weight*px)
-  minCost: 22,                 // a spring on the well still costs this per unit
-  floodTol: 4,                 // backlog above this floods a well
+  drainBudget: 26,             // service budget per capacity point (weight*px)
+  comfortR: 30,                // within this radius signal is full-strength (forgiving "good zone")
+  floodTol: 4,                 // congestion above this starts dropping connections
+  dmgScale: 1.4,               // uptime lost per unit of congestion beyond floodTol
+  regen: 6,                    // uptime regained per clean hour
+  driftMin: 11, driftMax: 19,  // crowd drift speed (faster = constant re-balancing)
 };
 
 const S = {
@@ -156,7 +159,9 @@ function resolveDrain(mutate) {
     let budget = capacityOf(w) * CFG.drainBudget;
     let backlog = 0;
     for (const sp of owned) {
-      const cost = Math.max(CFG.minCost, Math.sqrt(dist2(sp.x, sp.y, w.x, w.y)));
+      // within comfortR the signal is full-strength (a forgiving zone, not a
+      // single pixel-perfect spot); beyond it, distance bites linearly
+      const cost = Math.max(CFG.comfortR, Math.sqrt(dist2(sp.x, sp.y, w.x, w.y)));
       const can = budget > 0 ? Math.min(sp.w, Math.floor(budget / cost)) : 0;
       budget -= can * cost; served += can;
       const remaining = mutate ? (sp.w -= can, sp.w) : (sp.w - can);
@@ -211,16 +216,21 @@ function advance() {
   for (const sp of S.springs) if (growSet.has(sp.id)) sp.w += 1;
   // 2) recharge settled wells
   for (const w of S.wells) w.charge = Math.min(1, w.charge + CFG.chargeGain);
-  // 3) drain: each well serves what its budget can reach (placement-driven)
+  // 3) drain: each tower serves what its budget can reach (placement-driven)
   const { flooded, served } = resolveDrain(true);
-  S.springs = S.springs.filter(sp => sp.w > 0); // fully-served springs disappear
-  // 4) reserve: lose per flooded well, slowly regen when clean
-  if (flooded > 0) S.reserve -= flooded; else if (S.reserve < CFG.maxReserve) S.reserve += 1;
+  S.springs = S.springs.filter(sp => sp.w > 0); // fully-served demand disappears
+  // 4) uptime: damage is PROPORTIONAL to how congested towers are (a tower can
+  //    run a little hot harmlessly; severe/sustained congestion is what hurts)
+  let severity = 0;
+  for (const w of S.wells) if (w.backlog > CFG.floodTol) severity += (w.backlog - CFG.floodTol);
+  if (severity > 0) S.reserve -= severity * CFG.dmgScale;
+  else if (S.reserve < CFG.maxReserve) S.reserve += CFG.regen;
+  S.reserve = clamp(S.reserve, 0, CFG.maxReserve);
   S.score += served;
   // 5) hand out wells + drift + escalate
   driftHotspots();
   if (S.turn % CFG.newWellEvery === 0 && S.wells.length + S.wellsToPlace < CFG.maxWells) S.wellsToPlace++;
-  if (S.turn % 9 === 0 && S.hotspots.length < 4) S.hotspots.push(makeHotspot());
+  if (S.turn % 7 === 0 && S.hotspots.length < 6) S.hotspots.push(makeHotspot());
   S.turn++;
   // 6) lose check
   if (S.reserve <= 0) { S.reserve = 0; S.phase = "over"; updateUI(); showResult(); return; }
@@ -230,16 +240,16 @@ function advance() {
 
 // ---- setup -----------------------------------------------------
 function makeHotspot() {
-  const a = Math.random() * Math.PI * 2, sp = 7 + Math.random() * 6;
+  const a = Math.random() * Math.PI * 2, sp = CFG.driftMin + Math.random() * (CFG.driftMax - CFG.driftMin);
   return { x: 80 + Math.random() * (W - 160), y: 80 + Math.random() * (H - 160), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp };
 }
 function startGame() {
   resize();
   S.phase = "plan"; S.turn = 1; S.reserve = CFG.startReserve; S.score = 0;
   S.wells = []; S.springs = []; S.hotspots = []; S.wellsToPlace = 0; S.drag = null;
-  for (let i = 0; i < 2; i++) S.hotspots.push(makeHotspot());
-  // seed enough demand that turn 1 already needs balancing
-  for (let i = 0; i < 7; i++) { const h = S.hotspots[i % S.hotspots.length]; S.springs.push({ id: nextId++, x: clamp(h.x + (Math.random() - 0.5) * 170, 24, W - 24), y: clamp(h.y + (Math.random() - 0.5) * 170, 24, H - 24), w: 2 + (Math.random() * 3 | 0), owner: -1 }); }
+  for (let i = 0; i < 4; i++) S.hotspots.push(makeHotspot()); // more crowds than towers -> triage
+  // seed enough demand that hour 1 already forces hard choices
+  for (let i = 0; i < 7; i++) { const h = S.hotspots[i % S.hotspots.length]; S.springs.push({ id: nextId++, x: clamp(h.x + (Math.random() - 0.5) * 150, 24, W - 24), y: clamp(h.y + (Math.random() - 0.5) * 150, 24, H - 24), w: 1 + (Math.random() * 2 | 0), owner: -1 }); }
   // starting wells, spread out
   for (let i = 0; i < CFG.startWells; i++) {
     S.wells.push({ id: nextId++, x: W * (i + 1) / (CFG.startWells + 1), y: H / 2, charge: 1, load: 0, flooded: false, color: WELL_COLORS[i % WELL_COLORS.length] });
@@ -372,7 +382,7 @@ function draw() {
   // hint for an unplaced well
   if (S.wellsToPlace > 0 && S.phase === "plan") {
     ctx.fillStyle = "rgba(54,226,255,0.85)"; ctx.font = "600 14px Segoe UI"; ctx.textAlign = "center";
-    ctx.fillText("Tap an empty spot to place a new well (" + S.wellsToPlace + ")", W / 2, 22);
+    ctx.fillText("Tap an empty spot to deploy a new tower (" + S.wellsToPlace + ")", W / 2, 22);
   }
 }
 function hexA(hex, a) {
@@ -392,8 +402,9 @@ const advBtn = document.getElementById("advBtn");
 function updateUI() {
   turnVal.textContent = S.turn;
   intHearts.innerHTML = "";
-  for (let i = 0; i < CFG.maxReserve; i++) { const h = document.createElement("span"); h.className = "heart" + (i < S.reserve ? "" : " off"); intHearts.appendChild(h); }
-  reserveLabel.classList.toggle("low", S.reserve <= 2);
+  const segs = Math.ceil(S.reserve / 20); // 5 segments of uptime
+  for (let i = 0; i < 5; i++) { const h = document.createElement("span"); h.className = "heart" + (i < segs ? "" : " off"); intHearts.appendChild(h); }
+  reserveLabel.classList.toggle("low", S.reserve <= 40);
   wellsVal.textContent = S.wells.length + (S.wellsToPlace ? " (+" + S.wellsToPlace + ")" : "");
   scoreVal.textContent = S.score;
   advBtn.disabled = S.phase !== "plan";
@@ -401,8 +412,8 @@ function updateUI() {
   let over = 0; for (const w of S.wells) if (w.flooded) over++;
   if (S.phase === "plan") {
     bannerEl.innerHTML = over > 0
-      ? "<b style='color:#ff8a8a'>" + over + " well" + (over > 1 ? "s" : "") + " flooding</b> — re-balance before you advance, or lose reserve."
-      : "<b>Balanced.</b> Plan for the ghosts (next turn's growth), then advance.";
+      ? "<b style='color:#ff8a8a'>" + over + " tower" + (over > 1 ? "s" : "") + " congested</b> — move a tower onto that demand before you advance, or lose uptime."
+      : "<b>All connected.</b> Plan for the ghosts (next hour's surge), then advance.";
   }
 }
 
@@ -412,8 +423,8 @@ const resultTitle = document.getElementById("resultTitle");
 const resultBody = document.getElementById("resultBody");
 const resultBtn = document.getElementById("resultBtn");
 function showResult() {
-  resultTitle.textContent = "Network collapsed";
-  resultBody.innerHTML = "You held the watershed for <b>" + (S.turn - 1) + "</b> turns and served <b>" + S.score + "</b> total flow before the reserve ran dry.";
+  resultTitle.textContent = "Network down";
+  resultBody.innerHTML = "You kept the city connected for <b>" + (S.turn - 1) + "</b> hours and pushed <b>" + S.score + "</b> data before uptime ran out.";
   resultBtn.textContent = "Play again";
   resultOverlay.classList.add("show");
 }
