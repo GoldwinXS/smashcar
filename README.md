@@ -1,61 +1,75 @@
-# Comet Court
+# FIREWALL
 
-**Mini-golf × Sumo, played in orbit.** A quick, fun browser prototype.
+**Tower-defense × tactics chess, with perfect information.** A browser
+strategy prototype where every threat is telegraphed — you win or lose on
+your decisions, not your reflexes.
 
-Slingshot your comet, let gravity wells bend the shot, and bump every rival
-out of the shrinking ring. Last comet standing wins the round.
+Viruses cross a circuit grid toward your **core** on the right. Each one
+shows exactly where it will move next, so every turn is a planning puzzle:
+place programs, funnel the swarm into kill-zones, manage energy, and hold
+the line for 8 waves.
 
 ## The mashup
 
-The brief was a "Rocket League move" — bolt together two genres nobody usually
-combines. The top 5 concepts became the game's pillars:
+A fresh two-genre combo built specifically for **strategy and planning**:
 
-1. **Orbital gravity / slingshot physics** — gravity wells curve every shot.
-2. **Mini-golf** — one flick per turn: aim, set power, read the curve.
-3. **Sumo / king-of-the-hill** — knock rivals out of a ring that tightens each round.
-4. **Roguelike-lite** — pick one stacking perk before each match.
-5. **Arcade combo multiplier** — chain knockouts in a single shot for escalating score.
+- **Tower Defense** — waves advance toward a core you must protect; you
+  place defenses to stop them.
+- **Grid tactics (chess-like)** — programs have distinct attack/blocking
+  *patterns*, and positioning is everything.
+- **Perfect-information telegraphing** (the *Into the Breach* idea) — you
+  see every enemy's next move before you commit, so losses are fair and
+  every turn is a solvable puzzle.
 
-## Controls
+## How to play
 
-- **Aim:** press and drag *back* from your (cyan, ringed) comet, then release —
-  like a slingshot. Pull farther for more power.
-- **Read the curve:** the dotted preview shows your path through gravity.
-- **Win the round:** be the last comet inside the ring.
+Each turn you **plan**, then **Execute**. On execute: your programs fire
+first, then every virus advances one step along its arrow.
 
-Works with mouse or touch.
+Programs (cost in energy):
+
+- **Wall (1)** — blocks movement (2 HP). Reroutes the swarm; chewed through if you fully seal a lane.
+- **Zap (2)** — hits the 4 orthogonal neighbours for 1 each turn. Great on chokepoints.
+- **Beam (3)** — fires right along its whole row for 1. Mows a lane.
+- **Nova (5)** — hits all 8 surrounding tiles for 2. An expensive kill-zone.
+- **Mine (2)** — detonates when a virus steps on it: 3 damage to that tile + neighbours, then gone.
+
+You gain energy each wave and can **Recycle** programs to adapt — full
+refund if placed this turn, 50% otherwise. Place and recycle freely while
+planning; nothing locks until you Execute.
+
+Controls: click a tool then click a tile (mouse or touch). Keys `1`–`5`
+pick tools, `R` recycles, `Enter`/`Space` executes the turn.
 
 ## Run it locally
 
-It's a single static file — just open `index.html` in a browser.
-
-For a clean local server (avoids any future fetch/CORS quirks):
+Single static file — open `index.html`, or serve it:
 
 ```bash
-python -m http.server 8000
-# then visit http://localhost:8000
+python -m http.server 8000   # then visit http://localhost:8000
 ```
 
 ## Deploy to GitHub Pages
 
-No build step. Push to GitHub, then in the repo:
-
-1. **Settings → Pages**
-2. **Source:** *Deploy from a branch*
-3. **Branch:** `main`, folder `/ (root)` → **Save**
-
-The site goes live at `https://<user>.github.io/<repo>/`.
-The included `.nojekyll` file tells Pages to serve everything as-is.
+No build step. Push, then **Settings → Pages → Deploy from a branch →
+`main` / root**. The `.nojekyll` file keeps Pages serving everything as-is.
+Lives at `https://<user>.github.io/<repo>/`.
 
 ## Status
 
-v0.1 prototype — core loop is playable end to end. Tunables live in the `CFG`
-object at the top of the `<script>` in `index.html`.
+v0.1 prototype, fully playable through 8 waves. Verified by simulation:
+doing nothing loses the core; a reasonable strategy clears all waves.
+Tunables (wave composition, costs, energy, core HP) live in the constants
+at the top of the `<script>`.
 
 ### Ideas to explore next
 
-- Sound (launch whoosh, knockout thump, combo chime).
-- More perks + an enemy/perk-draft for the AI too.
-- Smarter AI that banks shots off gravity wells on purpose.
-- Online or hotseat 2-player.
-- Per-round hazards: moving wells, a black hole, bumpers.
+- More program/virus types (splitters, shielded viruses, slow fields).
+- A roguelike-lite draft: pick a new program or upgrade between waves.
+- Smarter difficulty curve + an endless mode with a score leaderboard.
+- Sound and juicier resolve animations.
+
+## Also in this repo
+
+- `comet-court.html` — the earlier prototype (slingshot/gravity sumo)
+  this project started as, kept for reference. Its history is in git.

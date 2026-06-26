@@ -3,164 +3,121 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Comet Court — mini-golf x sumo, in orbit</title>
+<title>FIREWALL — tower-defense chess</title>
 <style>
   :root {
-    --bg0: #05060f;
-    --bg1: #0b1024;
-    --ink: #e8f0ff;
-    --muted: #8aa0c8;
-    --cyan: #36e2ff;
-    --line: #233056;
-    --panel: rgba(12, 18, 40, 0.92);
+    --bg0: #05060f; --bg1: #0b1024;
+    --ink: #e8f0ff; --muted: #8aa0c8;
+    --cyan: #36e2ff; --purple: #b388ff; --amber: #ffd166;
+    --foe: #ff6b6b;
+    --line: #233056; --panel: rgba(12, 18, 40, 0.92);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
-    margin: 0; height: 100%; overflow: hidden;
+    margin: 0; min-height: 100%; overflow: hidden;
     background: radial-gradient(120% 120% at 50% 0%, var(--bg1), var(--bg0));
-    color: var(--ink);
-    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--ink); font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
     user-select: none; touch-action: none;
   }
-  #wrap { position: fixed; inset: 0; display: grid; place-items: center; }
-  canvas { display: block; touch-action: none; }
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px; }
 
-  /* HUD */
-  #hud {
-    position: fixed; top: 0; left: 0; right: 0;
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 12px 16px; pointer-events: none; gap: 12px;
-    font-variant-numeric: tabular-nums;
-  }
-  #hud .pill {
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 999px; padding: 6px 14px; font-size: 14px;
-    display: flex; align-items: center; gap: 8px;
-  }
-  #hud .label { color: var(--muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
-  #combo { color: var(--cyan); font-weight: 700; min-width: 0; transition: transform .12s; }
+  #hud { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; font-variant-numeric: tabular-nums; }
+  .pill { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .pill .label { color: var(--muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+  #coreHearts { display: flex; gap: 3px; }
+  .heart { width: 11px; height: 11px; border-radius: 3px; background: var(--cyan); box-shadow: 0 0 7px rgba(54,226,255,.6); }
+  .heart.off { background: #2a3554; box-shadow: none; }
+  #energyVal { color: var(--amber); font-weight: 700; }
 
-  /* Turn / objective banner */
-  #banner {
-    position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
-    pointer-events: none; text-align: center; width: max-content; max-width: 92vw;
-  }
-  #banner .who {
-    font-size: 17px; font-weight: 700; letter-spacing: .02em;
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 999px; padding: 7px 18px; display: inline-block;
-    transition: color .15s, border-color .15s;
-  }
-  #banner .who.danger { color: #ff6b6b; border-color: #ff6b6b; }
-  #banner .sub { display: block; margin-top: 7px; color: var(--muted); font-size: 13px; }
+  #banner { color: var(--muted); font-size: 13px; min-height: 18px; text-align: center; }
+  #banner b { color: var(--ink); }
 
-  /* Overlays */
-  .overlay {
-    position: fixed; inset: 0; display: none; place-items: center;
-    background: rgba(3, 5, 14, 0.72); backdrop-filter: blur(3px); z-index: 5;
-  }
-  .overlay.show { display: grid; }
-  .card {
-    width: min(560px, 92vw); background: var(--panel);
-    border: 1px solid var(--line); border-radius: 18px;
-    padding: 28px; box-shadow: 0 24px 80px rgba(0,0,0,.6);
-  }
-  .card h1 { margin: 0 0 4px; font-size: 30px; letter-spacing: -0.5px; }
-  .card h2 { margin: 0 0 16px; font-size: 20px; }
-  .card .tag { color: var(--cyan); font-size: 13px; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 14px; }
-  .card p { color: var(--muted); line-height: 1.55; margin: 0 0 14px; font-size: 15px; }
-  .card ul { color: var(--muted); line-height: 1.6; margin: 0 0 18px; padding-left: 18px; font-size: 14px; }
-  .card b { color: var(--ink); }
+  canvas { display: block; touch-action: none; border-radius: 8px; }
 
+  /* palette */
+  #palette { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 860px; }
+  .tool {
+    background: #111a38; border: 1px solid var(--line); border-radius: 11px;
+    padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    transition: border-color .12s, background .12s, opacity .12s; min-width: 92px;
+  }
+  .tool svg { width: 20px; height: 20px; flex: none; }
+  .tool .tn { font-size: 13px; font-weight: 600; }
+  .tool .tc { font-size: 11px; color: var(--amber); }
+  .tool.sel { border-color: var(--cyan); background: #14224a; box-shadow: 0 0 16px rgba(54,226,255,.3); }
+  .tool.dis { opacity: .4; cursor: not-allowed; }
+  .tool.recycle .tc { color: var(--muted); }
+
+  #controls { display: flex; gap: 10px; align-items: center; }
   button {
-    font: inherit; cursor: pointer; border-radius: 12px;
-    border: 1px solid var(--line); background: #131c3c; color: var(--ink);
-    padding: 12px 18px; font-size: 15px; transition: transform .08s, border-color .15s, background .15s;
+    font: inherit; cursor: pointer; border-radius: 11px; border: 1px solid var(--line);
+    background: #131c3c; color: var(--ink); padding: 11px 18px; font-size: 15px;
+    transition: transform .08s, border-color .15s, background .15s;
   }
   button:hover { border-color: var(--cyan); }
   button:active { transform: translateY(1px); }
-  .btn-primary { background: linear-gradient(180deg, #1ea7c4, #1577a8); border-color: #36e2ff; font-weight: 600; }
+  .btn-primary { background: linear-gradient(180deg, #1ea7c4, #1577a8); border-color: #36e2ff; font-weight: 700; }
 
-  .perks { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-  @media (max-width: 520px) { .perks { grid-template-columns: 1fr; } }
-  .perk {
-    text-align: left; padding: 16px; border-radius: 14px; line-height: 1.4;
-    display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
-  }
-  .perk .pname { font-weight: 700; font-size: 15px; }
-  .perk .pdesc { color: var(--muted); font-size: 13px; }
+  /* overlays */
+  .overlay { position: fixed; inset: 0; display: none; place-items: center; background: rgba(3,5,14,.74); backdrop-filter: blur(3px); z-index: 9; padding: 16px; }
+  .overlay.show { display: grid; }
+  .card { width: min(600px, 94vw); max-height: 92vh; overflow:auto; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 26px; box-shadow: 0 24px 80px rgba(0,0,0,.6); }
+  .card h1 { margin: 0 0 4px; font-size: 30px; letter-spacing: -.5px; }
+  .card .tag { color: var(--cyan); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 12px; }
+  .card p { color: var(--muted); line-height: 1.55; margin: 0 0 12px; font-size: 15px; }
+  .card ul { color: var(--muted); line-height: 1.55; margin: 0 0 14px; padding-left: 18px; font-size: 14px; }
+  .card b { color: var(--ink); }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; margin: 6px 0 16px; }
+  .legend .li { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; color: var(--muted); }
+  .legend .li svg { width: 22px; height: 22px; flex: none; margin-top: 1px; }
+  .legend .li b { color: var(--ink); }
   .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
-
-  /* PULSE ability button */
-  #pulse {
-    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
-    display: none; align-items: center; gap: 11px;
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 14px; padding: 11px 20px; cursor: pointer; z-index: 4;
-    transition: border-color .15s, box-shadow .15s, opacity .15s;
-  }
-  #pulse .pl { font-weight: 700; letter-spacing: .1em; font-size: 15px; }
-  #pulse .pips { display: flex; gap: 5px; }
-  #pulse .pip { width: 10px; height: 10px; border-radius: 50%; background: var(--cyan); }
-  #pulse .pip.off { background: #33405f; }
-  #pulse .key { color: var(--muted); font-size: 12px; }
-  #pulse.ready { border-color: var(--cyan); box-shadow: 0 0 26px rgba(54,226,255,.4); }
-  #pulse.ready .pl { color: var(--cyan); }
-  #pulse.spent { opacity: .42; }
 </style>
 </head>
 <body>
-<div id="wrap"><canvas id="game"></canvas></div>
-
-<div id="hud">
-  <div class="pill"><span class="label">Round</span> <span id="roundNum">1</span></div>
-  <div class="pill"><span class="label">Combo</span> <span id="combo">x1</span></div>
-  <div class="pill"><span class="label">Score</span> <span id="score">0</span></div>
+<div id="app">
+  <div id="hud">
+    <div class="pill"><span class="label">Wave</span> <span id="waveVal">1</span><span style="color:var(--muted)">/8</span></div>
+    <div class="pill"><span class="label">Core</span> <span id="coreHearts"></span></div>
+    <div class="pill"><span class="label">Energy</span> <span id="energyVal">7</span></div>
+    <div class="pill"><span class="label">Score</span> <span id="scoreVal">0</span></div>
+  </div>
+  <div id="banner"></div>
+  <canvas id="grid"></canvas>
+  <div id="palette"></div>
+  <div id="controls">
+    <button class="btn-primary" id="execBtn">Execute turn</button>
+  </div>
 </div>
 
-<div id="banner" style="display:none">
-  <span class="who" id="bannerWho">Your shot</span>
-  <span class="sub" id="bannerSub">Drag back from your comet to launch</span>
-</div>
+<!-- icon defs reused by JS via cloneNode -->
+<svg style="display:none" id="icons" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="ic-wall" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="#6b7aa8"/><path d="M3 12h18M9 5v7M15 12v7" stroke="#0b1024" stroke-width="1.6"/></symbol>
+  <symbol id="ic-zap" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18" stroke="#36e2ff" stroke-width="3" stroke-linecap="round"/></symbol>
+  <symbol id="ic-beam" viewBox="0 0 24 24"><path d="M3 12h15" stroke="#5be3ff" stroke-width="3" stroke-linecap="round"/><path d="M14 7l6 5-6 5z" fill="#5be3ff"/></symbol>
+  <symbol id="ic-nova" viewBox="0 0 24 24"><g stroke="#b388ff" stroke-width="2.4" stroke-linecap="round"><path d="M12 4v16M4 12h16M6 6l12 12M18 6L6 18"/></g></symbol>
+  <symbol id="ic-mine" viewBox="0 0 24 24"><path d="M12 3l9 9-9 9-9-9z" fill="#ffd166"/><circle cx="12" cy="12" r="2.4" fill="#0b1024"/></symbol>
+  <symbol id="ic-recycle" viewBox="0 0 24 24"><path d="M7 7a7 7 0 0 1 11 2" fill="none" stroke="#8aa0c8" stroke-width="2.2" stroke-linecap="round"/><path d="M18 4v5h-5" fill="none" stroke="#8aa0c8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 17a7 7 0 0 1-11-2" fill="none" stroke="#8aa0c8" stroke-width="2.2" stroke-linecap="round"/><path d="M6 20v-5h5" fill="none" stroke="#8aa0c8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
 
-<div id="pulse" title="Fire a shockwave (Space)">
-  <span class="pl">PULSE</span>
-  <span class="pips" id="pulsePips"></span>
-  <span class="key">Space</span>
-</div>
-
-<!-- Start menu -->
+<!-- start menu -->
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">Mini-golf &times; Sumo &middot; in orbit</p>
-    <h1>Comet Court</h1>
-    <p><b>Goal: be the last comet on the platform.</b> You are the <b style="color:#36e2ff">cyan</b> comet. You and the rivals take turns flicking — last one on the platform wins.</p>
-    <ul>
-      <li><b>Aim:</b> drag <b>back</b> from your comet and release, like a slingshot. Farther = more power. The dotted line previews your curve through the gravity wells.</li>
-      <li><b>PULSE (Space / button):</b> your defense. A rival's shot is shown as a dashed line before it fires — tap PULSE to shove it away, or to knock a nearby rival off the edge yourself. <b>One charge per round.</b></li>
-      <li><b>Play the angles:</b> rivals go after whoever is most <b>exposed</b>. Hang back from the edge and let them shove <i>each other</i> off.</li>
-      <li><b>Perks stack</b> each round — build a tank, a sniper, or a pulse-bomber.</li>
-    </ul>
-    <div class="row"><button class="btn-primary" id="startBtn">Start match</button></div>
+    <p class="tag">Tower-defense &times; tactics chess</p>
+    <h1>FIREWALL</h1>
+    <p>Viruses cross the grid toward your <b style="color:var(--cyan)">core</b> on the right. Every virus shows <b>exactly where it will move next</b> — so each turn is a planning puzzle, not a reflex test. Place programs, funnel the swarm into kill-zones, and don't let them breach.</p>
+    <p><b>Each turn:</b> spend energy to place or recycle programs, then hit <b>Execute</b>. Your programs fire first, then every virus advances one step along the arrow. Survive 8 waves.</p>
+    <div class="legend" id="menuLegend"></div>
+    <p style="font-size:13px">Tip: a <b>Wall</b> reroutes the swarm — bend their path through a <b>Nova</b> or a <b>Mine</b>. You can place and recycle freely while planning; nothing is locked until you Execute.</p>
+    <div class="row"><button class="btn-primary" id="startBtn">Start</button></div>
   </div>
 </div>
 
-<!-- Perk pick (roguelike-lite) -->
-<div class="overlay" id="perkOverlay">
-  <div class="card">
-    <p class="tag">Choose a perk</p>
-    <h2>Tune your comet</h2>
-    <div class="perks" id="perkList"></div>
-    <p class="hint">One perk per match. Stacks as you win.</p>
-  </div>
-</div>
-
-<!-- Round / game result -->
+<!-- result -->
 <div class="overlay" id="resultOverlay">
   <div class="card">
-    <h1 id="resultTitle">Round won</h1>
-    <p id="resultBody">Nice shooting.</p>
+    <h1 id="resultTitle">Wave cleared</h1>
+    <p id="resultBody"></p>
     <div class="row"><button class="btn-primary" id="resultBtn">Continue</button></div>
   </div>
 </div>
@@ -168,856 +125,545 @@
 <script>
 "use strict";
 /* ============================================================
-   Comet Court — single-file prototype
-   Mashup pillars: orbital gravity, mini-golf flick, sumo
-   knockout, roguelike perks, arcade combo scoring.
+   FIREWALL — single-file prototype
+   Mashup: Tower Defense (waves to your core) x grid Tactics
+   (chess-like patterns) x perfect-information telegraphing.
+   Pillars: planning, positioning, energy economy, routing,
+   read-and-counter. No reflexes — every threat is shown.
    ============================================================ */
 
-const cv = document.getElementById("game");
-const ctx = cv.getContext("2d");
+const COLS = 8, ROWS = 6;        // col 0 = spawn, col 7 = core, 1..6 buildable
+const CORE_COL = COLS - 1, SPAWN_COL = 0;
+const CORE_HP = 5;
+const START_ENERGY = 7, ENERGY_PER_WAVE = 4, ENERGY_CAP = 18;
 
-// ---- Tunables (physics in px/frame at 60fps) -------------------
-const CFG = {
-  friction: 0.986,        // per-frame velocity damping
-  stopSpeed: 0.06,        // below this a comet is "settled"
-  maxLaunch: 19,          // cap on launch speed
-  dragScale: 0.13,        // drag pixels -> launch speed
-  gravity: 26,            // gravity well strength
-  minGravDist: 26,        // softening so wells don't spike
-  restitution: 0.92,      // base bounciness of comet collisions
-  ringShrink: 0.93,       // ring radius multiplier each round
-  simCap: 9 * 60,         // max frames a single shot may simulate
-  aiPower: 0.86,          // fraction of max power AI uses
-  aiSpread: 0.17,         // AI aim inaccuracy (radians, smaller = sharper)
-  pulseRange: 0.55,       // shockwave radius as fraction of ringR
-  pulsePower: 17,         // shockwave push strength
+const TOOLS = {
+  wall:  { name: "Wall",  cost: 1, icon: "ic-wall",  color: "#6b7aa8", desc: "Blocks movement (2 HP). Reroutes the swarm; chewed through if fully sealed." },
+  zap:   { name: "Zap",   cost: 2, icon: "ic-zap",   color: "#36e2ff", desc: "Hits the 4 orthogonal neighbours for 1 each turn. Great on chokepoints." },
+  beam:  { name: "Beam",  cost: 3, icon: "ic-beam",  color: "#5be3ff", desc: "Fires right along its whole row for 1. Mow down a lane." },
+  nova:  { name: "Nova",  cost: 5, icon: "ic-nova",  color: "#b388ff", desc: "Hits all 8 surrounding tiles for 2. An expensive kill-zone." },
+  mine:  { name: "Mine",  cost: 2, icon: "ic-mine",  color: "#ffd166", desc: "Detonates when a virus steps on it: 3 damage to that tile + neighbours, then gone." },
+};
+const TOOL_ORDER = ["wall", "zap", "beam", "nova", "mine"];
+
+const VIRUS = {
+  grunt:  { hp: 2, speed: 1, score: 10, color: "#ff8a5b", shape: "circle" },
+  runner: { hp: 1, speed: 2, score: 15, color: "#ffd166", shape: "triangle" },
+  brute:  { hp: 4, speed: 1, score: 25, color: "#ff5d7e", shape: "hex" },
 };
 
-const PALETTE = {
-  player: "#36e2ff",
-  ai: ["#ff6b6b", "#ffd166", "#b388ff", "#4dffa6"],
-  ring: "#2b3a6b",
-  well: "#7c5cff",
+// each wave: list of {type,row}. Rows 0..5.
+const WAVES = [
+  [["grunt",2],["grunt",3]],
+  [["grunt",1],["grunt",3],["grunt",4]],
+  [["grunt",0],["grunt",2],["grunt",3],["grunt",5]],
+  [["runner",1],["grunt",2],["grunt",3],["runner",4]],
+  [["grunt",0],["runner",2],["grunt",3],["grunt",4],["runner",5]],
+  [["grunt",0],["brute",2],["brute",3],["grunt",5]],
+  [["runner",0],["brute",1],["grunt",3],["brute",4],["runner",5]],
+  [["grunt",0],["brute",1],["runner",2],["brute",3],["runner",4],["grunt",5]],
+];
+
+// ---- state -----------------------------------------------------
+let cv, ctx, TILE = 64, DPR = 1, gridW = 0, gridH = 0;
+let nextId = 1;
+const S = {
+  phase: "menu",      // menu | plan | won | lost
+  wave: 0, coreHP: CORE_HP, energy: START_ENERGY, score: 0, turn: 0,
+  viruses: [], programs: [], dist: null,
+  tool: "zap", hoverC: -1, hoverR: -1,
+  fx: [],             // transient particles / flashes
 };
 
-// ---- World state ----------------------------------------------
-let W = 0, H = 0, DPR = 1;
-let cx = 0, cy = 0;          // arena center (px)
-let ringR = 0, ringR0 = 0;   // current / base ring radius
-let unit = 0;                // scale unit ~ ring radius, for sizing
-
-const game = {
-  state: "menu",            // menu | aim | sim | ai | result
-  comets: [],
-  wells: [],
-  round: 1,
-  score: 0,
-  combo: 1,
-  comboPeak: 1,
-  shotKnockouts: 0,
-  simFrames: 0,
-  playerPerks: [],
-  comboFlashes: [],
-  particles: [],
-  shake: 0,
-  currentShooter: null,   // comet taking the current turn
-  lastWasPlayer: false,   // for 1:1 player/rival alternation
-  aiCounter: 0,           // round-robins which rival shoots
-  pulseCharges: 0,
-  pulseBase: 1,
-  pulseCredit: 0,         // frames during which eject is credited to the player's pulse
-  pulseRings: [],
-};
-
-// ---- Juice: particles + screen shake --------------------------
-function burst(x, y, color, n, spread) {
-  for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const s = Math.random() * spread;
-    game.particles.push({
-      x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-      life: 1, decay: 0.02 + Math.random() * 0.03,
-      r: 1.5 + Math.random() * 2.5, color,
-    });
-  }
-}
-function addShake(mag) { game.shake = Math.min(game.shake + mag, 22); }
-
-// ---- Vector helpers -------------------------------------------
 const len = (x, y) => Math.hypot(x, y);
+const inB = (c, r) => c >= 0 && c < COLS && r >= 0 && r < ROWS;
+const programAt = (c, r) => S.programs.find(p => p.col === c && p.row === r) || null;
+const virusAt = (c, r) => S.viruses.find(v => v.col === c && v.row === r) || null;
+const isWall = (c, r) => { const p = programAt(c, r); return p && p.type === "wall"; };
+const buildable = (c, r) => inB(c, r) && c > SPAWN_COL && c < CORE_COL;
 
-// ---- Resize ----------------------------------------------------
+// ---- sizing ----------------------------------------------------
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
-  const size = Math.min(window.innerWidth, window.innerHeight);
-  W = size; H = size;
-  cv.width = Math.floor(W * DPR);
-  cv.height = Math.floor(H * DPR);
-  cv.style.width = W + "px";
-  cv.style.height = H + "px";
+  const maxW = Math.min(window.innerWidth - 24, 860);
+  const maxH = window.innerHeight - 250;
+  TILE = Math.max(34, Math.floor(Math.min(maxW / COLS, maxH / ROWS)));
+  gridW = TILE * COLS; gridH = TILE * ROWS;
+  cv.width = Math.floor(gridW * DPR); cv.height = Math.floor(gridH * DPR);
+  cv.style.width = gridW + "px"; cv.style.height = gridH + "px";
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  cx = W / 2; cy = H / 2;
-  ringR0 = size * 0.46;
-  unit = ringR0;
-  // keep current ring proportional if mid-game
-  ringR = ringR0 * Math.pow(CFG.ringShrink, game.round - 1);
 }
 window.addEventListener("resize", resize);
 
-// ---- Starfield (static, generated once per size) ---------------
-let stars = [];
-function makeStars() {
-  stars = [];
-  const n = 90;
+const ccx = c => c * TILE + TILE / 2;
+const ccy = r => r * TILE + TILE / 2;
+
+// ---- pathing: multi-source BFS distance to the core column -----
+function computeDist() {
+  const INF = 1e9;
+  const dist = Array.from({ length: COLS }, () => new Array(ROWS).fill(INF));
+  const q = [];
+  for (let r = 0; r < ROWS; r++) { dist[CORE_COL][r] = 0; q.push([CORE_COL, r]); }
+  let head = 0;
+  while (head < q.length) {
+    const [c, r] = q[head++];
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nc = c + dc, nr = r + dr;
+      if (!inB(nc, nr) || isWall(nc, nr)) continue;
+      if (dist[nc][nr] > dist[c][r] + 1) { dist[nc][nr] = dist[c][r] + 1; q.push([nc, nr]); }
+    }
+  }
+  S.dist = dist;
+}
+
+// best forward neighbour for a virus at (c,r): lowest dist, must progress
+function bestNeighbour(c, r) {
+  const d = S.dist[c][r];
+  let best = null, bestD = d;
+  for (const [dc, dr] of [[1, 0], [0, 1], [0, -1], [-1, 0]]) { // prefer toward core / vertical
+    const nc = c + dc, nr = r + dr;
+    if (!inB(nc, nr) || isWall(nc, nr)) continue;
+    if (S.dist[nc][nr] < bestD) { bestD = S.dist[nc][nr]; best = { c: nc, r: nr }; }
+  }
+  return best;
+}
+
+// telegraph: up to `speed` steps ahead (ignores occupancy, for display/AI read)
+function telegraph(v) {
+  const steps = [];
+  let c = v.col, r = v.row;
+  for (let i = 0; i < v.speed; i++) {
+    const nb = bestNeighbour(c, r);
+    if (!nb) break;
+    steps.push(nb); c = nb.c; r = nb.r;
+    if (c === CORE_COL) break;
+  }
+  return steps;
+}
+
+// ---- turn resolution ------------------------------------------
+function firePrograms() {
+  const dmg = Array.from({ length: COLS }, () => new Array(ROWS).fill(0));
+  const addDmg = (c, r, n) => { if (inB(c, r)) dmg[c][r] += n; };
+  for (const p of S.programs) {
+    if (p.type === "zap") {
+      addDmg(p.col + 1, p.row, 1); addDmg(p.col - 1, p.row, 1);
+      addDmg(p.col, p.row + 1, 1); addDmg(p.col, p.row - 1, 1);
+    } else if (p.type === "beam") {
+      for (let c = p.col + 1; c < CORE_COL; c++) addDmg(c, p.row, 1);
+    } else if (p.type === "nova") {
+      for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++)
+        if (dc || dr) addDmg(p.col + dc, p.row + dr, 2);
+    }
+  }
+  return dmg;
+}
+
+// what fire will do — also used for the plan-phase preview
+function previewDamage() { return firePrograms(); }
+
+function detonateMine(p) {
+  flash(ccx(p.col), ccy(p.row), TOOLS.mine.color, 26, TILE * 0.12);
+  for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) {
+    const c = p.col + dc, r = p.row + dr;
+    const v = virusAt(c, r);
+    if (v) v.hp -= 3;
+  }
+  S.programs = S.programs.filter(x => x !== p);
+}
+
+function executeTurn() {
+  if (S.phase !== "plan") return;
+
+  // 1) programs fire
+  const dmg = firePrograms();
+  for (const v of S.viruses) v.hp -= dmg[v.col][v.row];
+  killDead("fire");
+
+  // 2) viruses advance (closest to core first to free up space)
+  computeDist();
+  const order = S.viruses.slice().sort((a, b) => S.dist[a.col][a.row] - S.dist[b.col][b.row]);
+  for (const v of order) {
+    if (v.hp <= 0) continue;
+    let steps = v.speed;
+    while (steps-- > 0 && v.hp > 0) {
+      const nb = bestNeighbour(v.col, v.row);
+      if (!nb) { attackWall(v); break; }
+      if (nb.c === CORE_COL) { breach(v); break; }
+      if (virusAt(nb.c, nb.r)) break; // lane blocked by another virus — wait
+      v.col = nb.c; v.row = nb.r;
+      const m = programAt(v.col, v.row);
+      if (m && m.type === "mine") detonateMine(m);
+      if (v.hp <= 0) break;
+    }
+  }
+  killDead("step");
+  S.viruses = S.viruses.filter(v => !v.breached);
+
+  // 3) walls may have been destroyed -> refresh field
+  computeDist();
+
+  // 4) wave / win
+  if (S.viruses.length === 0) {
+    if (S.wave >= WAVES.length) { S.phase = "won"; updateUI(); showResult("won"); return; }
+    startWave(S.wave + 1, true);
+  }
+
+  // 5) lose
+  if (S.coreHP <= 0) { S.phase = "lost"; updateUI(); showResult("lost"); return; }
+
+  for (const p of S.programs) p.placedTurn = -1; // older than this turn now -> 50% recycle
+  S.turn++;
+  updateUI();
+}
+
+function killDead(cause) {
+  const dead = S.viruses.filter(v => v.hp <= 0);
+  for (const v of dead) { S.score += VIRUS[v.type].score; flash(ccx(v.col), ccy(v.row), v.color, 18, TILE * 0.1); }
+  S.viruses = S.viruses.filter(v => v.hp > 0);
+}
+
+function breach(v) {
+  v.breached = true; S.coreHP = Math.max(0, S.coreHP - 1);
+  flash(cv ? ccx(CORE_COL) : 0, ccy(v.row), "#ff5d7e", 24, TILE * 0.12);
+}
+
+function attackWall(v) {
+  // stuck: chew the wall nearest the core (right, then vertical, then left)
+  for (const [dc, dr] of [[1, 0], [0, 1], [0, -1], [-1, 0]]) {
+    const c = v.col + dc, r = v.row + dr;
+    const w = programAt(c, r);
+    if (w && w.type === "wall") {
+      w.hp -= 1; flash(ccx(c), ccy(r), "#6b7aa8", 8, TILE * 0.06);
+      if (w.hp <= 0) S.programs = S.programs.filter(x => x !== w);
+      return;
+    }
+  }
+}
+
+// ---- waves -----------------------------------------------------
+function startWave(n, gainEnergy) {
+  S.wave = n;
+  const spec = WAVES[n - 1] || [];
+  for (const [type, row] of spec) {
+    const t = VIRUS[type];
+    S.viruses.push({ id: nextId++, type, col: SPAWN_COL, row, hp: t.hp, maxhp: t.hp, speed: t.speed, color: t.color, breached: false });
+  }
+  if (gainEnergy) S.energy = Math.min(ENERGY_CAP, S.energy + ENERGY_PER_WAVE);
+  computeDist();
+}
+
+// ---- placing / recycling --------------------------------------
+function tryPlace(c, r) {
+  if (S.phase !== "plan") return;
+  if (S.tool === "recycle") { tryRecycle(c, r); return; }
+  const t = TOOLS[S.tool]; if (!t) return;
+  if (!buildable(c, r)) { hint("You can only build in the middle columns."); return; }
+  if (programAt(c, r) || virusAt(c, r)) { hint("That tile is occupied."); return; }
+  if (S.energy < t.cost) { hint("Not enough energy for " + t.name + "."); return; }
+  S.energy -= t.cost;
+  const p = { id: nextId++, type: S.tool, col: c, row: r, hp: S.tool === "wall" ? 2 : 1, placedTurn: S.turn };
+  S.programs.push(p);
+  if (S.tool === "wall") computeDist();
+  updateUI();
+}
+
+function tryRecycle(c, r) {
+  const p = programAt(c, r); if (!p) return;
+  const cost = TOOLS[p.type].cost;
+  const refund = p.placedTurn === S.turn ? cost : Math.floor(cost / 2); // full this turn, else 50%
+  S.energy = Math.min(ENERGY_CAP, S.energy + refund);
+  S.programs = S.programs.filter(x => x !== p);
+  if (p.type === "wall") computeDist();
+  hint("Recycled " + TOOLS[p.type].name + " (+" + refund + " energy).");
+  updateUI();
+}
+
+// ---- effects ---------------------------------------------------
+function flash(x, y, color, n, spread) {
   for (let i = 0; i < n; i++) {
-    stars.push({
-      x: Math.random() * 1, y: Math.random() * 1,
-      r: Math.random() * 1.3 + 0.2, a: Math.random() * 0.5 + 0.15,
-    });
+    const a = Math.random() * Math.PI * 2, s = Math.random() * spread;
+    S.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: 0.04 + Math.random() * 0.04, r: 1.5 + Math.random() * 2, color });
   }
 }
 
-// ---- Comet factory --------------------------------------------
-function makeComet(color, isPlayer, name) {
-  return {
-    x: 0, y: 0, vx: 0, vy: 0,
-    r: unit * 0.05,          // radius is FIXED — perks never grow your hitbox
-    mass: 1,
-    color,
-    name: name || "You",
-    isPlayer: !!isPlayer,
-    alive: true,
-    powerMult: 1,
-    frictionMult: 1,
-    restBonus: 0,
-    pulseRangeMult: 1,
-    pulsePowerMult: 1,
-    bonusCharges: 0,
-    telegraph: null,         // AI's intended shot, shown before it fires
-    trail: [],
-  };
-}
+// =================== RENDER ====================================
+function draw() {
+  ctx.clearRect(0, 0, gridW, gridH);
+  if (S.phase === "menu") return;
 
-// ---- Perk pool (roguelike-lite) -------------------------------
-// Perks STACK additively/multiplicatively and carry real trade-offs.
-// None of them grow your radius, so you never become a bigger target.
-const PERKS = [
-  { name: "Bulwark",    desc: "+90% mass, but -20% launch reach. A hard-to-shove tank.",
-    apply: c => { c.mass += 0.9; c.powerMult *= 0.8; } },
-  { name: "Slingshot",  desc: "+30% launch power. Reach clear across the platform.",
-    apply: c => { c.powerMult *= 1.3; } },
-  { name: "Twin Pulse", desc: "+1 PULSE charge every round. Defend twice.",
-    apply: c => { c.bonusCharges += 1; } },
-  { name: "Shockwave",  desc: "PULSE hits +60% wider and +35% harder — a real weapon.",
-    apply: c => { c.pulseRangeMult *= 1.6; c.pulsePowerMult *= 1.35; } },
-  { name: "Counterweight", desc: "+50% mass and you bounce attackers back harder.",
-    apply: c => { c.mass += 0.5; c.restBonus += 0.5; } },
-  { name: "Glider",     desc: "Less drag — your comet coasts much farther for trick shots.",
-    apply: c => { c.frictionMult *= 0.6; } },
-];
+  const dmg = (S.phase === "plan") ? previewDamage() : null;
 
-function rollPerks(n) {
-  const pool = PERKS.slice();
-  const out = [];
-  for (let i = 0; i < n && pool.length; i++) {
-    out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  // tiles
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+    const x = c * TILE, y = r * TILE;
+    let fill = "#0b1430";
+    if (c === SPAWN_COL) fill = "#241019";
+    else if (c === CORE_COL) fill = "#0c2438";
+    ctx.fillStyle = fill;
+    ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+    // preview: tiles that will take fire
+    if (dmg && dmg[c][r] > 0) {
+      ctx.fillStyle = "rgba(54,226,255,0.12)";
+      ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+    }
+    // grid lines
+    ctx.strokeStyle = "rgba(54,226,255,0.10)";
+    ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, TILE, TILE);
   }
-  return out;
-}
+  // core glow column
+  ctx.fillStyle = "rgba(54,226,255,0.10)";
+  ctx.fillRect(CORE_COL * TILE, 0, TILE, gridH);
+  ctx.strokeStyle = "rgba(54,226,255,0.5)";
+  ctx.lineWidth = 2; ctx.strokeRect(CORE_COL * TILE + 1, 1, TILE - 2, gridH - 2);
+  drawCenteredText("CORE", ccx(CORE_COL), gridH - 8, 10, "rgba(180,220,255,.7)");
 
-// ---- Match setup ----------------------------------------------
-const AI_NAMES = ["Red", "Gold", "Violet", "Mint"];
-function placeComets(count) {
-  game.comets = [];
-  const player = makeComet(PALETTE.player, true, "You");
-  game.comets.push(player);
-  for (let i = 0; i < count - 1; i++) {
-    game.comets.push(makeComet(PALETTE.ai[i % PALETTE.ai.length], false, AI_NAMES[i % AI_NAMES.length]));
+  // hover highlight
+  if (S.phase === "plan" && buildable(S.hoverC, S.hoverR) && S.tool !== "recycle") {
+    ctx.strokeStyle = "rgba(54,226,255,.8)"; ctx.lineWidth = 2;
+    ctx.strokeRect(S.hoverC * TILE + 2, S.hoverR * TILE + 2, TILE - 4, TILE - 4);
   }
-  // arrange on a circle inside the ring
-  const ringNow = ringR0 * Math.pow(CFG.ringShrink, game.round - 1);
-  const rad = ringNow * 0.58;
-  const start = -Math.PI / 2;
-  game.comets.forEach((c, i) => {
-    const a = start + (i / count) * Math.PI * 2;
-    c.x = cx + Math.cos(a) * rad;
-    c.y = cy + Math.sin(a) * rad;
-    c.trail = [];
-  });
-}
 
-function placeWells() {
-  game.wells = [];
-  const ringNow = ringR0 * Math.pow(CFG.ringShrink, game.round - 1);
-  // Wells are OFF-CENTER on purpose: a glowing dot dead-center reads as a
-  // "bullseye goal". Off-center swirls read as hazards to route around.
-  const base = Math.random() * Math.PI * 2;
-  const d = ringNow * 0.34;
-  game.wells.push({ x: cx + Math.cos(base) * d, y: cy + Math.sin(base) * d, r: unit * 0.055, mass: 1 });
-  if (game.round >= 2) {
-    const a2 = base + Math.PI + (Math.random() - 0.5) * 1.2;
-    game.wells.push({ x: cx + Math.cos(a2) * d, y: cy + Math.sin(a2) * d, r: unit * 0.05, mass: 0.85 });
+  // programs
+  for (const p of S.programs) drawProgram(p);
+
+  // telegraph arrows (drawn under viruses)
+  if (S.phase === "plan") for (const v of S.viruses) drawTelegraph(v);
+
+  // viruses
+  for (const v of S.viruses) drawVirus(v, dmg);
+
+  // fx
+  for (const f of S.fx) {
+    ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.color;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
   }
+  ctx.globalAlpha = 1;
 }
 
-function startMatch() {
-  game.round = 1;
-  game.score = 0;
-  game.combo = 1; game.comboPeak = 1;
-  game.playerPerks = [];
-  resize();
-  beginRound(true);
+function drawProgram(p) {
+  const x = ccx(p.col), y = ccy(p.row), R = TILE * 0.34, t = TOOLS[p.type];
+  ctx.save();
+  // base chip
+  ctx.fillStyle = "rgba(10,16,36,0.9)";
+  roundRect(p.col * TILE + TILE * 0.14, p.row * TILE + TILE * 0.14, TILE * 0.72, TILE * 0.72, 7); ctx.fill();
+  ctx.strokeStyle = t.color; ctx.lineWidth = 2; ctx.stroke();
+  ctx.translate(x, y);
+  ctx.strokeStyle = t.color; ctx.fillStyle = t.color; ctx.lineWidth = Math.max(2, TILE * 0.045);
+  ctx.lineCap = "round";
+  if (p.type === "wall") {
+    ctx.fillStyle = "#6b7aa8";
+    roundRect(-R, -R * 0.8, R * 2, R * 1.6, 4); ctx.fill();
+    // hp ticks
+    ctx.fillStyle = "#0b1024";
+    for (let i = 0; i < p.hp; i++) { ctx.fillRect(-R + 3 + i * (R * 0.9), -R * 0.8 + 3, R * 0.55, R * 1.6 - 6); }
+  } else if (p.type === "zap") {
+    ctx.beginPath(); ctx.moveTo(0, -R); ctx.lineTo(0, R); ctx.moveTo(-R, 0); ctx.lineTo(R, 0); ctx.stroke();
+  } else if (p.type === "beam") {
+    ctx.beginPath(); ctx.moveTo(-R, 0); ctx.lineTo(R * 0.4, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(R * 0.2, -R * 0.5); ctx.lineTo(R, 0); ctx.lineTo(R * 0.2, R * 0.5); ctx.closePath(); ctx.fill();
+  } else if (p.type === "nova") {
+    ctx.beginPath();
+    ctx.moveTo(0, -R); ctx.lineTo(0, R); ctx.moveTo(-R, 0); ctx.lineTo(R, 0);
+    const d = R * 0.72; ctx.moveTo(-d, -d); ctx.lineTo(d, d); ctx.moveTo(d, -d); ctx.lineTo(-d, d);
+    ctx.stroke();
+  } else if (p.type === "mine") {
+    ctx.beginPath(); ctx.moveTo(0, -R); ctx.lineTo(R, 0); ctx.lineTo(0, R); ctx.lineTo(-R, 0); ctx.closePath();
+    ctx.fillStyle = "#ffd166"; ctx.fill();
+    ctx.fillStyle = "#0b1024"; ctx.beginPath(); ctx.arc(0, 0, R * 0.28, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
 }
 
-function beginRound(askPerk) {
-  hideBanner();
-  ringR = ringR0 * Math.pow(CFG.ringShrink, game.round - 1);
-  const count = 4;
-  placeComets(count);
-  placeWells();
-  applyPlayerPerks();
-  const pl = game.comets.find(c => c.isPlayer);
-  game.pulseBase = 1 + (pl ? pl.bonusCharges : 0);
-  game.pulseCharges = game.pulseBase;
-  game.currentShooter = null;
-  game.lastWasPlayer = false;
-  game.aiCounter = 0;
-  game.pulseCredit = 0;
-  game.comboFlashes = []; game.particles = []; game.pulseRings = []; game.shake = 0;
-  if (askPerk) {
-    showPerkPick();
-  } else {
-    startTurnCycle();
+function drawTelegraph(v) {
+  const steps = telegraph(v);
+  let fc = v.col, fr = v.row;
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    const x1 = ccx(fc), y1 = ccy(fr), x2 = ccx(s.c), y2 = ccy(s.r);
+    ctx.save();
+    ctx.globalAlpha = 0.5 - i * 0.12;
+    ctx.strokeStyle = v.color; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.setLineDash([]);
+    // arrowhead at destination
+    const a = Math.atan2(y2 - y1, x2 - x1), ah = TILE * 0.16;
+    ctx.fillStyle = v.color;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - ah * Math.cos(a - 0.5), y2 - ah * Math.sin(a - 0.5));
+    ctx.lineTo(x2 - ah * Math.cos(a + 0.5), y2 - ah * Math.sin(a + 0.5));
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    fc = s.c; fr = s.r;
   }
 }
 
-function applyPlayerPerks() {
-  const p = game.comets.find(c => c.isPlayer);
-  if (!p) return;
-  game.playerPerks.forEach(perk => perk.apply(p));
+function drawVirus(v, dmg) {
+  const x = ccx(v.col), y = ccy(v.row), R = TILE * (v.type === "brute" ? 0.32 : 0.27);
+  const willDie = dmg && dmg[v.col][v.row] >= v.hp;
+  ctx.save();
+  // glow
+  const g = ctx.createRadialGradient(x, y, 0, x, y, R * 2.2);
+  g.addColorStop(0, v.color + "cc"); g.addColorStop(0.6, v.color + "33"); g.addColorStop(1, v.color + "00");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R * 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = v.color; ctx.strokeStyle = "#0b1024"; ctx.lineWidth = 2;
+  const sh = VIRUS[v.type].shape;
+  ctx.beginPath();
+  if (sh === "circle") ctx.arc(x, y, R, 0, Math.PI * 2);
+  else if (sh === "triangle") { ctx.moveTo(x + R, y); ctx.lineTo(x - R * 0.8, y - R * 0.85); ctx.lineTo(x - R * 0.8, y + R * 0.85); ctx.closePath(); }
+  else { for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + i * Math.PI / 3; const px = x + Math.cos(a) * R, py = y + Math.sin(a) * R; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); }
+  ctx.fill(); ctx.stroke();
+  // "will die" marker
+  if (willDie) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, R * 1.45, 0, Math.PI * 2); ctx.stroke(); }
+  // hp pips
+  const pips = v.maxhp; const pw = Math.min(TILE * 0.14, 7); const gap = 2;
+  const totalW = pips * pw + (pips - 1) * gap;
+  for (let i = 0; i < pips; i++) {
+    ctx.fillStyle = i < v.hp ? "#ffffff" : "rgba(255,255,255,0.22)";
+    ctx.fillRect(x - totalW / 2 + i * (pw + gap), y - R - pw - 3, pw, pw);
+  }
+  ctx.restore();
 }
 
-// ---- Turn flow -------------------------------------------------
-function aliveComets() { return game.comets.filter(c => c.alive); }
+// canvas helpers
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function drawCenteredText(t, x, y, size, color) { ctx.fillStyle = color; ctx.font = "600 " + size + "px Segoe UI, sans-serif"; ctx.textAlign = "center"; ctx.fillText(t, x, y); }
 
-// Turns alternate 1:1 — you, a rival, you, a rival... so you are never
-// hit several times in a row, and you always get to answer.
-function startTurnCycle() {
-  game.lastWasPlayer = false; // player goes first each round
-  nextShooter();
+// =================== UI ========================================
+const waveVal = document.getElementById("waveVal");
+const coreHearts = document.getElementById("coreHearts");
+const energyVal = document.getElementById("energyVal");
+const scoreVal = document.getElementById("scoreVal");
+const bannerEl = document.getElementById("banner");
+const paletteEl = document.getElementById("palette");
+const execBtn = document.getElementById("execBtn");
+
+function buildPalette() {
+  paletteEl.innerHTML = "";
+  for (const key of TOOL_ORDER) {
+    const t = TOOLS[key];
+    const b = document.createElement("div");
+    b.className = "tool"; b.dataset.tool = key;
+    b.innerHTML = '<svg><use href="#' + t.icon + '"/></svg><div><div class="tn">' + t.name + '</div><div class="tc">' + t.cost + ' E</div></div>';
+    b.title = t.desc;
+    b.onclick = () => { if (!b.classList.contains("dis")) { S.tool = key; updateUI(); } };
+    paletteEl.appendChild(b);
+  }
+  const rec = document.createElement("div");
+  rec.className = "tool recycle"; rec.dataset.tool = "recycle";
+  rec.innerHTML = '<svg><use href="#ic-recycle"/></svg><div><div class="tn">Recycle</div><div class="tc">refund</div></div>';
+  rec.title = "Remove a program. Full refund if placed this turn, else 50%.";
+  rec.onclick = () => { S.tool = "recycle"; updateUI(); };
+  paletteEl.appendChild(rec);
 }
 
-function nextShooter() {
-  if (checkRoundOver()) return;
-  const player = game.comets.find(c => c.isPlayer && c.alive);
-  const ais = game.comets.filter(c => !c.isPlayer && c.alive);
-  let shooter = null;
-  if (player && !game.lastWasPlayer) {
-    shooter = player; game.lastWasPlayer = true;
-  } else if (ais.length) {
-    shooter = ais[game.aiCounter % ais.length]; game.aiCounter++; game.lastWasPlayer = false;
-  } else if (player) {
-    shooter = player; game.lastWasPlayer = true;
-  } else { return; }
-  game.currentShooter = shooter;
-  if (shooter.isPlayer) {
-    game.state = "aim";
-    showBanner();
-  } else {
-    aiTakeTurn(shooter);
+function buildMenuLegend() {
+  const wrap = document.getElementById("menuLegend");
+  wrap.innerHTML = "";
+  for (const key of TOOL_ORDER) {
+    const t = TOOLS[key];
+    const li = document.createElement("div"); li.className = "li";
+    li.innerHTML = '<svg><use href="#' + t.icon + '"/></svg><div><b>' + t.name + '</b> (' + t.cost + ' E) — ' + t.desc + '</div>';
+    wrap.appendChild(li);
   }
 }
 
-function launch(comet, vx, vy) {
-  comet.vx = vx; comet.vy = vy;
-  game.shotKnockouts = 0;
-  game.simFrames = 0;
-  game.state = "sim";
-}
-
-function aiTakeTurn(c) {
-  game.state = "ai";
-  // Decide the shot up front so we can TELEGRAPH it (dashed aim line),
-  // giving the player a window to react with PULSE.
-  const targets = aliveComets().filter(t => t !== c);
-  if (!targets.length) { nextShooter(); return; }
-  // target whoever is most exposed, with a little randomness so the opener
-  // isn't always the player and ties break unpredictably
-  targets.sort((a, b) =>
-    (distFromCenter(b) + Math.random() * 30) - (distFromCenter(a) + Math.random() * 30));
-  const tgt = targets[0];
-  const outAng = Math.atan2(tgt.y - cy, tgt.x - cx);
-  let ang = Math.atan2(tgt.y - c.y, tgt.x - c.x);
-  ang = ang * 0.6 + outAng * 0.4;
-  ang += (Math.random() - 0.5) * CFG.aiSpread;
-  const power = CFG.maxLaunch * CFG.aiPower * c.powerMult * (0.9 + Math.random() * 0.1);
-  c.telegraph = { vx: Math.cos(ang) * power, vy: Math.sin(ang) * power };
-  showBanner(c);
-  setTimeout(() => {
-    if (!c.alive) { c.telegraph = null; nextShooter(); return; }
-    const t = c.telegraph; c.telegraph = null;
-    if (!t) { nextShooter(); return; } // pre-empted by the player's pulse
-    launch(c, t.vx, t.vy);
-  }, 720);
-}
-
-// ---- PULSE: the player's defensive/offensive shockwave ---------
-function doPulse() {
-  const p = game.comets.find(c => c.isPlayer && c.alive);
-  if (!p) return;
-  if (game.state !== "ai" && game.state !== "sim") return; // reactive tool only
-  if (game.pulseCharges <= 0) return;
-  game.pulseCharges--;
-  // if a rival is mid-telegraph, it fires NOW and we react simultaneously
-  if (game.state === "ai" && game.currentShooter && game.currentShooter.telegraph) {
-    const c = game.currentShooter, t = c.telegraph; c.telegraph = null;
-    launch(c, t.vx, t.vy);
+let hintTimer = null;
+function hint(msg) { bannerEl.innerHTML = msg; clearTimeout(hintTimer); hintTimer = setTimeout(updateBanner, 2200); }
+function updateBanner() {
+  if (S.phase === "plan") {
+    const left = WAVES[S.wave - 1] ? "" : "";
+    bannerEl.innerHTML = "<b>Plan your turn</b> &middot; place programs, then Execute. Arrows show where each virus moves next.";
   }
-  const R = ringR * CFG.pulseRange * p.pulseRangeMult;
-  const strength = CFG.pulsePower * p.pulsePowerMult;
-  for (const c of game.comets) {
-    if (!c.alive || c === p) continue;
-    const dx = c.x - p.x, dy = c.y - p.y, d = Math.max(len(dx, dy), 1);
-    if (d < R) {
-      const f = (1 - d / R) * strength;
-      c.vx += (dx / d) * f; c.vy += (dy / d) * f;
+}
+
+function updateUI() {
+  waveVal.textContent = S.wave;
+  coreHearts.innerHTML = "";
+  for (let i = 0; i < CORE_HP; i++) { const h = document.createElement("span"); h.className = "heart" + (i < S.coreHP ? "" : " off"); coreHearts.appendChild(h); }
+  energyVal.textContent = S.energy;
+  scoreVal.textContent = S.score;
+  // palette enable/selected
+  for (const b of paletteEl.children) {
+    const key = b.dataset.tool;
+    b.classList.toggle("sel", key === S.tool);
+    if (key !== "recycle") {
+      const aff = S.energy >= TOOLS[key].cost && S.phase === "plan";
+      b.classList.toggle("dis", !aff);
     }
   }
-  game.pulseRings.push({ x: p.x, y: p.y, r: p.r * 2, max: R, t: 1 });
-  burst(p.x, p.y, PALETTE.player, 30, 9);
-  addShake(11);
-  game.pulseCredit = 55; // knockouts in this window count for you
+  execBtn.disabled = S.phase !== "plan";
+  updateBanner();
 }
 
-function distFromCenter(c) { return len(c.x - cx, c.y - cy); }
-
-// ---- Physics ---------------------------------------------------
-function stepPhysics() {
-  const cs = game.comets;
-  // gravity + integrate
-  for (const c of cs) {
-    if (!c.alive) continue;
-    for (const w of game.wells) {
-      let dx = w.x - c.x, dy = w.y - c.y;
-      let d = Math.max(len(dx, dy), CFG.minGravDist);
-      const a = (CFG.gravity * w.mass) / (d * d);
-      c.vx += (dx / d) * a;
-      c.vy += (dy / d) * a;
-    }
-    c.vx *= Math.pow(CFG.friction, c.frictionMult);
-    c.vy *= Math.pow(CFG.friction, c.frictionMult);
-    c.x += c.vx; c.y += c.vy;
-    // trail
-    c.trail.push({ x: c.x, y: c.y });
-    if (c.trail.length > 14) c.trail.shift();
-  }
-  // collisions (pairwise)
-  for (let i = 0; i < cs.length; i++) {
-    const a = cs[i]; if (!a.alive) continue;
-    for (let j = i + 1; j < cs.length; j++) {
-      const b = cs[j]; if (!b.alive) continue;
-      resolveCollision(a, b);
-    }
-  }
-  // eject check
-  let movers = 0, justOut = 0;
-  for (const c of cs) {
-    if (!c.alive) continue;
-    if (distFromCenter(c) - c.r > ringR) {
-      c.alive = false;
-      justOut++;
-      burst(c.x, c.y, c.color, 26, 6);
-      addShake(c.isPlayer ? 16 : 12);
-      if (!c.isPlayer) {
-        // credit the player if it was their shot OR their recent pulse
-        const byPlayer = (game.currentShooter && game.currentShooter.isPlayer) || game.pulseCredit > 0;
-        if (byPlayer) {
-          game.shotKnockouts++;
-          registerKnockout(c);
-        }
-      }
-      continue;
-    }
-    if (len(c.vx, c.vy) > CFG.stopSpeed) movers++;
-  }
-  if (game.pulseCredit > 0) game.pulseCredit--;
-  game.simFrames++;
-  const settled = movers === 0 || game.simFrames > CFG.simCap;
-  if (settled) onShotSettled();
-}
-
-function resolveCollision(a, b) {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  const d = len(dx, dy);
-  const minD = a.r + b.r;
-  if (d === 0 || d >= minD) return;
-  const nx = dx / d, ny = dy / d;
-  // positional correction
-  const overlap = minD - d;
-  const totalInv = (1 / a.mass) + (1 / b.mass);
-  a.x -= nx * overlap * (1 / a.mass) / totalInv;
-  a.y -= ny * overlap * (1 / a.mass) / totalInv;
-  b.x += nx * overlap * (1 / b.mass) / totalInv;
-  b.y += ny * overlap * (1 / b.mass) / totalInv;
-  // relative velocity along normal
-  const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
-  const vn = rvx * nx + rvy * ny;
-  if (vn > 0) return; // separating
-  const e = CFG.restitution + Math.max(a.restBonus, b.restBonus);
-  const jImp = -(1 + e) * vn / totalInv;
-  const ix = jImp * nx, iy = jImp * ny;
-  a.vx -= ix / a.mass; a.vy -= iy / a.mass;
-  b.vx += ix / b.mass; b.vy += iy / b.mass;
-  // impact feedback scaled by how hard the hit was
-  const impact = Math.min(Math.abs(vn), 14);
-  if (impact > 2) {
-    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    burst(mx, my, "#ffffff", Math.round(impact), impact * 0.5);
-    addShake(impact * 0.5);
-  }
-}
-
-function registerKnockout(c) {
-  // combo grows with knockouts within a single shot
-  const base = 100 * game.round;
-  game.combo = 1 + game.shotKnockouts; // x1 for first, x2 for second in same shot...
-  game.comboPeak = Math.max(game.comboPeak, game.combo);
-  game.score += base * game.combo;
-  game.comboFlashes.push({ x: c.x, y: c.y, t: 1, mult: game.combo });
-  burst(c.x, c.y, PALETTE.player, 14, 7);
-  addShake(8);
-  pulse(comboEl);
-}
-
-function onShotSettled() {
-  if (game.state !== "sim") return;
-  if (checkRoundOver()) return;
-  // combo resets to 1 once a fresh shot begins; peak is already banked in score
-  if (game.shotKnockouts > 0) game.combo = 1;
-  nextShooter();
-}
-
-function checkRoundOver() {
-  const alive = aliveComets();
-  const playerAlive = alive.some(c => c.isPlayer);
-  if (!playerAlive) { endRound(false); return true; }
-  if (alive.length <= 1) { endRound(true); return true; }
-  return false;
-}
-
-// ---- Round / match resolution ---------------------------------
-function endRound(playerWon) {
-  game.state = "result";
-  hideBanner();
-  if (playerWon) {
-    game.score += 250 * game.round;
-    game.round++;
-    showResult("Round " + (game.round - 1) + " cleared",
-      "Survivor bonus banked. The ring tightens — pick a perk and keep going.",
-      "Next round", () => beginRound(true));
-  } else {
-    showResult("Knocked out",
-      "You were pushed off the court on round " + game.round +
-      ". Final score " + game.score + " &middot; best combo x" + game.comboPeak + ".",
-      "Play again", () => startMatch());
-  }
-}
-
-// ---- Input (slingshot aim) ------------------------------------
-let dragging = false, dragX = 0, dragY = 0;
-
-function pointerPos(e) {
+// ---- input -----------------------------------------------------
+function tileFromEvent(e) {
   const rect = cv.getBoundingClientRect();
   const p = (e.touches && e.touches[0]) || e;
-  return { x: p.clientX - rect.left, y: p.clientY - rect.top };
+  return { c: Math.floor((p.clientX - rect.left) / TILE), r: Math.floor((p.clientY - rect.top) / TILE) };
+}
+function onPointer(e) {
+  if (S.phase !== "plan") return;
+  const { c, r } = tileFromEvent(e); tryPlace(c, r);
+}
+function onMove(e) {
+  const { c, r } = tileFromEvent(e); S.hoverC = c; S.hoverR = r;
 }
 
-function activePlayer() {
-  if (game.state !== "aim") return null;
-  const c = game.currentShooter;
-  return (c && c.isPlayer && c.alive) ? c : null;
-}
-
-cv.addEventListener("pointerdown", e => {
-  const p = activePlayer(); if (!p) return;
-  const { x, y } = pointerPos(e);
-  // must grab near the comet to start a slingshot
-  if (len(x - p.x, y - p.y) < p.r * 3.2) {
-    dragging = true; dragX = x; dragY = y;
-    cv.setPointerCapture(e.pointerId);
-  }
-});
-cv.addEventListener("pointermove", e => {
-  if (!dragging) return;
-  const { x, y } = pointerPos(e);
-  dragX = x; dragY = y;
-});
-cv.addEventListener("pointerup", e => {
-  const p = activePlayer();
-  if (!dragging || !p) { dragging = false; return; }
-  dragging = false;
-  // launch opposite to the drag (pull back, fling forward)
-  const dx = p.x - dragX, dy = p.y - dragY;
-  let speed = Math.min(len(dx, dy) * CFG.dragScale, CFG.maxLaunch) * p.powerMult;
-  if (speed < 1.2) return; // tap, no launch
-  const a = Math.atan2(dy, dx);
-  launch(p, Math.cos(a) * speed, Math.sin(a) * speed);
-});
-
-// ---- Trajectory preview (gravity-aware, no collisions) --------
-function previewPath(p, vx, vy) {
-  const pts = [];
-  let x = p.x, y = p.y, sx = vx, sy = vy;
-  for (let i = 0; i < 70; i++) {
-    for (const w of game.wells) {
-      let dx = w.x - x, dy = w.y - y;
-      let d = Math.max(len(dx, dy), CFG.minGravDist);
-      const a = (CFG.gravity * w.mass) / (d * d);
-      sx += (dx / d) * a; sy += (dy / d) * a;
-    }
-    sx *= Math.pow(CFG.friction, p.frictionMult);
-    sy *= Math.pow(CFG.friction, p.frictionMult);
-    x += sx; y += sy;
-    if (len(x - cx, y - cy) - p.r > ringR) break;
-    if (i % 2 === 0) pts.push({ x, y });
-  }
-  return pts;
-}
-
-// ---- Rendering -------------------------------------------------
-function draw() {
-  ctx.clearRect(0, 0, W, H);
-
-  // starfield
-  for (const s of stars) {
-    ctx.globalAlpha = s.a;
-    ctx.fillStyle = "#cfe0ff";
-    ctx.beginPath();
-    ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-
-  // ---- screen shake (world-space only; starfield stays put) ----
-  const sh = game.shake;
-  const ox = sh ? (Math.random() - 0.5) * sh : 0;
-  const oy = sh ? (Math.random() - 0.5) * sh : 0;
-  ctx.save();
-  ctx.translate(ox, oy);
-
-  // ---- the platform (a disc floating in the void) ----
-  // soft shadow so it reads as a raised surface, NOT a flat target ring
-  const voidg = ctx.createRadialGradient(cx, cy, ringR * 0.92, cx, cy, ringR * 1.55);
-  voidg.addColorStop(0, "rgba(0,0,0,0.55)");
-  voidg.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = voidg;
-  ctx.beginPath(); ctx.arc(cx, cy, ringR * 1.55, 0, Math.PI * 2); ctx.fill();
-
-  // surface — one smooth off-axis gradient, no concentric "bullseye" rings
-  const surf = ctx.createRadialGradient(cx - ringR * 0.3, cy - ringR * 0.3, ringR * 0.1, cx, cy, ringR);
-  surf.addColorStop(0, "#1a2747");
-  surf.addColorStop(1, "#0a1124");
-  ctx.fillStyle = surf;
-  ctx.beginPath(); ctx.arc(cx, cy, ringR, 0, Math.PI * 2); ctx.fill();
-
-  // danger rim just inside the edge — falling off here = death
-  ctx.lineWidth = ringR * 0.045;
-  ctx.strokeStyle = "rgba(255,107,107,0.16)";
-  ctx.beginPath(); ctx.arc(cx, cy, ringR - ringR * 0.022, 0, Math.PI * 2); ctx.stroke();
-
-  // bright solid edge (the platform rim)
-  ctx.lineWidth = 3.5;
-  ctx.strokeStyle = "#5be3ff";
-  ctx.shadowColor = "#36e2ff"; ctx.shadowBlur = 18;
-  ctx.beginPath(); ctx.arc(cx, cy, ringR, 0, Math.PI * 2); ctx.stroke();
-  ctx.shadowBlur = 0;
-
-  // ---- gravity wells: swirling vortices (hazards, not goals) ----
-  const tw = performance.now() / 1000;
-  for (const w of game.wells) {
-    const R = w.r * 5.0;
-    const g = ctx.createRadialGradient(w.x, w.y, 0, w.x, w.y, R);
-    g.addColorStop(0, "rgba(124,92,255,0.5)");
-    g.addColorStop(0.45, "rgba(124,92,255,0.16)");
-    g.addColorStop(1, "rgba(124,92,255,0)");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(w.x, w.y, R, 0, Math.PI * 2); ctx.fill();
-    // rotating spiral arms make it read as a sucking vortex
-    ctx.save();
-    ctx.translate(w.x, w.y);
-    ctx.rotate(tw * 1.4);
-    ctx.strokeStyle = "rgba(190,170,255,0.5)";
-    ctx.lineWidth = 2;
-    for (let k = 0; k < 3; k++) {
-      ctx.rotate((Math.PI * 2) / 3);
-      ctx.beginPath(); ctx.arc(0, 0, w.r * 2.1, 0, Math.PI * 0.9); ctx.stroke();
-    }
-    ctx.restore();
-    ctx.fillStyle = "#d7ccff";
-    ctx.beginPath(); ctx.arc(w.x, w.y, w.r * 0.6, 0, Math.PI * 2); ctx.fill();
-  }
-
-  // comets + trails
-  for (const c of game.comets) {
-    if (!c.alive) continue;
-    // trail
-    for (let i = 0; i < c.trail.length; i++) {
-      const t = c.trail[i];
-      ctx.globalAlpha = (i / c.trail.length) * 0.35;
-      ctx.fillStyle = c.color;
-      ctx.beginPath(); ctx.arc(t.x, t.y, c.r * (0.3 + 0.5 * i / c.trail.length), 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    // glow
-    const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r * 2.4);
-    g.addColorStop(0, c.color);
-    g.addColorStop(0.5, c.color + "55");
-    g.addColorStop(1, c.color + "00");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(c.x, c.y, c.r * 2.4, 0, Math.PI * 2); ctx.fill();
-    // body
-    ctx.fillStyle = c.color;
-    ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.beginPath(); ctx.arc(c.x - c.r * 0.28, c.y - c.r * 0.28, c.r * 0.32, 0, Math.PI * 2); ctx.fill();
-    // player ring + YOU label + edge-danger pulse
-    if (c.isPlayer) {
-      ctx.strokeStyle = "rgba(255,255,255,0.9)";
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(c.x, c.y, c.r * 1.5, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = "rgba(255,255,255,0.92)";
-      ctx.font = "bold 12px Segoe UI, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("YOU", c.x, c.y + c.r * 3.0);
-      if (distFromCenter(c) > ringR * 0.76) {
-        const pl = 0.5 + 0.5 * Math.sin(performance.now() / 120);
-        ctx.strokeStyle = "rgba(255,80,80," + (0.4 + pl * 0.5) + ")";
-        ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(c.x, c.y, c.r * (1.9 + pl * 0.5), 0, Math.PI * 2); ctx.stroke();
-      }
-    }
-    // whose-turn chevron above the current shooter
-    const shooter = game.currentShooter;
-    if (c === shooter && (game.state === "aim" || game.state === "ai")) {
-      const bob = Math.sin(performance.now() / 220) * 4;
-      const ay = c.y - c.r * 2.7 + bob;
-      ctx.fillStyle = c.color;
-      ctx.beginPath();
-      ctx.moveTo(c.x, ay + 9); ctx.lineTo(c.x - 7, ay); ctx.lineTo(c.x + 7, ay);
-      ctx.closePath(); ctx.fill();
-    }
-  }
-
-  // enemy shot telegraph — shows where the rival is about to fire
-  if (game.state === "ai" && game.currentShooter && game.currentShooter.telegraph) {
-    const c = game.currentShooter, t = c.telegraph;
-    const pts = previewPath(c, t.vx, t.vy);
-    ctx.save();
-    ctx.setLineDash([4, 7]); ctx.globalAlpha = 0.65;
-    ctx.strokeStyle = c.color; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(c.x, c.y);
-    for (const q of pts) ctx.lineTo(q.x, q.y);
-    ctx.stroke();
-    ctx.restore();
-    ctx.globalAlpha = 1; ctx.setLineDash([]);
-  }
-
-  // pulse shockwave rings
-  for (const ring of game.pulseRings) {
-    const rr = ring.r + (ring.max - ring.r) * (1 - ring.t);
-    ctx.globalAlpha = ring.t * 0.6;
-    ctx.strokeStyle = PALETTE.player; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(ring.x, ring.y, rr, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1;
-  }
-
-  // aim preview
-  const p = activePlayer();
-  if (p && dragging) {
-    const dx = p.x - dragX, dy = p.y - dragY;
-    let speed = Math.min(len(dx, dy) * CFG.dragScale, CFG.maxLaunch) * p.powerMult;
-    const a = Math.atan2(dy, dx);
-    const vx = Math.cos(a) * speed, vy = Math.sin(a) * speed;
-    const pts = previewPath(p, vx, vy);
-    // dotted predicted path
-    for (let i = 0; i < pts.length; i++) {
-      ctx.globalAlpha = 0.8 - (i / pts.length) * 0.6;
-      ctx.fillStyle = PALETTE.player;
-      ctx.beginPath(); ctx.arc(pts[i].x, pts[i].y, 2.6, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    // slingshot band
-    ctx.strokeStyle = "rgba(255,255,255,0.5)";
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(dragX, dragY); ctx.stroke();
-    // power ring
-    const frac = speed / (CFG.maxLaunch * p.powerMult);
-    ctx.strokeStyle = PALETTE.player;
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 2.2, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); ctx.stroke();
-  } else if (p && game.state === "aim") {
-    // idle hint pulse around player
-    const t = (performance.now() / 600) % 1;
-    ctx.globalAlpha = 0.5 * (1 - t);
-    ctx.strokeStyle = PALETTE.player;
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (1.8 + t * 1.4), 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1;
-  }
-
-  // particles (impacts + knockout bursts)
-  for (const pt of game.particles) {
-    ctx.globalAlpha = Math.max(0, pt.life);
-    ctx.fillStyle = pt.color;
-    ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-
-  // combo flashes
-  for (const f of game.comboFlashes) {
-    ctx.globalAlpha = Math.max(0, f.t);
-    ctx.fillStyle = PALETTE.player;
-    ctx.font = "bold " + (18 + f.mult * 6) + "px Segoe UI, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("x" + f.mult + "!", f.x, f.y - (1 - f.t) * 40);
-    ctx.globalAlpha = 1;
-  }
-
-  ctx.restore(); // end screen shake
-}
-
-// ---- HUD -------------------------------------------------------
-const roundEl = document.getElementById("roundNum");
-const comboEl = document.getElementById("combo");
-const scoreEl = document.getElementById("score");
-const bannerEl = document.getElementById("banner");
-const bannerWho = document.getElementById("bannerWho");
-const bannerSub = document.getElementById("bannerSub");
-function rivalsLeft() { return game.comets.filter(c => c.alive && !c.isPlayer).length; }
-function showBanner(aiComet) {
-  bannerEl.style.display = "block";
-  const n = rivalsLeft();
-  if (aiComet) {
-    bannerWho.textContent = aiComet.name + " is taking a shot";
-    bannerWho.classList.remove("danger");
-    bannerSub.innerHTML = game.pulseCharges > 0
-      ? "Dashed line = its shot &middot; tap PULSE to deflect it"
-      : "No pulse left — brace for it";
-  } else {
-    const p = game.comets.find(c => c.isPlayer);
-    const danger = p && distFromCenter(p) > ringR * 0.76;
-    bannerWho.textContent = "Your shot";
-    bannerWho.classList.toggle("danger", !!danger);
-    bannerSub.innerHTML = danger
-      ? "You're near the edge &mdash; careful!"
-      : "Drag back from your comet to launch &middot; " + n + " rival" + (n === 1 ? "" : "s") + " to knock off";
-  }
-}
-function hideBanner() { bannerEl.style.display = "none"; }
-function pulse(el) { el.style.transform = "scale(1.35)"; setTimeout(() => el.style.transform = "scale(1)", 130); }
-
-const pulseBtn = document.getElementById("pulse");
-const pulsePips = document.getElementById("pulsePips");
-let lastPipKey = "";
-function syncHud() {
-  roundEl.textContent = game.round;
-  comboEl.textContent = "x" + game.combo;
-  scoreEl.textContent = game.score;
-  // pulse button
-  const playing = game.state === "aim" || game.state === "ai" || game.state === "sim";
-  pulseBtn.style.display = playing ? "flex" : "none";
-  if (playing) {
-    const usable = (game.state === "ai" || game.state === "sim") && game.pulseCharges > 0;
-    pulseBtn.classList.toggle("ready", usable);
-    pulseBtn.classList.toggle("spent", !usable);
-    const key = game.pulseBase + "/" + game.pulseCharges;
-    if (key !== lastPipKey) {
-      lastPipKey = key;
-      let pips = "";
-      for (let i = 0; i < game.pulseBase; i++) {
-        pips += '<span class="pip' + (i < game.pulseCharges ? "" : " off") + '"></span>';
-      }
-      pulsePips.innerHTML = pips;
-    }
-  }
-}
-
-// PULSE input: Space or tapping the button
-window.addEventListener("keydown", e => {
-  if (e.code === "Space") { e.preventDefault(); doPulse(); }
-});
-pulseBtn.addEventListener("click", doPulse);
-
-// ---- Main loop -------------------------------------------------
-function frame() {
-  // self-heal if the canvas was sized before the viewport had real dimensions
-  if ((W === 0 || H === 0) && window.innerWidth > 0 && window.innerHeight > 0) {
-    resize(); makeStars();
-  }
-  if (game.state === "sim") stepPhysics();
-  for (const f of game.comboFlashes) f.t -= 0.012;
-  game.comboFlashes = game.comboFlashes.filter(f => f.t > 0);
-  // advance particles + decay shake
-  for (const pt of game.particles) {
-    pt.x += pt.vx; pt.y += pt.vy; pt.vx *= 0.92; pt.vy *= 0.92; pt.life -= pt.decay;
-  }
-  game.particles = game.particles.filter(pt => pt.life > 0);
-  for (const ring of game.pulseRings) ring.t -= 0.045;
-  game.pulseRings = game.pulseRings.filter(r => r.t > 0);
-  game.shake *= 0.86; if (game.shake < 0.4) game.shake = 0;
-  draw();
-  syncHud();
-  requestAnimationFrame(frame);
-}
-
-// ---- Overlays --------------------------------------------------
-const menuEl = document.getElementById("menu");
-const perkEl = document.getElementById("perkOverlay");
-const perkListEl = document.getElementById("perkList");
-const resultEl = document.getElementById("resultOverlay");
+// ---- result ----------------------------------------------------
+const resultOverlay = document.getElementById("resultOverlay");
 const resultTitle = document.getElementById("resultTitle");
 const resultBody = document.getElementById("resultBody");
 const resultBtn = document.getElementById("resultBtn");
+function showResult(kind) {
+  if (kind === "won") {
+    resultTitle.textContent = "Firewall holds";
+    resultBody.innerHTML = "You repelled all 8 waves with <b>" + S.coreHP + "</b> core integrity to spare. Final score <b>" + S.score + "</b>.";
+    resultBtn.textContent = "Play again";
+  } else {
+    resultTitle.textContent = "Core breached";
+    resultBody.innerHTML = "The swarm broke through on wave <b>" + S.wave + "</b>. Final score <b>" + S.score + "</b>. The whole board was visible — replan and try again.";
+    resultBtn.textContent = "Retry";
+  }
+  resultOverlay.classList.add("show");
+}
+resultBtn.onclick = () => { resultOverlay.classList.remove("show"); startGame(); };
 
-function showPerkPick() {
-  const choices = rollPerks(3);
-  perkListEl.innerHTML = "";
-  choices.forEach(perk => {
-    const b = document.createElement("button");
-    b.className = "perk";
-    b.innerHTML = '<span class="pname">' + perk.name + '</span><span class="pdesc">' + perk.desc + '</span>';
-    b.onclick = () => {
-      game.playerPerks.push(perk);
-      applyPlayerPerks();
-      // recompute pulse charges in case a perk granted more
-      const pl = game.comets.find(c => c.isPlayer);
-      game.pulseBase = 1 + (pl ? pl.bonusCharges : 0);
-      game.pulseCharges = game.pulseBase;
-      perkEl.classList.remove("show");
-      startTurnCycle();
-    };
-    perkListEl.appendChild(b);
+// ---- lifecycle -------------------------------------------------
+function startGame() {
+  S.phase = "plan"; S.wave = 0; S.coreHP = CORE_HP; S.energy = START_ENERGY;
+  S.score = 0; S.turn = 0; S.viruses = []; S.programs = []; S.fx = []; S.tool = "zap";
+  resize();
+  startWave(1, false);
+  updateUI();
+}
+
+function loop() {
+  for (const f of S.fx) { f.x += f.vx; f.y += f.vy; f.vx *= 0.9; f.vy *= 0.9; f.life -= f.decay; }
+  S.fx = S.fx.filter(f => f.life > 0);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function boot() {
+  cv = document.getElementById("grid"); ctx = cv.getContext("2d");
+  resize(); buildPalette(); buildMenuLegend(); updateUI();
+  cv.addEventListener("pointerdown", onPointer);
+  cv.addEventListener("pointermove", onMove);
+  execBtn.addEventListener("click", executeTurn);
+  document.getElementById("startBtn").onclick = () => { document.getElementById("menu").classList.remove("show"); startGame(); };
+  // keyboard: number keys select tools, Enter executes
+  window.addEventListener("keydown", e => {
+    if (S.phase !== "plan") return;
+    const idx = parseInt(e.key, 10);
+    if (idx >= 1 && idx <= TOOL_ORDER.length) { S.tool = TOOL_ORDER[idx - 1]; updateUI(); }
+    else if (e.key === "0" || e.key === "r" || e.key === "R") { S.tool = "recycle"; updateUI(); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); executeTurn(); }
   });
-  perkEl.classList.add("show");
+  requestAnimationFrame(loop);
 }
-
-function showResult(title, body, btn, onClick) {
-  resultTitle.textContent = title;
-  resultBody.innerHTML = body;
-  resultBtn.textContent = btn;
-  resultBtn.onclick = () => { resultEl.classList.remove("show"); onClick(); };
-  resultEl.classList.add("show");
-}
-
-document.getElementById("startBtn").onclick = () => {
-  menuEl.classList.remove("show");
-  startMatch();
-};
-
-// ---- Boot ------------------------------------------------------
-resize();
-makeStars();
-requestAnimationFrame(frame);
+boot();
 </script>
 </body>
 </html>
