@@ -1,75 +1,68 @@
-# FIREWALL
+# WATERSHED
 
-**Tower-defense × tactics chess, with perfect information.** A browser
-strategy prototype where every threat is telegraphed — you win or lose on
-your decisions, not your reflexes.
+**A minimalist spatial-strategy game.** One verb, one elegant mathematical
+engine, escalating pressure — built deliberately so there is no single
+"solved" strategy.
 
-Viruses cross a circuit grid toward your **core** on the right. Each one
-shows exactly where it will move next, so every turn is a planning puzzle:
-place programs, funnel the swarm into kill-zones, manage energy, and hold
-the line for 8 waves.
+**Springs** (warm dots, demand) each flow to the **nearest well** you place.
+A well drains the demand it covers, but its capacity is a budget spent
+against *distance* — near demand is cheap to serve, far demand is expensive.
+Sit a well on its demand and it clears; let demand drift away and the
+backlog piles up and **floods**, draining your reserve. Keep the network
+balanced as demand keeps rising.
 
-## The mashup
+## Why it's built this way (the research)
 
-A fresh two-genre combo built specifically for **strategy and planning**:
+After several prototypes that collapsed into a single dominant strategy, the
+design was grounded in published work on game *depth*:
 
-- **Tower Defense** — waves advance toward a core you must protect; you
-  place defenses to stop them.
-- **Grid tactics (chess-like)** — programs have distinct attack/blocking
-  *patterns*, and positioning is everything.
-- **Perfect-information telegraphing** (the *Into the Breach* idea) — you
-  see every enemy's next move before you commit, so losses are fair and
-  every turn is a solvable puzzle.
+- **Depth ≠ complexity.** Adding rules/systems doesn't add depth (Lantz,
+  Isaksen, Jaffe, Nealen & Togelius, *Depth in Strategic Games*, AAAI 2017).
+- **Depth = a long "strategy ladder"** — a novice heuristic should be
+  beatable by a slightly cleverer one, indefinitely. A game dies when "one
+  weird trick" exploits a regularity to play near-perfectly (the
+  tower-defense maze-and-chokepoint trap).
+- **Tight coupling** — one state variable doing several jobs — buys depth
+  without adding rules (Nealen, Saltsman & Boxerman, *Towards Minimalist
+  Game Design*, FDG 2011).
+
+WATERSHED applies this directly: the core is a **facility-location / nearest-
+point partition** (k-means cost). It's genuinely hard to optimise, *globally
+coupled* (move one well and every boundary shifts), and the demand **drifts**
+so no static layout stays optimal — there is no dominant trick, only
+ever-better reading of the board. One coupled variable (a well's **charge** =
+capacity, reset when you move it) supplies the *adapt-vs-commit* trade-off.
+
+Verified by simulation: a static "never move" player survives ~half as long
+as one that follows the drift — so placement, not a hidden meter, is the game.
 
 ## How to play
 
-Each turn you **plan**, then **Execute**. On execute: your programs fire
-first, then every virus advances one step along its arrow.
+- **Drag wells** around the field to re-divide it. Every move re-slices the
+  whole map to whatever's nearest.
+- **Moving unsettles a well** (capacity drops, then recharges over a few
+  turns) — so move only where it counts.
+- Each turn, demand **grows and new springs bloom**; next turn's growth is
+  shown as faint **ghosts** before you commit. Plan for what's coming.
+- Keep wells from flooding. Demand never stops rising — last as long as you
+  can. (`Enter` / `Space` advances a turn.)
 
-Programs (cost in energy):
+## Run / deploy
 
-- **Wall (1)** — blocks movement (2 HP). Reroutes the swarm; chewed through if you fully seal a lane.
-- **Zap (2)** — hits the 4 orthogonal neighbours for 1 each turn. Great on chokepoints.
-- **Beam (3)** — fires right along its whole row for 1. Mows a lane.
-- **Nova (5)** — hits all 8 surrounding tiles for 2. An expensive kill-zone.
-- **Mine (2)** — detonates when a virus steps on it: 3 damage to that tile + neighbours, then gone.
-
-You gain energy each wave and can **Recycle** programs to adapt — full
-refund if placed this turn, 50% otherwise. Place and recycle freely while
-planning; nothing locks until you Execute.
-
-Controls: click a tool then click a tile (mouse or touch). Keys `1`–`5`
-pick tools, `R` recycles, `Enter`/`Space` executes the turn.
-
-## Run it locally
-
-Single static file — open `index.html`, or serve it:
-
-```bash
-python -m http.server 8000   # then visit http://localhost:8000
-```
-
-## Deploy to GitHub Pages
-
-No build step. Push, then **Settings → Pages → Deploy from a branch →
-`main` / root**. The `.nojekyll` file keeps Pages serving everything as-is.
-Lives at `https://<user>.github.io/<repo>/`.
+Single static file. Open `index.html`, or `python -m http.server 8000`.
+GitHub Pages: push, then Settings → Pages → `main` / root (`.nojekyll`
+included). Tunables live in the `CFG` object at the top of the `<script>`.
 
 ## Status
 
-v0.1 prototype, fully playable through 8 waves. Verified by simulation:
-doing nothing loses the core; a reasonable strategy clears all waves.
-Tunables (wave composition, costs, energy, core HP) live in the constants
-at the top of the `<script>`.
+v0.1 prototype. The core mechanic is verified sound (placement-driven,
+clear skill gap, escalating, no dominant strategy). Difficulty/feel tuning is
+the open question — best judged by playing.
 
-### Ideas to explore next
+### Earlier prototypes in this repo
 
-- More program/virus types (splitters, shielded viruses, slow fields).
-- A roguelike-lite draft: pick a new program or upgrade between waves.
-- Smarter difficulty curve + an endless mode with a score leaderboard.
-- Sound and juicier resolve animations.
+- `firewall.html` — a tower-defense × tactics game (collapsed into a single
+  dominant maze-and-chokepoint strategy; the reason for the research pivot).
+- `comet-court.html` — the original slingshot/gravity sumo prototype.
 
-## Also in this repo
-
-- `comet-court.html` — the earlier prototype (slingshot/gravity sumo)
-  this project started as, kept for reference. Its history is in git.
+Both kept for reference; full history is in git.

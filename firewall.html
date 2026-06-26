@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>FIREWALL — tower-defense chess</title>
+<style>
+  :root {
+    --bg0: #05060f; --bg1: #0b1024;
+    --ink: #e8f0ff; --muted: #8aa0c8;
+    --cyan: #36e2ff; --purple: #b388ff; --amber: #ffd166;
+    --foe: #ff6b6b;
+    --line: #233056; --panel: rgba(12, 18, 40, 0.92);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; min-height: 100%; overflow: hidden;
+    background: radial-gradient(120% 120% at 50% 0%, var(--bg1), var(--bg0));
+    color: var(--ink); font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    user-select: none; touch-action: none;
+  }
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px; }
+
+  #hud { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; font-variant-numeric: tabular-nums; }
+  .pill { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .pill .label { color: var(--muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+  #coreHearts { display: flex; gap: 3px; }
+  .heart { width: 11px; height: 11px; border-radius: 3px; background: var(--cyan); box-shadow: 0 0 7px rgba(54,226,255,.6); }
+  .heart.off { background: #2a3554; box-shadow: none; }
+  #energyVal { color: var(--amber); font-weight: 700; }
+
+  #banner { color: var(--muted); font-size: 13px; min-height: 18px; text-align: center; }
+  #banner b { color: var(--ink); }
+
+  canvas { display: block; touch-action: none; border-radius: 8px; }
+
+  /* palette */
+  #palette { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 860px; }
+  .tool {
+    background: #111a38; border: 1px solid var(--line); border-radius: 11px;
+    padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    transition: border-color .12s, background .12s, opacity .12s; min-width: 92px;
+  }
+  .tool svg { width: 20px; height: 20px; flex: none; }
+  .tool .tn { font-size: 13px; font-weight: 600; }
+  .tool .tc { font-size: 11px; color: var(--amber); }
+  .tool.sel { border-color: var(--cyan); background: #14224a; box-shadow: 0 0 16px rgba(54,226,255,.3); }
+  .tool.dis { opacity: .4; cursor: not-allowed; }
+  .tool.recycle .tc { color: var(--muted); }
+
+  #controls { display: flex; gap: 10px; align-items: center; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 11px; border: 1px solid var(--line);
+    background: #131c3c; color: var(--ink); padding: 11px 18px; font-size: 15px;
+    transition: transform .08s, border-color .15s, background .15s;
+  }
+  button:hover { border-color: var(--cyan); }
+  button:active { transform: translateY(1px); }
+  .btn-primary { background: linear-gradient(180deg, #1ea7c4, #1577a8); border-color: #36e2ff; font-weight: 700; }
+
+  /* overlays */
+  .overlay { position: fixed; inset: 0; display: none; place-items: center; background: rgba(3,5,14,.74); backdrop-filter: blur(3px); z-index: 9; padding: 16px; }
+  .overlay.show { display: grid; }
+  .card { width: min(600px, 94vw); max-height: 92vh; overflow:auto; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 26px; box-shadow: 0 24px 80px rgba(0,0,0,.6); }
+  .card h1 { margin: 0 0 4px; font-size: 30px; letter-spacing: -.5px; }
+  .card .tag { color: var(--cyan); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 12px; }
+  .card p { color: var(--muted); line-height: 1.55; margin: 0 0 12px; font-size: 15px; }
+  .card ul { color: var(--muted); line-height: 1.55; margin: 0 0 14px; padding-left: 18px; font-size: 14px; }
+  .card b { color: var(--ink); }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; margin: 6px 0 16px; }
+  .legend .li { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; color: var(--muted); }
+  .legend .li svg { width: 22px; height: 22px; flex: none; margin-top: 1px; }
+  .legend .li b { color: var(--ink); }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div class="pill"><span class="label">Wave</span> <span id="waveVal">1</span><span style="color:var(--muted)">/8</span></div>
+    <div class="pill"><span class="label">Core</span> <span id="coreHearts"></span></div>
+    <div class="pill"><span class="label">Energy</span> <span id="energyVal">7</span></div>
+    <div class="pill"><span class="label">Score</span> <span id="scoreVal">0</span></div>
+  </div>
+  <div id="banner"></div>
+  <canvas id="grid"></canvas>
+  <div id="palette"></div>
+  <div id="controls">
+    <button class="btn-primary" id="execBtn">Execute turn</button>
+  </div>
+</div>
+
+<!-- icon defs reused by JS via cloneNode -->
+<svg style="display:none" id="icons" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="ic-wall" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="#6b7aa8"/><path d="M3 12h18M9 5v7M15 12v7" stroke="#0b1024" stroke-width="1.6"/></symbol>
+  <symbol id="ic-zap" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18" stroke="#36e2ff" stroke-width="3" stroke-linecap="round"/></symbol>
+  <symbol id="ic-beam" viewBox="0 0 24 24"><path d="M3 12h15" stroke="#5be3ff" stroke-width="3" stroke-linecap="round"/><path d="M14 7l6 5-6 5z" fill="#5be3ff"/></symbol>
+  <symbol id="ic-nova" viewBox="0 0 24 24"><g stroke="#b388ff" stroke-width="2.4" stroke-linecap="round"><path d="M12 4v16M4 12h16M6 6l12 12M18 6L6 18"/></g></symbol>
+  <symbol id="ic-mine" viewBox="0 0 24 24"><path d="M12 3l9 9-9 9-9-9z" fill="#ffd166"/><circle cx="12" cy="12" r="2.4" fill="#0b1024"/></symbol>
+  <symbol id="ic-recycle" viewBox="0 0 24 24"><path d="M7 7a7 7 0 0 1 11 2" fill="none" stroke="#8aa0c8" stroke-width="2.2" stroke-linecap="round"/><path d="M18 4v5h-5" fill="none" stroke="#8aa0c8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 17a7 7 0 0 1-11-2" fill="none" stroke="#8aa0c8" stroke-width="2.2" stroke-linecap="round"/><path d="M6 20v-5h5" fill="none" stroke="#8aa0c8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<!-- start menu -->
+<div class="overlay show" id="menu">
+  <div class="card">
+    <p class="tag">Tower-defense &times; tactics chess</p>
+    <h1>FIREWALL</h1>
+    <p>Viruses cross the grid toward your <b style="color:var(--cyan)">core</b> on the right. Every virus shows <b>exactly where it will move next</b> — so each turn is a planning puzzle, not a reflex test. Place programs, funnel the swarm into kill-zones, and don't let them breach.</p>
+    <p><b>Each turn:</b> spend energy to place or recycle programs, then hit <b>Execute</b>. Your programs fire first, then every virus advances one step along the arrow. Survive 8 waves.</p>
+    <div class="legend" id="menuLegend"></div>
+    <p style="font-size:13px">Tip: a <b>Wall</b> reroutes the swarm — bend their path through a <b>Nova</b> or a <b>Mine</b>. You can place and recycle freely while planning; nothing is locked until you Execute.</p>
+    <div class="row"><button class="btn-primary" id="startBtn">Start</button></div>
+  </div>
+</div>
+
+<!-- result -->
+<div class="overlay" id="resultOverlay">
+  <div class="card">
+    <h1 id="resultTitle">Wave cleared</h1>
+    <p id="resultBody"></p>
+    <div class="row"><button class="btn-primary" id="resultBtn">Continue</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   FIREWALL — single-file prototype
+   Mashup: Tower Defense (waves to your core) x grid Tactics
+   (chess-like patterns) x perfect-information telegraphing.
+   Pillars: planning, positioning, energy economy, routing,
+   read-and-counter. No reflexes — every threat is shown.
+   ============================================================ */
+
+const COLS = 8, ROWS = 6;        // col 0 = spawn, col 7 = core, 1..6 buildable
+const CORE_COL = COLS - 1, SPAWN_COL = 0;
+const CORE_HP = 5;
+const START_ENERGY = 7, ENERGY_PER_WAVE = 4, ENERGY_CAP = 18;
+
+const TOOLS = {
+  wall:  { name: "Wall",  cost: 1, icon: "ic-wall",  color: "#6b7aa8", desc: "Blocks movement (2 HP). Reroutes the swarm; chewed through if fully sealed." },
+  zap:   { name: "Zap",   cost: 2, icon: "ic-zap",   color: "#36e2ff", desc: "Hits the 4 orthogonal neighbours for 1 each turn. Great on chokepoints." },
+  beam:  { name: "Beam",  cost: 3, icon: "ic-beam",  color: "#5be3ff", desc: "Fires right along its whole row for 1. Mow down a lane." },
+  nova:  { name: "Nova",  cost: 5, icon: "ic-nova",  color: "#b388ff", desc: "Hits all 8 surrounding tiles for 2. An expensive kill-zone." },
+  mine:  { name: "Mine",  cost: 2, icon: "ic-mine",  color: "#ffd166", desc: "Detonates when a virus steps on it: 3 damage to that tile + neighbours, then gone." },
+};
+const TOOL_ORDER = ["wall", "zap", "beam", "nova", "mine"];
+
+const VIRUS = {
+  grunt:  { hp: 2, speed: 1, score: 10, color: "#ff8a5b", shape: "circle" },
+  runner: { hp: 1, speed: 2, score: 15, color: "#ffd166", shape: "triangle" },
+  brute:  { hp: 4, speed: 1, score: 25, color: "#ff5d7e", shape: "hex" },
+};
+
+// each wave: list of {type,row}. Rows 0..5.
+const WAVES = [
+  [["grunt",2],["grunt",3]],
+  [["grunt",1],["grunt",3],["grunt",4]],
+  [["grunt",0],["grunt",2],["grunt",3],["grunt",5]],
+  [["runner",1],["grunt",2],["grunt",3],["runner",4]],
+  [["grunt",0],["runner",2],["grunt",3],["grunt",4],["runner",5]],
+  [["grunt",0],["brute",2],["brute",3],["grunt",5]],
+  [["runner",0],["brute",1],["grunt",3],["brute",4],["runner",5]],
+  [["grunt",0],["brute",1],["runner",2],["brute",3],["runner",4],["grunt",5]],
+];
+
+// ---- state -----------------------------------------------------
+let cv, ctx, TILE = 64, DPR = 1, gridW = 0, gridH = 0;
+let nextId = 1;
+const S = {
+  phase: "menu",      // menu | plan | won | lost
+  wave: 0, coreHP: CORE_HP, energy: START_ENERGY, score: 0, turn: 0,
+  viruses: [], programs: [], dist: null,
+  tool: "zap", hoverC: -1, hoverR: -1,
+  fx: [],             // transient particles / flashes
+};
+
+const len = (x, y) => Math.hypot(x, y);
+const inB = (c, r) => c >= 0 && c < COLS && r >= 0 && r < ROWS;
+const programAt = (c, r) => S.programs.find(p => p.col === c && p.row === r) || null;
+const virusAt = (c, r) => S.viruses.find(v => v.col === c && v.row === r) || null;
+const isWall = (c, r) => { const p = programAt(c, r); return p && p.type === "wall"; };
+const buildable = (c, r) => inB(c, r) && c > SPAWN_COL && c < CORE_COL;
+
+// ---- sizing ----------------------------------------------------
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const maxW = Math.min(window.innerWidth - 24, 860);
+  const maxH = window.innerHeight - 250;
+  TILE = Math.max(34, Math.floor(Math.min(maxW / COLS, maxH / ROWS)));
+  gridW = TILE * COLS; gridH = TILE * ROWS;
+  cv.width = Math.floor(gridW * DPR); cv.height = Math.floor(gridH * DPR);
+  cv.style.width = gridW + "px"; cv.style.height = gridH + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", resize);
+
+const ccx = c => c * TILE + TILE / 2;
+const ccy = r => r * TILE + TILE / 2;
+
+// ---- pathing: multi-source BFS distance to the core column -----
+function computeDist() {
+  const INF = 1e9;
+  const dist = Array.from({ length: COLS }, () => new Array(ROWS).fill(INF));
+  const q = [];
+  for (let r = 0; r < ROWS; r++) { dist[CORE_COL][r] = 0; q.push([CORE_COL, r]); }
+  let head = 0;
+  while (head < q.length) {
+    const [c, r] = q[head++];
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nc = c + dc, nr = r + dr;
+      if (!inB(nc, nr) || isWall(nc, nr)) continue;
+      if (dist[nc][nr] > dist[c][r] + 1) { dist[nc][nr] = dist[c][r] + 1; q.push([nc, nr]); }
+    }
+  }
+  S.dist = dist;
+}
+
+// best forward neighbour for a virus at (c,r): lowest dist, must progress
+function bestNeighbour(c, r) {
+  const d = S.dist[c][r];
+  let best = null, bestD = d;
+  for (const [dc, dr] of [[1, 0], [0, 1], [0, -1], [-1, 0]]) { // prefer toward core / vertical
+    const nc = c + dc, nr = r + dr;
+    if (!inB(nc, nr) || isWall(nc, nr)) continue;
+    if (S.dist[nc][nr] < bestD) { bestD = S.dist[nc][nr]; best = { c: nc, r: nr }; }
+  }
+  return best;
+}
+
+// telegraph: up to `speed` steps ahead (ignores occupancy, for display/AI read)
+function telegraph(v) {
+  const steps = [];
+  let c = v.col, r = v.row;
+  for (let i = 0; i < v.speed; i++) {
+    const nb = bestNeighbour(c, r);
+    if (!nb) break;
+    steps.push(nb); c = nb.c; r = nb.r;
+    if (c === CORE_COL) break;
+  }
+  return steps;
+}
+
+// ---- turn resolution ------------------------------------------
+function firePrograms() {
+  const dmg = Array.from({ length: COLS }, () => new Array(ROWS).fill(0));
+  const addDmg = (c, r, n) => { if (inB(c, r)) dmg[c][r] += n; };
+  for (const p of S.programs) {
+    if (p.type === "zap") {
+      addDmg(p.col + 1, p.row, 1); addDmg(p.col - 1, p.row, 1);
+      addDmg(p.col, p.row + 1, 1); addDmg(p.col, p.row - 1, 1);
+    } else if (p.type === "beam") {
+      for (let c = p.col + 1; c < CORE_COL; c++) addDmg(c, p.row, 1);
+    } else if (p.type === "nova") {
+      for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++)
+        if (dc || dr) addDmg(p.col + dc, p.row + dr, 2);
+    }
+  }
+  return dmg;
+}
+
+// what fire will do — also used for the plan-phase preview
+function previewDamage() { return firePrograms(); }
+
+function detonateMine(p) {
+  flash(ccx(p.col), ccy(p.row), TOOLS.mine.color, 26, TILE * 0.12);
+  for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) {
+    const c = p.col + dc, r = p.row + dr;
+    const v = virusAt(c, r);
+    if (v) v.hp -= 3;
+  }
+  S.programs = S.programs.filter(x => x !== p);
+}
+
+function executeTurn() {
+  if (S.phase !== "plan") return;
+
+  // 1) programs fire
+  const dmg = firePrograms();
+  for (const v of S.viruses) v.hp -= dmg[v.col][v.row];
+  killDead("fire");
+
+  // 2) viruses advance (closest to core first to free up space)
+  computeDist();
+  const order = S.viruses.slice().sort((a, b) => S.dist[a.col][a.row] - S.dist[b.col][b.row]);
+  for (const v of order) {
+    if (v.hp <= 0) continue;
+    let steps = v.speed;
+    while (steps-- > 0 && v.hp > 0) {
+      const nb = bestNeighbour(v.col, v.row);
+      if (!nb) { attackWall(v); break; }
+      if (nb.c === CORE_COL) { breach(v); break; }
+      if (virusAt(nb.c, nb.r)) break; // lane blocked by another virus — wait
+      v.col = nb.c; v.row = nb.r;
+      const m = programAt(v.col, v.row);
+      if (m && m.type === "mine") detonateMine(m);
+      if (v.hp <= 0) break;
+    }
+  }
+  killDead("step");
+  S.viruses = S.viruses.filter(v => !v.breached);
+
+  // 3) walls may have been destroyed -> refresh field
+  computeDist();
+
+  // 4) wave / win
+  if (S.viruses.length === 0) {
+    if (S.wave >= WAVES.length) { S.phase = "won"; updateUI(); showResult("won"); return; }
+    startWave(S.wave + 1, true);
+  }
+
+  // 5) lose
+  if (S.coreHP <= 0) { S.phase = "lost"; updateUI(); showResult("lost"); return; }
+
+  for (const p of S.programs) p.placedTurn = -1; // older than this turn now -> 50% recycle
+  S.turn++;
+  updateUI();
+}
+
+function killDead(cause) {
+  const dead = S.viruses.filter(v => v.hp <= 0);
+  for (const v of dead) { S.score += VIRUS[v.type].score; flash(ccx(v.col), ccy(v.row), v.color, 18, TILE * 0.1); }
+  S.viruses = S.viruses.filter(v => v.hp > 0);
+}
+
+function breach(v) {
+  v.breached = true; S.coreHP = Math.max(0, S.coreHP - 1);
+  flash(cv ? ccx(CORE_COL) : 0, ccy(v.row), "#ff5d7e", 24, TILE * 0.12);
+}
+
+function attackWall(v) {
+  // stuck: chew the wall nearest the core (right, then vertical, then left)
+  for (const [dc, dr] of [[1, 0], [0, 1], [0, -1], [-1, 0]]) {
+    const c = v.col + dc, r = v.row + dr;
+    const w = programAt(c, r);
+    if (w && w.type === "wall") {
+      w.hp -= 1; flash(ccx(c), ccy(r), "#6b7aa8", 8, TILE * 0.06);
+      if (w.hp <= 0) S.programs = S.programs.filter(x => x !== w);
+      return;
+    }
+  }
+}
+
+// ---- waves -----------------------------------------------------
+function startWave(n, gainEnergy) {
+  S.wave = n;
+  const spec = WAVES[n - 1] || [];
+  for (const [type, row] of spec) {
+    const t = VIRUS[type];
+    S.viruses.push({ id: nextId++, type, col: SPAWN_COL, row, hp: t.hp, maxhp: t.hp, speed: t.speed, color: t.color, breached: false });
+  }
+  if (gainEnergy) S.energy = Math.min(ENERGY_CAP, S.energy + ENERGY_PER_WAVE);
+  computeDist();
+}
+
+// ---- placing / recycling --------------------------------------
+function tryPlace(c, r) {
+  if (S.phase !== "plan") return;
+  if (S.tool === "recycle") { tryRecycle(c, r); return; }
+  const t = TOOLS[S.tool]; if (!t) return;
+  if (!buildable(c, r)) { hint("You can only build in the middle columns."); return; }
+  if (programAt(c, r) || virusAt(c, r)) { hint("That tile is occupied."); return; }
+  if (S.energy < t.cost) { hint("Not enough energy for " + t.name + "."); return; }
+  S.energy -= t.cost;
+  const p = { id: nextId++, type: S.tool, col: c, row: r, hp: S.tool === "wall" ? 2 : 1, placedTurn: S.turn };
+  S.programs.push(p);
+  if (S.tool === "wall") computeDist();
+  updateUI();
+}
+
+function tryRecycle(c, r) {
+  const p = programAt(c, r); if (!p) return;
+  const cost = TOOLS[p.type].cost;
+  const refund = p.placedTurn === S.turn ? cost : Math.floor(cost / 2); // full this turn, else 50%
+  S.energy = Math.min(ENERGY_CAP, S.energy + refund);
+  S.programs = S.programs.filter(x => x !== p);
+  if (p.type === "wall") computeDist();
+  hint("Recycled " + TOOLS[p.type].name + " (+" + refund + " energy).");
+  updateUI();
+}
+
+// ---- effects ---------------------------------------------------
+function flash(x, y, color, n, spread) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, s = Math.random() * spread;
+    S.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: 0.04 + Math.random() * 0.04, r: 1.5 + Math.random() * 2, color });
+  }
+}
+
+// =================== RENDER ====================================
+function draw() {
+  ctx.clearRect(0, 0, gridW, gridH);
+  if (S.phase === "menu") return;
+
+  const dmg = (S.phase === "plan") ? previewDamage() : null;
+
+  // tiles
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+    const x = c * TILE, y = r * TILE;
+    let fill = "#0b1430";
+    if (c === SPAWN_COL) fill = "#241019";
+    else if (c === CORE_COL) fill = "#0c2438";
+    ctx.fillStyle = fill;
+    ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+    // preview: tiles that will take fire
+    if (dmg && dmg[c][r] > 0) {
+      ctx.fillStyle = "rgba(54,226,255,0.12)";
+      ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
+    }
+    // grid lines
+    ctx.strokeStyle = "rgba(54,226,255,0.10)";
+    ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, TILE, TILE);
+  }
+  // core glow column
+  ctx.fillStyle = "rgba(54,226,255,0.10)";
+  ctx.fillRect(CORE_COL * TILE, 0, TILE, gridH);
+  ctx.strokeStyle = "rgba(54,226,255,0.5)";
+  ctx.lineWidth = 2; ctx.strokeRect(CORE_COL * TILE + 1, 1, TILE - 2, gridH - 2);
+  drawCenteredText("CORE", ccx(CORE_COL), gridH - 8, 10, "rgba(180,220,255,.7)");
+
+  // hover highlight
+  if (S.phase === "plan" && buildable(S.hoverC, S.hoverR) && S.tool !== "recycle") {
+    ctx.strokeStyle = "rgba(54,226,255,.8)"; ctx.lineWidth = 2;
+    ctx.strokeRect(S.hoverC * TILE + 2, S.hoverR * TILE + 2, TILE - 4, TILE - 4);
+  }
+
+  // programs
+  for (const p of S.programs) drawProgram(p);
+
+  // telegraph arrows (drawn under viruses)
+  if (S.phase === "plan") for (const v of S.viruses) drawTelegraph(v);
+
+  // viruses
+  for (const v of S.viruses) drawVirus(v, dmg);
+
+  // fx
+  for (const f of S.fx) {
+    ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.color;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawProgram(p) {
+  const x = ccx(p.col), y = ccy(p.row), R = TILE * 0.34, t = TOOLS[p.type];
+  ctx.save();
+  // base chip
+  ctx.fillStyle = "rgba(10,16,36,0.9)";
+  roundRect(p.col * TILE + TILE * 0.14, p.row * TILE + TILE * 0.14, TILE * 0.72, TILE * 0.72, 7); ctx.fill();
+  ctx.strokeStyle = t.color; ctx.lineWidth = 2; ctx.stroke();
+  ctx.translate(x, y);
+  ctx.strokeStyle = t.color; ctx.fillStyle = t.color; ctx.lineWidth = Math.max(2, TILE * 0.045);
+  ctx.lineCap = "round";
+  if (p.type === "wall") {
+    ctx.fillStyle = "#6b7aa8";
+    roundRect(-R, -R * 0.8, R * 2, R * 1.6, 4); ctx.fill();
+    // hp ticks
+    ctx.fillStyle = "#0b1024";
+    for (let i = 0; i < p.hp; i++) { ctx.fillRect(-R + 3 + i * (R * 0.9), -R * 0.8 + 3, R * 0.55, R * 1.6 - 6); }
+  } else if (p.type === "zap") {
+    ctx.beginPath(); ctx.moveTo(0, -R); ctx.lineTo(0, R); ctx.moveTo(-R, 0); ctx.lineTo(R, 0); ctx.stroke();
+  } else if (p.type === "beam") {
+    ctx.beginPath(); ctx.moveTo(-R, 0); ctx.lineTo(R * 0.4, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(R * 0.2, -R * 0.5); ctx.lineTo(R, 0); ctx.lineTo(R * 0.2, R * 0.5); ctx.closePath(); ctx.fill();
+  } else if (p.type === "nova") {
+    ctx.beginPath();
+    ctx.moveTo(0, -R); ctx.lineTo(0, R); ctx.moveTo(-R, 0); ctx.lineTo(R, 0);
+    const d = R * 0.72; ctx.moveTo(-d, -d); ctx.lineTo(d, d); ctx.moveTo(d, -d); ctx.lineTo(-d, d);
+    ctx.stroke();
+  } else if (p.type === "mine") {
+    ctx.beginPath(); ctx.moveTo(0, -R); ctx.lineTo(R, 0); ctx.lineTo(0, R); ctx.lineTo(-R, 0); ctx.closePath();
+    ctx.fillStyle = "#ffd166"; ctx.fill();
+    ctx.fillStyle = "#0b1024"; ctx.beginPath(); ctx.arc(0, 0, R * 0.28, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTelegraph(v) {
+  const steps = telegraph(v);
+  let fc = v.col, fr = v.row;
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    const x1 = ccx(fc), y1 = ccy(fr), x2 = ccx(s.c), y2 = ccy(s.r);
+    ctx.save();
+    ctx.globalAlpha = 0.5 - i * 0.12;
+    ctx.strokeStyle = v.color; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.setLineDash([]);
+    // arrowhead at destination
+    const a = Math.atan2(y2 - y1, x2 - x1), ah = TILE * 0.16;
+    ctx.fillStyle = v.color;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - ah * Math.cos(a - 0.5), y2 - ah * Math.sin(a - 0.5));
+    ctx.lineTo(x2 - ah * Math.cos(a + 0.5), y2 - ah * Math.sin(a + 0.5));
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    fc = s.c; fr = s.r;
+  }
+}
+
+function drawVirus(v, dmg) {
+  const x = ccx(v.col), y = ccy(v.row), R = TILE * (v.type === "brute" ? 0.32 : 0.27);
+  const willDie = dmg && dmg[v.col][v.row] >= v.hp;
+  ctx.save();
+  // glow
+  const g = ctx.createRadialGradient(x, y, 0, x, y, R * 2.2);
+  g.addColorStop(0, v.color + "cc"); g.addColorStop(0.6, v.color + "33"); g.addColorStop(1, v.color + "00");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R * 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = v.color; ctx.strokeStyle = "#0b1024"; ctx.lineWidth = 2;
+  const sh = VIRUS[v.type].shape;
+  ctx.beginPath();
+  if (sh === "circle") ctx.arc(x, y, R, 0, Math.PI * 2);
+  else if (sh === "triangle") { ctx.moveTo(x + R, y); ctx.lineTo(x - R * 0.8, y - R * 0.85); ctx.lineTo(x - R * 0.8, y + R * 0.85); ctx.closePath(); }
+  else { for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + i * Math.PI / 3; const px = x + Math.cos(a) * R, py = y + Math.sin(a) * R; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.closePath(); }
+  ctx.fill(); ctx.stroke();
+  // "will die" marker
+  if (willDie) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, R * 1.45, 0, Math.PI * 2); ctx.stroke(); }
+  // hp pips
+  const pips = v.maxhp; const pw = Math.min(TILE * 0.14, 7); const gap = 2;
+  const totalW = pips * pw + (pips - 1) * gap;
+  for (let i = 0; i < pips; i++) {
+    ctx.fillStyle = i < v.hp ? "#ffffff" : "rgba(255,255,255,0.22)";
+    ctx.fillRect(x - totalW / 2 + i * (pw + gap), y - R - pw - 3, pw, pw);
+  }
+  ctx.restore();
+}
+
+// canvas helpers
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function drawCenteredText(t, x, y, size, color) { ctx.fillStyle = color; ctx.font = "600 " + size + "px Segoe UI, sans-serif"; ctx.textAlign = "center"; ctx.fillText(t, x, y); }
+
+// =================== UI ========================================
+const waveVal = document.getElementById("waveVal");
+const coreHearts = document.getElementById("coreHearts");
+const energyVal = document.getElementById("energyVal");
+const scoreVal = document.getElementById("scoreVal");
+const bannerEl = document.getElementById("banner");
+const paletteEl = document.getElementById("palette");
+const execBtn = document.getElementById("execBtn");
+
+function buildPalette() {
+  paletteEl.innerHTML = "";
+  for (const key of TOOL_ORDER) {
+    const t = TOOLS[key];
+    const b = document.createElement("div");
+    b.className = "tool"; b.dataset.tool = key;
+    b.innerHTML = '<svg><use href="#' + t.icon + '"/></svg><div><div class="tn">' + t.name + '</div><div class="tc">' + t.cost + ' E</div></div>';
+    b.title = t.desc;
+    b.onclick = () => { if (!b.classList.contains("dis")) { S.tool = key; updateUI(); } };
+    paletteEl.appendChild(b);
+  }
+  const rec = document.createElement("div");
+  rec.className = "tool recycle"; rec.dataset.tool = "recycle";
+  rec.innerHTML = '<svg><use href="#ic-recycle"/></svg><div><div class="tn">Recycle</div><div class="tc">refund</div></div>';
+  rec.title = "Remove a program. Full refund if placed this turn, else 50%.";
+  rec.onclick = () => { S.tool = "recycle"; updateUI(); };
+  paletteEl.appendChild(rec);
+}
+
+function buildMenuLegend() {
+  const wrap = document.getElementById("menuLegend");
+  wrap.innerHTML = "";
+  for (const key of TOOL_ORDER) {
+    const t = TOOLS[key];
+    const li = document.createElement("div"); li.className = "li";
+    li.innerHTML = '<svg><use href="#' + t.icon + '"/></svg><div><b>' + t.name + '</b> (' + t.cost + ' E) — ' + t.desc + '</div>';
+    wrap.appendChild(li);
+  }
+}
+
+let hintTimer = null;
+function hint(msg) { bannerEl.innerHTML = msg; clearTimeout(hintTimer); hintTimer = setTimeout(updateBanner, 2200); }
+function updateBanner() {
+  if (S.phase === "plan") {
+    const left = WAVES[S.wave - 1] ? "" : "";
+    bannerEl.innerHTML = "<b>Plan your turn</b> &middot; place programs, then Execute. Arrows show where each virus moves next.";
+  }
+}
+
+function updateUI() {
+  waveVal.textContent = S.wave;
+  coreHearts.innerHTML = "";
+  for (let i = 0; i < CORE_HP; i++) { const h = document.createElement("span"); h.className = "heart" + (i < S.coreHP ? "" : " off"); coreHearts.appendChild(h); }
+  energyVal.textContent = S.energy;
+  scoreVal.textContent = S.score;
+  // palette enable/selected
+  for (const b of paletteEl.children) {
+    const key = b.dataset.tool;
+    b.classList.toggle("sel", key === S.tool);
+    if (key !== "recycle") {
+      const aff = S.energy >= TOOLS[key].cost && S.phase === "plan";
+      b.classList.toggle("dis", !aff);
+    }
+  }
+  execBtn.disabled = S.phase !== "plan";
+  updateBanner();
+}
+
+// ---- input -----------------------------------------------------
+function tileFromEvent(e) {
+  const rect = cv.getBoundingClientRect();
+  const p = (e.touches && e.touches[0]) || e;
+  return { c: Math.floor((p.clientX - rect.left) / TILE), r: Math.floor((p.clientY - rect.top) / TILE) };
+}
+function onPointer(e) {
+  if (S.phase !== "plan") return;
+  const { c, r } = tileFromEvent(e); tryPlace(c, r);
+}
+function onMove(e) {
+  const { c, r } = tileFromEvent(e); S.hoverC = c; S.hoverR = r;
+}
+
+// ---- result ----------------------------------------------------
+const resultOverlay = document.getElementById("resultOverlay");
+const resultTitle = document.getElementById("resultTitle");
+const resultBody = document.getElementById("resultBody");
+const resultBtn = document.getElementById("resultBtn");
+function showResult(kind) {
+  if (kind === "won") {
+    resultTitle.textContent = "Firewall holds";
+    resultBody.innerHTML = "You repelled all 8 waves with <b>" + S.coreHP + "</b> core integrity to spare. Final score <b>" + S.score + "</b>.";
+    resultBtn.textContent = "Play again";
+  } else {
+    resultTitle.textContent = "Core breached";
+    resultBody.innerHTML = "The swarm broke through on wave <b>" + S.wave + "</b>. Final score <b>" + S.score + "</b>. The whole board was visible — replan and try again.";
+    resultBtn.textContent = "Retry";
+  }
+  resultOverlay.classList.add("show");
+}
+resultBtn.onclick = () => { resultOverlay.classList.remove("show"); startGame(); };
+
+// ---- lifecycle -------------------------------------------------
+function startGame() {
+  S.phase = "plan"; S.wave = 0; S.coreHP = CORE_HP; S.energy = START_ENERGY;
+  S.score = 0; S.turn = 0; S.viruses = []; S.programs = []; S.fx = []; S.tool = "zap";
+  resize();
+  startWave(1, false);
+  updateUI();
+}
+
+function loop() {
+  for (const f of S.fx) { f.x += f.vx; f.y += f.vy; f.vx *= 0.9; f.vy *= 0.9; f.life -= f.decay; }
+  S.fx = S.fx.filter(f => f.life > 0);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function boot() {
+  cv = document.getElementById("grid"); ctx = cv.getContext("2d");
+  resize(); buildPalette(); buildMenuLegend(); updateUI();
+  cv.addEventListener("pointerdown", onPointer);
+  cv.addEventListener("pointermove", onMove);
+  execBtn.addEventListener("click", executeTurn);
+  document.getElementById("startBtn").onclick = () => { document.getElementById("menu").classList.remove("show"); startGame(); };
+  // keyboard: number keys select tools, Enter executes
+  window.addEventListener("keydown", e => {
+    if (S.phase !== "plan") return;
+    const idx = parseInt(e.key, 10);
+    if (idx >= 1 && idx <= TOOL_ORDER.length) { S.tool = TOOL_ORDER[idx - 1]; updateUI(); }
+    else if (e.key === "0" || e.key === "r" || e.key === "R") { S.tool = "recycle"; updateUI(); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); executeTurn(); }
+  });
+  requestAnimationFrame(loop);
+}
+boot();
+</script>
+</body>
+</html>
