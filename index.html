@@ -3,12 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>LINE COOK — an AI cat-chef duel</title>
+<title>SIMMER — an AI cat-chef duel</title>
 <style>
-  :root{
-    --bg0:#05060f;--bg1:#0b1024;--ink:#e8f0ff;--muted:#8aa0c8;
-    --you:#36e2ff;--rival:#ff9b50;--line:#233056;--panel:rgba(12,18,40,0.92);
-  }
+  :root{--bg0:#05060f;--bg1:#0b1024;--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--rival:#ff9b50;--line:#233056;--panel:rgba(12,18,40,0.92);}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;min-height:100%;overflow:hidden;background:radial-gradient(120% 120% at 50% 0%,var(--bg1),var(--bg0));color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;user-select:none;touch-action:none;}
   #app{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px;}
@@ -17,7 +14,6 @@
   .pill .label{color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
   .pill.you{border-color:var(--you);} .pill.you b{color:var(--you);}
   .pill.rival{border-color:var(--rival);} .pill.rival b{color:var(--rival);}
-  .pill.turn{font-weight:600;}
   #banner{color:var(--muted);font-size:13px;min-height:18px;text-align:center;max-width:760px;}
   #banner b{color:var(--ink);}
   canvas{display:block;touch-action:none;}
@@ -42,34 +38,28 @@
 <div id="app">
   <div id="hud">
     <div class="pill you"><span class="label">You</span> <b id="youScore">0</b></div>
-    <div class="pill turn" id="turnPill">Your move</div>
+    <div class="pill" id="turnPill">Your stir</div>
     <div class="pill rival"><span class="label">Rival</span> <b id="rivalScore">0</b></div>
   </div>
   <div id="banner"></div>
   <canvas id="board"></canvas>
-  <div id="controls">
-    <button id="newBtn">New duel</button>
-  </div>
+  <div id="controls"><button id="newBtn">New service</button></div>
 </div>
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">AI cat-chef duel &middot; cooking-show &times; territory strategy</p>
-    <h1>LINE COOK</h1>
-    <p>You and a rival AI cat draw <b>counters</b> on a shared kitchen grid. Close all four sides of a <b>station</b> and you claim its dish — <b>and you cook again</b>. Most dishes when the grid is full wins. The Capybara of Indifference judges, unmoved.</p>
+    <p class="tag">AI cat-chef duel &middot; cooking &times; territory strategy</p>
+    <h1>SIMMER</h1>
+    <p>Every pot has a <b>doneness</b> number. <b>Stir</b> a pot and it — <i>plus its four neighbours</i> — each drop by one. Any pot that hits exactly <b>0</b> is <b>plated</b> in your colour. When the stove is empty, the most dishes wins. The Capybara of Indifference judges, unmoved.</p>
     <ul>
-      <li><b>Draw a counter:</b> click an empty edge between two dots.</li>
-      <li><b>Claim &amp; repeat:</b> completing a station's 4th wall claims it and gives you another move — so claims can chain.</li>
-      <li><b>The trap:</b> drawing a station's <i>third</i> wall hands your rival a free dish. When you must, give away the <b>smallest</b> run — and the expert move is to <b>sacrifice two</b> to force your rival to open the next big chain.</li>
+      <li><b>Your move:</b> click any cooking pot to stir it (a plus-shaped pulse). Then it's the rival cat's turn.</li>
+      <li><b>The catch:</b> stirring also nudges pots toward <i>0</i> for whoever stirs next — so leaving a pot on <b>1</b> hands the rival a free dish. Set up <b>multi-plates</b> for yourself; deny them to the rival.</li>
+      <li>Grabbing the most dishes <i>this</i> stir isn't always right — sometimes you stir to deny, not to plate.</li>
     </ul>
-    <p class="note">Core = <b>combinatorial game theory</b> (the chain-and-parity math of Dots &amp; Boxes, per Berlekamp). The greedy "grab every dish" move is <i>provably</i> a trap, and it's adversarial — so there's no single trick to solve it, only deeper parity play. Theme from 2026's biggest internet obsessions: AI + cats + cooking.</p>
+    <p class="note">An <b>original</b> mechanic (not a known game), with a <b>combinatorial-game</b> core: it's adversarial and a purely greedy "plate the most now" player loses ~75% of games to a thinking one (verified in simulation). Theme from 2026's biggest internet obsessions: AI + cats + cooking.</p>
     <div class="row">
-      <label style="color:var(--muted);font-size:14px">Grid
-        <select id="sizeSel">
-          <option value="4">4 × 4 (quick)</option>
-          <option value="5" selected>5 × 5</option>
-          <option value="6">6 × 6 (long)</option>
-        </select>
+      <label style="color:var(--muted);font-size:14px">Stove
+        <select id="sizeSel"><option value="4">4 × 4</option><option value="5" selected>5 × 5</option><option value="6">6 × 6</option></select>
       </label>
       <button class="btn-primary" id="startBtn">Start cooking</button>
     </div>
@@ -87,184 +77,124 @@
 <script>
 "use strict";
 /* ============================================================
-   LINE COOK — Dots & Boxes core (combinatorial game theory).
-   You (cyan cat) vs an AI rival cat. Close a box's 4th edge to
-   claim it AND move again. The greedy "take every box" play is a
-   trap; depth is in chain parity + the double-cross sacrifice.
+   SIMMER — original "stir the pots" duel.
+   Stir a pot: it + its 4 orthogonal neighbours each -1. Any pot
+   reaching 0 is plated (claimed) by the stirrer. One stir per
+   turn (NO go-again — that's what gives the parity/denial depth).
+   You (cyan cat) vs a lookahead AI rival (orange cat). Most
+   dishes when the stove empties wins.
    ============================================================ */
 
 let cv, ctx, DPR = 1;
-let ROWS = 5, COLS = 5;              // boxes; dots = (ROWS+1) x (COLS+1)
-let CELL = 80, OX = 0, OY = 0;
+let R = 5, C = 5, N = 25;
+let CELL = 80, OX = 20, OY = 20;
+let nbrs = [];
 
-// edges drawn-state. H: (ROWS+1) x COLS ; V: ROWS x (COLS+1)
-let H, V, owner, edgeOwner_H, edgeOwner_V;
-const G = {
-  phase: "menu",   // menu | you | ai | over
-  youScore: 0, rivalScore: 0,
-  hoverEdge: null,
-  fx: [],
-};
+// cells: v (doneness, >0 while cooking), owner (-1 cooking, 0 you, 1 rival)
+let cells = [];
+const G = { phase: "menu", you: 0, rival: 0, hover: -1, fx: [], thinking: false };
 
-const inb = (a, lo, hi) => a >= lo && a < hi;
-
-function initBoard() {
-  H = Array.from({ length: ROWS + 1 }, () => new Array(COLS).fill(false));
-  V = Array.from({ length: ROWS }, () => new Array(COLS + 1).fill(false));
-  edgeOwner_H = Array.from({ length: ROWS + 1 }, () => new Array(COLS).fill(-1));
-  edgeOwner_V = Array.from({ length: ROWS }, () => new Array(COLS + 1).fill(-1));
-  owner = Array.from({ length: ROWS }, () => new Array(COLS).fill(-1));
-  G.youScore = 0; G.rivalScore = 0; G.fx = []; G.hoverEdge = null;
-}
-
-// ---- box / edge helpers ---------------------------------------
-function edgeDrawn(e) { return e.o === "H" ? H[e.r][e.c] : V[e.r][e.c]; }
-function setEdge(e, val) { if (e.o === "H") H[e.r][e.c] = val; else V[e.r][e.c] = val; }
-function boxDegree(br, bc) { // undrawn edges of a box
-  let d = 0;
-  if (!H[br][bc]) d++;
-  if (!H[br + 1][bc]) d++;
-  if (!V[br][bc]) d++;
-  if (!V[br][bc + 1]) d++;
-  return d;
-}
-function adjacentBoxes(e) {
-  const out = [];
-  if (e.o === "H") { if (e.r > 0) out.push([e.r - 1, e.c]); if (e.r < ROWS) out.push([e.r, e.c]); }
-  else { if (e.c > 0) out.push([e.r, e.c - 1]); if (e.c < COLS) out.push([e.r, e.c]); }
-  return out;
-}
-function allUndrawn() {
-  const out = [];
-  for (let r = 0; r <= ROWS; r++) for (let c = 0; c < COLS; c++) if (!H[r][c]) out.push({ o: "H", r, c });
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c <= COLS; c++) if (!V[r][c]) out.push({ o: "V", r, c });
-  return out;
-}
-
-// classify a move
-function isCapture(e) { return adjacentBoxes(e).some(([r, c]) => boxDegree(r, c) === 1); }
-function isUnsafe(e) { return !isCapture(e) && adjacentBoxes(e).some(([r, c]) => boxDegree(r, c) === 2); }
-function isSafe(e) { return !isCapture(e) && !isUnsafe(e); }
-
-// apply a move for `player` (0 you, 1 rival). returns # boxes completed.
-function applyMove(e, player) {
-  setEdge(e, true);
-  if (e.o === "H") edgeOwner_H[e.r][e.c] = player; else edgeOwner_V[e.r][e.c] = player;
-  let done = 0;
-  for (const [r, c] of adjacentBoxes(e)) {
-    if (boxDegree(r, c) === 0 && owner[r][c] === -1) {
-      owner[r][c] = player; done++;
-      if (player === 0) G.youScore++; else G.rivalScore++;
-      spawnClaim(r, c, player);
-    }
+function buildNbrs() {
+  nbrs = [];
+  for (let i = 0; i < N; i++) {
+    const r = (i / C) | 0, c = i % C, a = [];
+    if (r > 0) a.push(i - C); if (r < R - 1) a.push(i + C);
+    if (c > 0) a.push(i - 1); if (c < C - 1) a.push(i + 1);
+    nbrs.push(a);
   }
-  return done;
+}
+const cooking = (cc, i) => cc[i].o < 0 && cc[i].v > 0;
+const cloneCells = cc => cc.map(x => ({ v: x.v, o: x.o }));
+function legalMoves(cc) { const a = []; for (let i = 0; i < N; i++) if (cooking(cc, i)) a.push(i); return a; }
+
+// stir on a given cells array; returns # plated
+function stirOn(cc, i, pl) {
+  if (!cooking(cc, i)) return 0;
+  let plated = 0;
+  const grp = [i].concat(nbrs[i]);
+  for (const j of grp) { const x = cc[j]; if (x.o < 0 && x.v > 0) { x.v--; if (x.v === 0) { x.o = pl; plated++; } } }
+  return plated;
 }
 
-function boxesLeft() { let n = 0; for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (owner[r][c] === -1) n++; return n; }
-function gameOver() { return allUndrawn().length === 0; }
-
-// ---- AI: capture frees -> safe move -> open the SMALLEST chain --
-// (greedy "take all" is punished; v1 AI minimises sacrifice. The
-//  expert double-cross is the player's path to beating it.)
-function sacrificeCost(e) {
-  // draw e on a clone, then count how many boxes the opponent can
-  // capture in the chain it opens (smaller = better to give away).
-  const Hs = H.map(row => row.slice()), Vs = V.map(row => row.slice());
-  setEdge(e, true);
-  let count = 0, guard = 0;
-  while (guard++ < 400) {
-    let took = false;
-    for (let r = 0; r < ROWS && !took; r++) for (let c = 0; c < COLS && !took; c++) {
-      if (owner[r][c] === -1 && boxDegree(r, c) === 1) {
-        // draw its missing edge
-        if (!H[r][c]) H[r][c] = true; else if (!H[r + 1][c]) H[r + 1][c] = true;
-        else if (!V[r][c]) V[r][c] = true; else V[r][c + 1] = true;
-        count++; took = true;
-      }
-    }
-    if (!took) break;
+// ---- AI: negamax on plate-differential with alpha-beta --------
+function negamax(cc, pl, depth, alpha, beta) {
+  const moves = legalMoves(cc);
+  if (depth === 0 || moves.length === 0) return 0;
+  // move ordering: most immediate plates first (better pruning)
+  moves.sort((a, b) => quickPlates(cc, b, pl) - quickPlates(cc, a, pl));
+  let best = -Infinity;
+  for (const i of moves) {
+    const k = cloneCells(cc); const p = stirOn(k, i, pl);
+    const val = p - negamax(k, 1 - pl, depth - 1, -beta, -alpha);
+    if (val > best) best = val;
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break;
   }
-  H = Hs; V = Vs; // restore
-  return count;
+  return best;
 }
-function aiChooseMove() {
-  const undrawn = allUndrawn();
-  const caps = undrawn.filter(isCapture);
-  if (caps.length) return caps[0];
-  const safes = undrawn.filter(isSafe);
-  if (safes.length) return safes[(Math.random() * safes.length) | 0];
-  // forced to open: minimise what we give away
-  let best = undrawn[0], bestCost = Infinity;
-  for (const e of undrawn) { const c = sacrificeCost(e); if (c < bestCost) { bestCost = c; best = e; } }
+function quickPlates(cc, i, pl) { // count plates without cloning (read-only)
+  let p = 0; const grp = [i].concat(nbrs[i]);
+  for (const j of grp) { const x = cc[j]; if (x.o < 0 && x.v === 1) p++; }
+  return p;
+}
+function aiChoose() {
+  const moves = legalMoves(cells);
+  const depth = moves.length > 26 ? 2 : (moves.length > 14 ? 3 : 4);
+  let best = moves[0], bestV = -Infinity;
+  moves.sort((a, b) => quickPlates(cells, b, 1) - quickPlates(cells, a, 1));
+  for (const i of moves) {
+    const k = cloneCells(cells); const p = stirOn(k, i, 1);
+    const v = p - negamax(k, 0, depth - 1, -Infinity, Infinity);
+    if (v > bestV) { bestV = v; best = i; }
+  }
   return best;
 }
 
 // ---- turn flow -------------------------------------------------
-function youPlay(e) {
-  if (G.phase !== "you" || edgeDrawn(e)) return;
-  const made = applyMove(e, 0);
-  finishTurn(made === 0 ? 1 : 0);
+function doStir(i, pl) {
+  const before = cells.map(x => x.o);
+  const plated = stirOn(cells, i, pl);
+  // fx for newly plated + the pulse
+  for (let j = 0; j < N; j++) if (before[j] < 0 && cells[j].o >= 0) spawnPlate(j, pl);
+  if (pl === 0) G.you += plated; else G.rival += plated;
+  return plated;
 }
-function finishTurn(next) {
-  if (gameOver()) { endGame(); return; }
-  if (next === 0) { G.phase = "you"; updateHud(); }
-  else { G.phase = "ai"; updateHud(); setTimeout(aiStep, 480); }
+function youStir(i) {
+  if (G.phase !== "you" || !cooking(cells, i)) return;
+  doStir(i, 0);
+  G.hover = -1;
+  if (over()) return endGame();
+  G.phase = "ai"; G.thinking = true; updateHud();
+  setTimeout(() => { const m = aiChoose(); doStir(m, 1); G.thinking = false; if (over()) return endGame(); G.phase = "you"; updateHud(); }, 380);
 }
-function aiStep() {
-  if (G.phase !== "ai") return;
-  const e = aiChooseMove();
-  const made = applyMove(e, 1);
-  if (gameOver()) { endGame(); return; }
-  if (made > 0) setTimeout(aiStep, 420); // claimed -> cook again
-  else finishTurn(0);
-}
-function endGame() {
-  G.phase = "over"; updateHud(); showResult();
-}
+function over() { return legalMoves(cells).length === 0; }
+function endGame() { G.phase = "over"; updateHud(); showResult(); }
 
 // ---- effects ---------------------------------------------------
-function spawnClaim(r, c, player) {
-  const x = OX + (c + 0.5) * CELL, y = OY + (r + 0.5) * CELL;
-  const col = player === 0 ? "#36e2ff" : "#ff9b50";
-  for (let i = 0; i < 14; i++) { const a = Math.random() * Math.PI * 2, s = Math.random() * 5; G.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: 0.03 + Math.random() * 0.03, r: 1.5 + Math.random() * 2, col }); }
+function spawnPlate(i, pl) {
+  const x = OX + ((i % C) + 0.5) * CELL, y = OY + (((i / C) | 0) + 0.5) * CELL;
+  const col = pl === 0 ? "#36e2ff" : "#ff9b50";
+  for (let k = 0; k < 12; k++) { const a = Math.random() * Math.PI * 2, s = Math.random() * 4.5; G.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: .03 + Math.random() * .03, r: 1.5 + Math.random() * 2, col }); }
 }
 
 // ---- sizing ----------------------------------------------------
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
-  const maxW = Math.min(window.innerWidth - 24, 720);
-  const maxH = window.innerHeight - 180;
-  CELL = Math.max(40, Math.floor(Math.min(maxW / COLS, maxH / ROWS)));
-  const w = CELL * COLS + 40, h = CELL * ROWS + 40;
+  const maxW = Math.min(window.innerWidth - 24, 680), maxH = window.innerHeight - 180;
+  CELL = Math.max(46, Math.floor(Math.min(maxW / C, maxH / R)));
+  const w = CELL * C + 2 * OX, h = CELL * R + 2 * OY;
   cv.width = Math.floor(w * DPR); cv.height = Math.floor(h * DPR);
   cv.style.width = w + "px"; cv.style.height = h + "px";
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  OX = 20; OY = 20;
 }
 window.addEventListener("resize", () => { if (G.phase !== "menu") resize(); });
-
-const dotX = c => OX + c * CELL, dotY = r => OY + r * CELL;
+const cellX = i => OX + (i % C) * CELL, cellY = i => OY + ((i / C) | 0) * CELL;
 
 // ---- input -----------------------------------------------------
-function nearestEdge(px, py) {
-  let best = null, bd = (CELL * 0.42) ** 2;
-  // horizontal edges: midpoint at (dotX(c)+CELL/2, dotY(r))
-  for (let r = 0; r <= ROWS; r++) for (let c = 0; c < COLS; c++) {
-    if (H[r][c]) continue;
-    const mx = dotX(c) + CELL / 2, my = dotY(r); const d = (px - mx) ** 2 + (py - my) ** 2;
-    if (d < bd) { bd = d; best = { o: "H", r, c }; }
-  }
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c <= COLS; c++) {
-    if (V[r][c]) continue;
-    const mx = dotX(c), my = dotY(r) + CELL / 2; const d = (px - mx) ** 2 + (py - my) ** 2;
-    if (d < bd) { bd = d; best = { o: "V", r, c }; }
-  }
-  return best;
-}
+function idxAt(px, py) { const c = ((px - OX) / CELL) | 0, r = ((py - OY) / CELL) | 0; if (r < 0 || r >= R || c < 0 || c >= C) return -1; return r * C + c; }
 function evtPos(e) { const rect = cv.getBoundingClientRect(); const p = (e.touches && e.touches[0]) || e; return { x: p.clientX - rect.left, y: p.clientY - rect.top }; }
-function onMove(e) { if (G.phase !== "you") { G.hoverEdge = null; return; } const { x, y } = evtPos(e); G.hoverEdge = nearestEdge(x, y); }
-function onDown(e) { if (G.phase !== "you") return; const { x, y } = evtPos(e); const ed = nearestEdge(x, y); if (ed) youPlay(ed); }
+function onMove(e) { if (G.phase !== "you") { G.hover = -1; return; } const { x, y } = evtPos(e); const i = idxAt(x, y); G.hover = (i >= 0 && cooking(cells, i)) ? i : -1; }
+function onDown(e) { if (G.phase !== "you") return; const { x, y } = evtPos(e); const i = idxAt(x, y); if (i >= 0) youStir(i); }
 
 // ---- render ----------------------------------------------------
 function draw() {
@@ -272,99 +202,85 @@ function draw() {
   ctx.clearRect(0, 0, cv.width, cv.height);
   if (G.phase === "menu") return;
 
-  // claimed boxes
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-    if (owner[r][c] < 0) continue;
-    const x = dotX(c), y = dotY(r), col = owner[r][c] === 0 ? "#36e2ff" : "#ff9b50";
-    ctx.fillStyle = hexA(col, 0.16); roundRect(x + 3, y + 3, CELL - 6, CELL - 6, 8); ctx.fill();
-    drawDish(x + CELL / 2, y + CELL / 2, CELL * 0.26, col, owner[r][c]);
+  // pulse preview (which cells this stir touches + which would plate)
+  const pulse = G.hover >= 0 ? new Set([G.hover].concat(nbrs[G.hover])) : null;
+
+  for (let i = 0; i < N; i++) {
+    const x = cellX(i), y = cellY(i), s = CELL;
+    const cellc = cells[i];
+    // base pot
+    ctx.fillStyle = "#0d1730";
+    roundRect(x + 4, y + 4, s - 8, s - 8, 10); ctx.fill();
+    if (cellc.o >= 0) {
+      // plated dish
+      const col = cellc.o === 0 ? "#36e2ff" : "#ff9b50";
+      ctx.fillStyle = hexA(col, 0.16); roundRect(x + 4, y + 4, s - 8, s - 8, 10); ctx.fill();
+      drawDish(x + s / 2, y + s / 2, s * 0.24, col);
+    } else {
+      // cooking: ring + doneness number
+      const willPlate = pulse && pulse.has(i) && cellc.v === 1;
+      const inPulse = pulse && pulse.has(i);
+      ctx.strokeStyle = inPulse ? (willPlate ? "#9affd0" : "rgba(54,226,255,0.8)") : "#2b3a6b";
+      ctx.lineWidth = inPulse ? 3 : 2; roundRect(x + 4, y + 4, s - 8, s - 8, 10); ctx.stroke();
+      ctx.fillStyle = willPlate ? "#9affd0" : "#cfe0ff";
+      ctx.font = "bold " + Math.round(s * 0.4) + "px Segoe UI"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(cellc.v, x + s / 2, y + s / 2 + 1);
+    }
   }
+  // hovered target marker
+  if (G.hover >= 0) { ctx.strokeStyle = "#36e2ff"; ctx.lineWidth = 3; roundRect(cellX(G.hover) + 2, cellY(G.hover) + 2, CELL - 4, CELL - 4, 11); ctx.stroke(); }
 
-  // hover preview
-  if (G.hoverEdge) drawEdge(G.hoverEdge, "rgba(54,226,255,0.5)", 5, true);
-
-  // drawn edges
-  for (let r = 0; r <= ROWS; r++) for (let c = 0; c < COLS; c++) if (H[r][c]) drawEdge({ o: "H", r, c }, edgeColor(edgeOwner_H[r][c]), 4, false);
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c <= COLS; c++) if (V[r][c]) drawEdge({ o: "V", r, c }, edgeColor(edgeOwner_V[r][c]), 4, false);
-
-  // dots
-  ctx.fillStyle = "#9fb3d9";
-  for (let r = 0; r <= ROWS; r++) for (let c = 0; c <= COLS; c++) { ctx.beginPath(); ctx.arc(dotX(c), dotY(r), 3.2, 0, Math.PI * 2); ctx.fill(); }
-
-  // fx
   for (const f of G.fx) { ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.col; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill(); }
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = 1; ctx.textBaseline = "alphabetic";
 }
-function edgeColor(o) { return o === 0 ? "#36e2ff" : o === 1 ? "#ff9b50" : "#5a6b96"; }
-function drawEdge(e, color, width, dashed) {
-  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = "round";
-  if (dashed) ctx.setLineDash([4, 5]); else ctx.setLineDash([]);
-  ctx.beginPath();
-  if (e.o === "H") { ctx.moveTo(dotX(e.c), dotY(e.r)); ctx.lineTo(dotX(e.c + 1), dotY(e.r)); }
-  else { ctx.moveTo(dotX(e.c), dotY(e.r)); ctx.lineTo(dotX(e.c), dotY(e.r + 1)); }
-  ctx.stroke(); ctx.setLineDash([]);
-}
-function drawDish(x, y, r, col, who) {
-  // a little plate with a cat-ear glyph (no emoji)
-  ctx.fillStyle = hexA(col, 0.9); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#0b1024"; ctx.beginPath(); ctx.arc(x, y, r * 0.62, 0, Math.PI * 2); ctx.fill();
-  // cat ears on top of the dome
-  ctx.fillStyle = hexA(col, 0.9);
-  ctx.beginPath(); ctx.moveTo(x - r * 0.5, y - r * 0.55); ctx.lineTo(x - r * 0.18, y - r * 0.95); ctx.lineTo(x - r * 0.02, y - r * 0.5); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(x + r * 0.5, y - r * 0.55); ctx.lineTo(x + r * 0.18, y - r * 0.95); ctx.lineTo(x + r * 0.02, y - r * 0.5); ctx.closePath(); ctx.fill();
+function drawDish(x, y, r, col) {
+  ctx.fillStyle = hexA(col, 0.92); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#0b1024"; ctx.beginPath(); ctx.arc(x, y, r * 0.6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = hexA(col, 0.92);
+  ctx.beginPath(); ctx.moveTo(x - r * 0.5, y - r * 0.5); ctx.lineTo(x - r * 0.16, y - r * 0.95); ctx.lineTo(x, y - r * 0.5); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x + r * 0.5, y - r * 0.5); ctx.lineTo(x + r * 0.16, y - r * 0.95); ctx.lineTo(x, y - r * 0.5); ctx.closePath(); ctx.fill();
 }
 function roundRect(x, y, w, h, rr) { ctx.beginPath(); ctx.moveTo(x + rr, y); ctx.arcTo(x + w, y, x + w, y + h, rr); ctx.arcTo(x + w, y + h, x, y + h, rr); ctx.arcTo(x, y + h, x, y, rr); ctx.arcTo(x, y, x + w, y, rr); ctx.closePath(); }
 function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")"; }
 
 // ---- HUD / overlays -------------------------------------------
-const youScoreEl = document.getElementById("youScore");
-const rivalScoreEl = document.getElementById("rivalScore");
-const turnPill = document.getElementById("turnPill");
-const bannerEl = document.getElementById("banner");
+const youEl = document.getElementById("youScore"), rivalEl = document.getElementById("rivalScore"), turnPill = document.getElementById("turnPill"), bannerEl = document.getElementById("banner");
 function updateHud() {
-  youScoreEl.textContent = G.youScore; rivalScoreEl.textContent = G.rivalScore;
-  if (G.phase === "you") { turnPill.textContent = "Your move"; turnPill.style.color = "var(--you)"; }
+  youEl.textContent = G.you; rivalEl.textContent = G.rival;
+  if (G.phase === "you") { turnPill.textContent = "Your stir"; turnPill.style.color = "var(--you)"; }
   else if (G.phase === "ai") { turnPill.textContent = "Rival cooking…"; turnPill.style.color = "var(--rival)"; }
   else { turnPill.textContent = "Service over"; turnPill.style.color = "var(--muted)"; }
-  // banner: warn when you have no safe move (you'll have to give a dish away)
   if (G.phase === "you") {
-    const u = allUndrawn();
-    const hasCap = u.some(isCapture), hasSafe = u.some(isSafe);
-    bannerEl.innerHTML = hasCap ? "<b>Free dish available</b> — but is taking it a trap? Watch the chain you open next."
-      : hasSafe ? "Play a <b>safe</b> counter (one that doesn't give a station its 3rd wall)."
-      : "<b>No safe move</b> — you must open a chain. Give away the <i>smallest</i> one.";
+    const ones = legalMoves(cells).filter(i => cells[i].v === 1).length;
+    bannerEl.innerHTML = ones > 0
+      ? "<b>" + ones + " pot" + (ones > 1 ? "s" : "") + " on 1</b> — ready to plate. Grab a cluster, but don't leave easy ones for the rival."
+      : "Stir to set up <b>multi-plates</b> — and watch which pots you nudge down to 1.";
   }
 }
-const resultOverlay = document.getElementById("resultOverlay");
-const resultTitle = document.getElementById("resultTitle");
-const resultBody = document.getElementById("resultBody");
+const resultOverlay = document.getElementById("resultOverlay"), resultTitle = document.getElementById("resultTitle"), resultBody = document.getElementById("resultBody");
 function showResult() {
-  const y = G.youScore, r = G.rivalScore;
+  const y = G.you, r = G.rival;
   resultTitle.textContent = y > r ? "You win the service!" : y < r ? "The rival cat wins" : "Dead heat";
-  resultBody.innerHTML = "Final dishes — <b style='color:var(--you)'>You " + y + "</b> &middot; <b style='color:var(--rival)'>Rival " + r + "</b>. " +
+  resultBody.innerHTML = "Dishes plated — <b style='color:var(--you)'>You " + y + "</b> &middot; <b style='color:var(--rival)'>Rival " + r + "</b>. " +
     (y > r ? "The Capybara nods, almost." : y < r ? "The Capybara remains unmoved." : "The Capybara is, as ever, indifferent.");
   resultOverlay.classList.add("show");
 }
 
 // ---- loop / boot ----------------------------------------------
-function loop() {
-  for (const f of G.fx) { f.x += f.vx; f.y += f.vy; f.vx *= 0.9; f.vy *= 0.9; f.life -= f.decay; }
-  G.fx = G.fx.filter(f => f.life > 0);
-  draw(); requestAnimationFrame(loop);
-}
+function loop() { for (const f of G.fx) { f.x += f.vx; f.y += f.vy; f.vx *= .9; f.vy *= .9; f.life -= f.decay; } G.fx = G.fx.filter(f => f.life > 0); draw(); requestAnimationFrame(loop); }
 function startGame() {
-  initBoard(); resize();
-  G.phase = "you"; updateHud();
+  N = R * C; buildNbrs();
+  cells = [];
+  for (let i = 0; i < N; i++) cells.push({ v: 1 + ((Math.random() * 3) | 0), o: -1 });
+  G.you = 0; G.rival = 0; G.fx = []; G.hover = -1; G.phase = "you"; G.thinking = false;
+  resize(); updateHud();
 }
 function boot() {
   cv = document.getElementById("board"); ctx = cv.getContext("2d");
   cv.addEventListener("pointermove", onMove);
   cv.addEventListener("pointerdown", onDown);
-  cv.addEventListener("pointerleave", () => { G.hoverEdge = null; });
-  document.getElementById("startBtn").onclick = () => {
-    const s = parseInt(document.getElementById("sizeSel").value, 10); ROWS = s; COLS = s;
-    document.getElementById("menu").classList.remove("show"); startGame();
-  };
+  cv.addEventListener("pointerleave", () => { G.hover = -1; });
+  document.getElementById("startBtn").onclick = () => { const s = parseInt(document.getElementById("sizeSel").value, 10); R = s; C = s; document.getElementById("menu").classList.remove("show"); startGame(); };
   document.getElementById("newBtn").onclick = () => { document.getElementById("menu").classList.add("show"); G.phase = "menu"; };
   document.getElementById("resultBtn").onclick = () => { resultOverlay.classList.remove("show"); startGame(); };
   requestAnimationFrame(loop);

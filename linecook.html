@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>LINE COOK — an AI cat-chef duel</title>
+<style>
+  :root{
+    --bg0:#05060f;--bg1:#0b1024;--ink:#e8f0ff;--muted:#8aa0c8;
+    --you:#36e2ff;--rival:#ff9b50;--line:#233056;--panel:rgba(12,18,40,0.92);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;min-height:100%;overflow:hidden;background:radial-gradient(120% 120% at 50% 0%,var(--bg1),var(--bg0));color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;user-select:none;touch-action:none;}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px;}
+  #hud{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;display:flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums;}
+  .pill .label{color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
+  .pill.you{border-color:var(--you);} .pill.you b{color:var(--you);}
+  .pill.rival{border-color:var(--rival);} .pill.rival b{color:var(--rival);}
+  .pill.turn{font-weight:600;}
+  #banner{color:var(--muted);font-size:13px;min-height:18px;text-align:center;max-width:760px;}
+  #banner b{color:var(--ink);}
+  canvas{display:block;touch-action:none;}
+  #controls{display:flex;gap:10px;}
+  button{font:inherit;cursor:pointer;border-radius:11px;border:1px solid var(--line);background:#131c3c;color:var(--ink);padding:10px 18px;font-size:14px;transition:transform .08s,border-color .15s;}
+  button:hover{border-color:var(--you);} button:active{transform:translateY(1px);}
+  .btn-primary{background:linear-gradient(180deg,#1ea7c4,#1577a8);border-color:#36e2ff;font-weight:700;}
+  .overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,14,.74);backdrop-filter:blur(3px);z-index:9;padding:16px;}
+  .overlay.show{display:grid;}
+  .card{width:min(600px,94vw);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.6);}
+  .card h1{margin:0 0 4px;font-size:30px;letter-spacing:-.5px;}
+  .card .tag{color:var(--you);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 12px;}
+  .card p{color:var(--muted);line-height:1.55;margin:0 0 12px;font-size:15px;}
+  .card ul{color:var(--muted);line-height:1.55;margin:0 0 14px;padding-left:18px;font-size:14px;}
+  .card b{color:var(--ink);}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  .note{font-size:12px;color:var(--muted);border-left:2px solid var(--line);padding-left:12px;margin-top:4px;}
+  select{font:inherit;background:#131c3c;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:7px 10px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div class="pill you"><span class="label">You</span> <b id="youScore">0</b></div>
+    <div class="pill turn" id="turnPill">Your move</div>
+    <div class="pill rival"><span class="label">Rival</span> <b id="rivalScore">0</b></div>
+  </div>
+  <div id="banner"></div>
+  <canvas id="board"></canvas>
+  <div id="controls">
+    <button id="newBtn">New duel</button>
+  </div>
+</div>
+
+<div class="overlay show" id="menu">
+  <div class="card">
+    <p class="tag">AI cat-chef duel &middot; cooking-show &times; territory strategy</p>
+    <h1>LINE COOK</h1>
+    <p>You and a rival AI cat draw <b>counters</b> on a shared kitchen grid. Close all four sides of a <b>station</b> and you claim its dish — <b>and you cook again</b>. Most dishes when the grid is full wins. The Capybara of Indifference judges, unmoved.</p>
+    <ul>
+      <li><b>Draw a counter:</b> click an empty edge between two dots.</li>
+      <li><b>Claim &amp; repeat:</b> completing a station's 4th wall claims it and gives you another move — so claims can chain.</li>
+      <li><b>The trap:</b> drawing a station's <i>third</i> wall hands your rival a free dish. When you must, give away the <b>smallest</b> run — and the expert move is to <b>sacrifice two</b> to force your rival to open the next big chain.</li>
+    </ul>
+    <p class="note">Core = <b>combinatorial game theory</b> (the chain-and-parity math of Dots &amp; Boxes, per Berlekamp). The greedy "grab every dish" move is <i>provably</i> a trap, and it's adversarial — so there's no single trick to solve it, only deeper parity play. Theme from 2026's biggest internet obsessions: AI + cats + cooking.</p>
+    <div class="row">
+      <label style="color:var(--muted);font-size:14px">Grid
+        <select id="sizeSel">
+          <option value="4">4 × 4 (quick)</option>
+          <option value="5" selected>5 × 5</option>
+          <option value="6">6 × 6 (long)</option>
+        </select>
+      </label>
+      <button class="btn-primary" id="startBtn">Start cooking</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="resultOverlay">
+  <div class="card">
+    <h1 id="resultTitle">Service over</h1>
+    <p id="resultBody"></p>
+    <div class="row"><button class="btn-primary" id="resultBtn">Rematch</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   LINE COOK — Dots & Boxes core (combinatorial game theory).
+   You (cyan cat) vs an AI rival cat. Close a box's 4th edge to
+   claim it AND move again. The greedy "take every box" play is a
+   trap; depth is in chain parity + the double-cross sacrifice.
+   ============================================================ */
+
+let cv, ctx, DPR = 1;
+let ROWS = 5, COLS = 5;              // boxes; dots = (ROWS+1) x (COLS+1)
+let CELL = 80, OX = 0, OY = 0;
+
+// edges drawn-state. H: (ROWS+1) x COLS ; V: ROWS x (COLS+1)
+let H, V, owner, edgeOwner_H, edgeOwner_V;
+const G = {
+  phase: "menu",   // menu | you | ai | over
+  youScore: 0, rivalScore: 0,
+  hoverEdge: null,
+  fx: [],
+};
+
+const inb = (a, lo, hi) => a >= lo && a < hi;
+
+function initBoard() {
+  H = Array.from({ length: ROWS + 1 }, () => new Array(COLS).fill(false));
+  V = Array.from({ length: ROWS }, () => new Array(COLS + 1).fill(false));
+  edgeOwner_H = Array.from({ length: ROWS + 1 }, () => new Array(COLS).fill(-1));
+  edgeOwner_V = Array.from({ length: ROWS }, () => new Array(COLS + 1).fill(-1));
+  owner = Array.from({ length: ROWS }, () => new Array(COLS).fill(-1));
+  G.youScore = 0; G.rivalScore = 0; G.fx = []; G.hoverEdge = null;
+}
+
+// ---- box / edge helpers ---------------------------------------
+function edgeDrawn(e) { return e.o === "H" ? H[e.r][e.c] : V[e.r][e.c]; }
+function setEdge(e, val) { if (e.o === "H") H[e.r][e.c] = val; else V[e.r][e.c] = val; }
+function boxDegree(br, bc) { // undrawn edges of a box
+  let d = 0;
+  if (!H[br][bc]) d++;
+  if (!H[br + 1][bc]) d++;
+  if (!V[br][bc]) d++;
+  if (!V[br][bc + 1]) d++;
+  return d;
+}
+function adjacentBoxes(e) {
+  const out = [];
+  if (e.o === "H") { if (e.r > 0) out.push([e.r - 1, e.c]); if (e.r < ROWS) out.push([e.r, e.c]); }
+  else { if (e.c > 0) out.push([e.r, e.c - 1]); if (e.c < COLS) out.push([e.r, e.c]); }
+  return out;
+}
+function allUndrawn() {
+  const out = [];
+  for (let r = 0; r <= ROWS; r++) for (let c = 0; c < COLS; c++) if (!H[r][c]) out.push({ o: "H", r, c });
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c <= COLS; c++) if (!V[r][c]) out.push({ o: "V", r, c });
+  return out;
+}
+
+// classify a move
+function isCapture(e) { return adjacentBoxes(e).some(([r, c]) => boxDegree(r, c) === 1); }
+function isUnsafe(e) { return !isCapture(e) && adjacentBoxes(e).some(([r, c]) => boxDegree(r, c) === 2); }
+function isSafe(e) { return !isCapture(e) && !isUnsafe(e); }
+
+// apply a move for `player` (0 you, 1 rival). returns # boxes completed.
+function applyMove(e, player) {
+  setEdge(e, true);
+  if (e.o === "H") edgeOwner_H[e.r][e.c] = player; else edgeOwner_V[e.r][e.c] = player;
+  let done = 0;
+  for (const [r, c] of adjacentBoxes(e)) {
+    if (boxDegree(r, c) === 0 && owner[r][c] === -1) {
+      owner[r][c] = player; done++;
+      if (player === 0) G.youScore++; else G.rivalScore++;
+      spawnClaim(r, c, player);
+    }
+  }
+  return done;
+}
+
+function boxesLeft() { let n = 0; for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (owner[r][c] === -1) n++; return n; }
+function gameOver() { return allUndrawn().length === 0; }
+
+// ---- AI: capture frees -> safe move -> open the SMALLEST chain --
+// (greedy "take all" is punished; v1 AI minimises sacrifice. The
+//  expert double-cross is the player's path to beating it.)
+function sacrificeCost(e) {
+  // draw e on a clone, then count how many boxes the opponent can
+  // capture in the chain it opens (smaller = better to give away).
+  const Hs = H.map(row => row.slice()), Vs = V.map(row => row.slice());
+  setEdge(e, true);
+  let count = 0, guard = 0;
+  while (guard++ < 400) {
+    let took = false;
+    for (let r = 0; r < ROWS && !took; r++) for (let c = 0; c < COLS && !took; c++) {
+      if (owner[r][c] === -1 && boxDegree(r, c) === 1) {
+        // draw its missing edge
+        if (!H[r][c]) H[r][c] = true; else if (!H[r + 1][c]) H[r + 1][c] = true;
+        else if (!V[r][c]) V[r][c] = true; else V[r][c + 1] = true;
+        count++; took = true;
+      }
+    }
+    if (!took) break;
+  }
+  H = Hs; V = Vs; // restore
+  return count;
+}
+function aiChooseMove() {
+  const undrawn = allUndrawn();
+  const caps = undrawn.filter(isCapture);
+  if (caps.length) return caps[0];
+  const safes = undrawn.filter(isSafe);
+  if (safes.length) return safes[(Math.random() * safes.length) | 0];
+  // forced to open: minimise what we give away
+  let best = undrawn[0], bestCost = Infinity;
+  for (const e of undrawn) { const c = sacrificeCost(e); if (c < bestCost) { bestCost = c; best = e; } }
+  return best;
+}
+
+// ---- turn flow -------------------------------------------------
+function youPlay(e) {
+  if (G.phase !== "you" || edgeDrawn(e)) return;
+  const made = applyMove(e, 0);
+  finishTurn(made === 0 ? 1 : 0);
+}
+function finishTurn(next) {
+  if (gameOver()) { endGame(); return; }
+  if (next === 0) { G.phase = "you"; updateHud(); }
+  else { G.phase = "ai"; updateHud(); setTimeout(aiStep, 480); }
+}
+function aiStep() {
+  if (G.phase !== "ai") return;
+  const e = aiChooseMove();
+  const made = applyMove(e, 1);
+  if (gameOver()) { endGame(); return; }
+  if (made > 0) setTimeout(aiStep, 420); // claimed -> cook again
+  else finishTurn(0);
+}
+function endGame() {
+  G.phase = "over"; updateHud(); showResult();
+}
+
+// ---- effects ---------------------------------------------------
+function spawnClaim(r, c, player) {
+  const x = OX + (c + 0.5) * CELL, y = OY + (r + 0.5) * CELL;
+  const col = player === 0 ? "#36e2ff" : "#ff9b50";
+  for (let i = 0; i < 14; i++) { const a = Math.random() * Math.PI * 2, s = Math.random() * 5; G.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: 0.03 + Math.random() * 0.03, r: 1.5 + Math.random() * 2, col }); }
+}
+
+// ---- sizing ----------------------------------------------------
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const maxW = Math.min(window.innerWidth - 24, 720);
+  const maxH = window.innerHeight - 180;
+  CELL = Math.max(40, Math.floor(Math.min(maxW / COLS, maxH / ROWS)));
+  const w = CELL * COLS + 40, h = CELL * ROWS + 40;
+  cv.width = Math.floor(w * DPR); cv.height = Math.floor(h * DPR);
+  cv.style.width = w + "px"; cv.style.height = h + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  OX = 20; OY = 20;
+}
+window.addEventListener("resize", () => { if (G.phase !== "menu") resize(); });
+
+const dotX = c => OX + c * CELL, dotY = r => OY + r * CELL;
+
+// ---- input -----------------------------------------------------
+function nearestEdge(px, py) {
+  let best = null, bd = (CELL * 0.42) ** 2;
+  // horizontal edges: midpoint at (dotX(c)+CELL/2, dotY(r))
+  for (let r = 0; r <= ROWS; r++) for (let c = 0; c < COLS; c++) {
+    if (H[r][c]) continue;
+    const mx = dotX(c) + CELL / 2, my = dotY(r); const d = (px - mx) ** 2 + (py - my) ** 2;
+    if (d < bd) { bd = d; best = { o: "H", r, c }; }
+  }
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c <= COLS; c++) {
+    if (V[r][c]) continue;
+    const mx = dotX(c), my = dotY(r) + CELL / 2; const d = (px - mx) ** 2 + (py - my) ** 2;
+    if (d < bd) { bd = d; best = { o: "V", r, c }; }
+  }
+  return best;
+}
+function evtPos(e) { const rect = cv.getBoundingClientRect(); const p = (e.touches && e.touches[0]) || e; return { x: p.clientX - rect.left, y: p.clientY - rect.top }; }
+function onMove(e) { if (G.phase !== "you") { G.hoverEdge = null; return; } const { x, y } = evtPos(e); G.hoverEdge = nearestEdge(x, y); }
+function onDown(e) { if (G.phase !== "you") return; const { x, y } = evtPos(e); const ed = nearestEdge(x, y); if (ed) youPlay(ed); }
+
+// ---- render ----------------------------------------------------
+function draw() {
+  if (!ctx) return;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (G.phase === "menu") return;
+
+  // claimed boxes
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    if (owner[r][c] < 0) continue;
+    const x = dotX(c), y = dotY(r), col = owner[r][c] === 0 ? "#36e2ff" : "#ff9b50";
+    ctx.fillStyle = hexA(col, 0.16); roundRect(x + 3, y + 3, CELL - 6, CELL - 6, 8); ctx.fill();
+    drawDish(x + CELL / 2, y + CELL / 2, CELL * 0.26, col, owner[r][c]);
+  }
+
+  // hover preview
+  if (G.hoverEdge) drawEdge(G.hoverEdge, "rgba(54,226,255,0.5)", 5, true);
+
+  // drawn edges
+  for (let r = 0; r <= ROWS; r++) for (let c = 0; c < COLS; c++) if (H[r][c]) drawEdge({ o: "H", r, c }, edgeColor(edgeOwner_H[r][c]), 4, false);
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c <= COLS; c++) if (V[r][c]) drawEdge({ o: "V", r, c }, edgeColor(edgeOwner_V[r][c]), 4, false);
+
+  // dots
+  ctx.fillStyle = "#9fb3d9";
+  for (let r = 0; r <= ROWS; r++) for (let c = 0; c <= COLS; c++) { ctx.beginPath(); ctx.arc(dotX(c), dotY(r), 3.2, 0, Math.PI * 2); ctx.fill(); }
+
+  // fx
+  for (const f of G.fx) { ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.col; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill(); }
+  ctx.globalAlpha = 1;
+}
+function edgeColor(o) { return o === 0 ? "#36e2ff" : o === 1 ? "#ff9b50" : "#5a6b96"; }
+function drawEdge(e, color, width, dashed) {
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = "round";
+  if (dashed) ctx.setLineDash([4, 5]); else ctx.setLineDash([]);
+  ctx.beginPath();
+  if (e.o === "H") { ctx.moveTo(dotX(e.c), dotY(e.r)); ctx.lineTo(dotX(e.c + 1), dotY(e.r)); }
+  else { ctx.moveTo(dotX(e.c), dotY(e.r)); ctx.lineTo(dotX(e.c), dotY(e.r + 1)); }
+  ctx.stroke(); ctx.setLineDash([]);
+}
+function drawDish(x, y, r, col, who) {
+  // a little plate with a cat-ear glyph (no emoji)
+  ctx.fillStyle = hexA(col, 0.9); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#0b1024"; ctx.beginPath(); ctx.arc(x, y, r * 0.62, 0, Math.PI * 2); ctx.fill();
+  // cat ears on top of the dome
+  ctx.fillStyle = hexA(col, 0.9);
+  ctx.beginPath(); ctx.moveTo(x - r * 0.5, y - r * 0.55); ctx.lineTo(x - r * 0.18, y - r * 0.95); ctx.lineTo(x - r * 0.02, y - r * 0.5); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x + r * 0.5, y - r * 0.55); ctx.lineTo(x + r * 0.18, y - r * 0.95); ctx.lineTo(x + r * 0.02, y - r * 0.5); ctx.closePath(); ctx.fill();
+}
+function roundRect(x, y, w, h, rr) { ctx.beginPath(); ctx.moveTo(x + rr, y); ctx.arcTo(x + w, y, x + w, y + h, rr); ctx.arcTo(x + w, y + h, x, y + h, rr); ctx.arcTo(x, y + h, x, y, rr); ctx.arcTo(x, y, x + w, y, rr); ctx.closePath(); }
+function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")"; }
+
+// ---- HUD / overlays -------------------------------------------
+const youScoreEl = document.getElementById("youScore");
+const rivalScoreEl = document.getElementById("rivalScore");
+const turnPill = document.getElementById("turnPill");
+const bannerEl = document.getElementById("banner");
+function updateHud() {
+  youScoreEl.textContent = G.youScore; rivalScoreEl.textContent = G.rivalScore;
+  if (G.phase === "you") { turnPill.textContent = "Your move"; turnPill.style.color = "var(--you)"; }
+  else if (G.phase === "ai") { turnPill.textContent = "Rival cooking…"; turnPill.style.color = "var(--rival)"; }
+  else { turnPill.textContent = "Service over"; turnPill.style.color = "var(--muted)"; }
+  // banner: warn when you have no safe move (you'll have to give a dish away)
+  if (G.phase === "you") {
+    const u = allUndrawn();
+    const hasCap = u.some(isCapture), hasSafe = u.some(isSafe);
+    bannerEl.innerHTML = hasCap ? "<b>Free dish available</b> — but is taking it a trap? Watch the chain you open next."
+      : hasSafe ? "Play a <b>safe</b> counter (one that doesn't give a station its 3rd wall)."
+      : "<b>No safe move</b> — you must open a chain. Give away the <i>smallest</i> one.";
+  }
+}
+const resultOverlay = document.getElementById("resultOverlay");
+const resultTitle = document.getElementById("resultTitle");
+const resultBody = document.getElementById("resultBody");
+function showResult() {
+  const y = G.youScore, r = G.rivalScore;
+  resultTitle.textContent = y > r ? "You win the service!" : y < r ? "The rival cat wins" : "Dead heat";
+  resultBody.innerHTML = "Final dishes — <b style='color:var(--you)'>You " + y + "</b> &middot; <b style='color:var(--rival)'>Rival " + r + "</b>. " +
+    (y > r ? "The Capybara nods, almost." : y < r ? "The Capybara remains unmoved." : "The Capybara is, as ever, indifferent.");
+  resultOverlay.classList.add("show");
+}
+
+// ---- loop / boot ----------------------------------------------
+function loop() {
+  for (const f of G.fx) { f.x += f.vx; f.y += f.vy; f.vx *= 0.9; f.vy *= 0.9; f.life -= f.decay; }
+  G.fx = G.fx.filter(f => f.life > 0);
+  draw(); requestAnimationFrame(loop);
+}
+function startGame() {
+  initBoard(); resize();
+  G.phase = "you"; updateHud();
+}
+function boot() {
+  cv = document.getElementById("board"); ctx = cv.getContext("2d");
+  cv.addEventListener("pointermove", onMove);
+  cv.addEventListener("pointerdown", onDown);
+  cv.addEventListener("pointerleave", () => { G.hoverEdge = null; });
+  document.getElementById("startBtn").onclick = () => {
+    const s = parseInt(document.getElementById("sizeSel").value, 10); ROWS = s; COLS = s;
+    document.getElementById("menu").classList.remove("show"); startGame();
+  };
+  document.getElementById("newBtn").onclick = () => { document.getElementById("menu").classList.add("show"); G.phase = "menu"; };
+  document.getElementById("resultBtn").onclick = () => { resultOverlay.classList.remove("show"); startGame(); };
+  requestAnimationFrame(loop);
+}
+boot();
+</script>
+</body>
+</html>
