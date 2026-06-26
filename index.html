@@ -3,17 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>SIMMER — an AI cat-chef duel</title>
+<title>THE PASS — an AI cat-chef connection duel</title>
 <style>
   :root{--bg0:#05060f;--bg1:#0b1024;--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--rival:#ff9b50;--line:#233056;--panel:rgba(12,18,40,0.92);}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;min-height:100%;overflow:hidden;background:radial-gradient(120% 120% at 50% 0%,var(--bg1),var(--bg0));color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;user-select:none;touch-action:none;}
   #app{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px;}
   #hud{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;}
-  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;display:flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums;}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;display:flex;align-items:center;gap:8px;}
   .pill .label{color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
-  .pill.you{border-color:var(--you);} .pill.you b{color:var(--you);}
-  .pill.rival{border-color:var(--rival);} .pill.rival b{color:var(--rival);}
+  .pill.turn{font-weight:600;}
   #banner{color:var(--muted);font-size:13px;min-height:18px;text-align:center;max-width:760px;}
   #banner b{color:var(--ink);}
   canvas{display:block;touch-action:none;}
@@ -37,38 +36,38 @@
 <body>
 <div id="app">
   <div id="hud">
-    <div class="pill you"><span class="label">You</span> <b id="youScore">0</b></div>
-    <div class="pill" id="turnPill">Your stir</div>
-    <div class="pill rival"><span class="label">Rival</span> <b id="rivalScore">0</b></div>
+    <div class="pill" style="border-color:var(--you)"><span class="label" style="color:var(--you)">You</span> link left&ndash;right</div>
+    <div class="pill turn" id="turnPill">Your move</div>
+    <div class="pill" style="border-color:var(--rival)"><span class="label" style="color:var(--rival)">Rival</span> links top&ndash;bottom</div>
   </div>
   <div id="banner"></div>
   <canvas id="board"></canvas>
-  <div id="controls"><button id="newBtn">New service</button></div>
+  <div id="controls"><button id="newBtn">New duel</button></div>
 </div>
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">AI cat-chef duel &middot; cooking &times; territory strategy</p>
-    <h1>SIMMER</h1>
-    <p>Every pot has a <b>doneness</b> number. <b>Stir</b> a pot and it — <i>plus its four neighbours</i> — each drop by one. Any pot that hits exactly <b>0</b> is <b>plated</b> in your colour. When the stove is empty, the most dishes wins. The Capybara of Indifference judges, unmoved.</p>
+    <p class="tag">AI cat-chef duel &middot; a connection game</p>
+    <h1>THE PASS</h1>
+    <p>Place a dab of your sauce on any open tile. <b>You</b> (cyan) win the instant your sauce forms one unbroken line from the <b>left</b> edge to the <b>right</b>. The rival cat (orange) is racing to link <b>top</b> to <b>bottom</b>.</p>
     <ul>
-      <li><b>Your move:</b> click any cooking pot to stir it (a plus-shaped pulse). Then it's the rival cat's turn.</li>
-      <li><b>The catch:</b> stirring also nudges pots toward <i>0</i> for whoever stirs next — so leaving a pot on <b>1</b> hands the rival a free dish. Set up <b>multi-plates</b> for yourself; deny them to the rival.</li>
-      <li>Grabbing the most dishes <i>this</i> stir isn't always right — sometimes you stir to deny, not to plate.</li>
+      <li><b>It can't end in a draw</b> — once the board fills, exactly one of you has crossed. So every tile you take also <i>blocks</i> the rival. Attack and defend are the same move.</li>
+      <li><b>No two games are alike:</b> there's no formula or endgame trick — you have to read the whole board, every time.</li>
+      <li><b>Watch for double-threats:</b> leave two ways to bridge a gap and the rival can only block one.</li>
     </ul>
-    <p class="note">An <b>original</b> mechanic (not a known game), with a <b>combinatorial-game</b> core: it's adversarial and a purely greedy "plate the most now" player loses ~75% of games to a thinking one (verified in simulation). Theme from 2026's biggest internet obsessions: AI + cats + cooking.</p>
+    <p class="note">This is a <b>connection game</b> (the Hex/Y family) &mdash; the maths says these are the deepest <i>simple</i> games: <b>PSPACE-complete</b>, with no closed-form solution and no solved endgame, so they stay a fresh puzzle every game (the fix for the "samey" parity games before this). An honest, obscure classic, reskinned as ours.</p>
     <div class="row">
-      <label style="color:var(--muted);font-size:14px">Stove
-        <select id="sizeSel"><option value="4">4 × 4</option><option value="5" selected>5 × 5</option><option value="6">6 × 6</option></select>
+      <label style="color:var(--muted);font-size:14px">Board
+        <select id="sizeSel"><option value="6">6 × 6</option><option value="7" selected>7 × 7</option><option value="9">9 × 9</option></select>
       </label>
-      <button class="btn-primary" id="startBtn">Start cooking</button>
+      <button class="btn-primary" id="startBtn">Start the service</button>
     </div>
   </div>
 </div>
 
 <div class="overlay" id="resultOverlay">
   <div class="card">
-    <h1 id="resultTitle">Service over</h1>
+    <h1 id="resultTitle">Linked!</h1>
     <p id="resultBody"></p>
     <div class="row"><button class="btn-primary" id="resultBtn">Rematch</button></div>
   </div>
@@ -77,202 +76,213 @@
 <script>
 "use strict";
 /* ============================================================
-   SIMMER — original "stir the pots" duel.
-   Stir a pot: it + its 4 orthogonal neighbours each -1. Any pot
-   reaching 0 is plated (claimed) by the stirrer. One stir per
-   turn (NO go-again — that's what gives the parity/denial depth).
-   You (cyan cat) vs a lookahead AI rival (orange cat). Most
-   dishes when the stove empties wins.
+   THE PASS — a Hex connection game (PSPACE-complete; no solved
+   endgame; draw-free). You (0) connect LEFT<->RIGHT; the AI (1)
+   connects TOP<->BOTTOM. Hex duality: blocking the rival and
+   building your own line are the same act. AI = flat Monte-Carlo
+   (random fills always yield a unique winner — perfect for MC).
    ============================================================ */
 
 let cv, ctx, DPR = 1;
-let R = 5, C = 5, N = 25;
-let CELL = 80, OX = 20, OY = 20;
-let nbrs = [];
+let n = 7;                 // board is n x n rhombus of hexes
+let SIZE = 26, OX = 0, OY = 0;
+let owner = [];            // length n*n: -1 empty, 0 you, 1 rival
 
-// cells: v (doneness, >0 while cooking), owner (-1 cooking, 0 you, 1 rival)
-let cells = [];
-const G = { phase: "menu", you: 0, rival: 0, hover: -1, fx: [], thinking: false };
+const G = { phase: "menu", hover: -1, fx: [], winner: -1, winPath: null };
 
-function buildNbrs() {
-  nbrs = [];
-  for (let i = 0; i < N; i++) {
-    const r = (i / C) | 0, c = i % C, a = [];
-    if (r > 0) a.push(i - C); if (r < R - 1) a.push(i + C);
-    if (c > 0) a.push(i - 1); if (c < C - 1) a.push(i + 1);
-    nbrs.push(a);
+const idx = (r, c) => r * n + c;
+const inb = (r, c) => r >= 0 && r < n && c >= 0 && c < n;
+// hex neighbours on a rhombus board
+const NB = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, 1], [1, -1]];
+function neighbors(i) {
+  const r = (i / n) | 0, c = i % n, out = [];
+  for (const [dr, dc] of NB) { const nr = r + dr, nc = c + dc; if (inb(nr, nc)) out.push(nr * n + nc); }
+  return out;
+}
+
+// ---- win check: does player p connect their two sides? --------
+// returns the connected path (array of indices) or null
+function connectionPath(own, p) {
+  // p=0: left col(c=0) -> right col(c=n-1); p=1: top row(r=0) -> bottom(r=n-1)
+  const start = [], N = n * n;
+  for (let k = 0; k < n; k++) start.push(p === 0 ? idx(k, 0) : idx(0, k));
+  const prev = new Int32Array(N).fill(-2); // -2 unvisited
+  const q = [];
+  for (const s of start) if (own[s] === p) { prev[s] = -1; q.push(s); }
+  let head = 0;
+  while (head < q.length) {
+    const i = q[head++], r = (i / n) | 0, c = i % n;
+    if ((p === 0 && c === n - 1) || (p === 1 && r === n - 1)) {
+      // reconstruct path
+      const path = []; let x = i; while (x !== -1) { path.push(x); x = prev[x]; } return path;
+    }
+    for (const j of neighbors(i)) if (own[j] === p && prev[j] === -2) { prev[j] = i; q.push(j); }
   }
+  return null;
 }
-const cooking = (cc, i) => cc[i].o < 0 && cc[i].v > 0;
-const cloneCells = cc => cc.map(x => ({ v: x.v, o: x.o }));
-function legalMoves(cc) { const a = []; for (let i = 0; i < N; i++) if (cooking(cc, i)) a.push(i); return a; }
-
-// stir on a given cells array; returns # plated
-function stirOn(cc, i, pl) {
-  if (!cooking(cc, i)) return 0;
-  let plated = 0;
-  const grp = [i].concat(nbrs[i]);
-  for (const j of grp) { const x = cc[j]; if (x.o < 0 && x.v > 0) { x.v--; if (x.v === 0) { x.o = pl; plated++; } } }
-  return plated;
-}
-
-// ---- AI: negamax on plate-differential with alpha-beta --------
-function negamax(cc, pl, depth, alpha, beta) {
-  const moves = legalMoves(cc);
-  if (depth === 0 || moves.length === 0) return 0;
-  // move ordering: most immediate plates first (better pruning)
-  moves.sort((a, b) => quickPlates(cc, b, pl) - quickPlates(cc, a, pl));
-  let best = -Infinity;
-  for (const i of moves) {
-    const k = cloneCells(cc); const p = stirOn(k, i, pl);
-    const val = p - negamax(k, 1 - pl, depth - 1, -beta, -alpha);
-    if (val > best) best = val;
-    if (best > alpha) alpha = best;
-    if (alpha >= beta) break;
+function connects(own, p) { // fast boolean (no path)
+  const N = n * n, seen = new Uint8Array(N), q = [];
+  for (let k = 0; k < n; k++) { const s = p === 0 ? idx(k, 0) : idx(0, k); if (own[s] === p) { seen[s] = 1; q.push(s); } }
+  let head = 0;
+  while (head < q.length) {
+    const i = q[head++], r = (i / n) | 0, c = i % n;
+    if ((p === 0 && c === n - 1) || (p === 1 && r === n - 1)) return true;
+    for (const j of neighbors(i)) if (own[j] === p && !seen[j]) { seen[j] = 1; q.push(j); }
   }
-  return best;
+  return false;
 }
-function quickPlates(cc, i, pl) { // count plates without cloning (read-only)
-  let p = 0; const grp = [i].concat(nbrs[i]);
-  for (const j of grp) { const x = cc[j]; if (x.o < 0 && x.v === 1) p++; }
-  return p;
-}
-function aiChoose() {
-  const moves = legalMoves(cells);
-  const depth = moves.length > 26 ? 2 : (moves.length > 14 ? 3 : 4);
-  let best = moves[0], bestV = -Infinity;
-  moves.sort((a, b) => quickPlates(cells, b, 1) - quickPlates(cells, a, 1));
-  for (const i of moves) {
-    const k = cloneCells(cells); const p = stirOn(k, i, 1);
-    const v = p - negamax(k, 0, depth - 1, -Infinity, Infinity);
-    if (v > bestV) { bestV = v; best = i; }
+
+// ---- flat Monte-Carlo AI (plays as player 1) ------------------
+function aiMove() {
+  const empties = [];
+  for (let i = 0; i < n * n; i++) if (owner[i] < 0) empties.push(i);
+  const totalBudget = 7000;
+  const per = Math.max(24, Math.round(totalBudget / empties.length));
+  // template of remaining empties for fast rollouts
+  const mid = (n - 1) / 2, maxD = Math.hypot(mid, mid) || 1;
+  let best = empties[0], bestScore = -1;
+  for (const cand of empties) {
+    const rest = empties.filter(e => e !== cand);
+    // after AI plays cand, it's YOUR turn: of `rest`, you take ceil(R/2), AI floor(R/2)
+    const R = rest.length, youCount = Math.ceil(R / 2);
+    let wins = 0;
+    for (let t = 0; t < per; t++) {
+      // shuffle rest (Fisher-Yates) into a scratch
+      for (let i = R - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const tmp = rest[i]; rest[i] = rest[j]; rest[j] = tmp; }
+      const own = owner.slice();
+      own[cand] = 1;
+      for (let i = 0; i < R; i++) own[rest[i]] = i < youCount ? 0 : 1;
+      if (connects(own, 1)) wins++;
+    }
+    // win rate + a small centre bias (only breaks near-ties; cures noisy
+    // empty-board play where every move looks ~50%)
+    const cr = (cand / n | 0), cc = cand % n;
+    const centerNorm = 1 - Math.hypot(cr - mid, cc - mid) / maxD;
+    const score = wins / per + 0.05 * centerNorm;
+    if (score > bestScore) { bestScore = score; best = cand; }
   }
   return best;
 }
 
 // ---- turn flow -------------------------------------------------
-function doStir(i, pl) {
-  const before = cells.map(x => x.o);
-  const plated = stirOn(cells, i, pl);
-  // fx for newly plated + the pulse
-  for (let j = 0; j < N; j++) if (before[j] < 0 && cells[j].o >= 0) spawnPlate(j, pl);
-  if (pl === 0) G.you += plated; else G.rival += plated;
-  return plated;
+function place(i, p) {
+  owner[i] = p; spawnFx(i, p);
+  const path = connectionPath(owner, p);
+  if (path) { G.winner = p; G.winPath = path; G.phase = "over"; updateHud(); showResult(); return true; }
+  return false;
 }
-function youStir(i) {
-  if (G.phase !== "you" || !cooking(cells, i)) return;
-  doStir(i, 0);
-  G.hover = -1;
-  if (over()) return endGame();
-  G.phase = "ai"; G.thinking = true; updateHud();
-  setTimeout(() => { const m = aiChoose(); doStir(m, 1); G.thinking = false; if (over()) return endGame(); G.phase = "you"; updateHud(); }, 380);
+function youPlay(i) {
+  if (G.phase !== "you" || owner[i] >= 0) return;
+  if (place(i, 0)) return;
+  G.hover = -1; G.phase = "ai"; updateHud();
+  setTimeout(() => { const m = aiMove(); if (place(m, 1)) return; G.phase = "you"; updateHud(); }, 320);
 }
-function over() { return legalMoves(cells).length === 0; }
-function endGame() { G.phase = "over"; updateHud(); showResult(); }
 
 // ---- effects ---------------------------------------------------
-function spawnPlate(i, pl) {
-  const x = OX + ((i % C) + 0.5) * CELL, y = OY + (((i / C) | 0) + 0.5) * CELL;
-  const col = pl === 0 ? "#36e2ff" : "#ff9b50";
-  for (let k = 0; k < 12; k++) { const a = Math.random() * Math.PI * 2, s = Math.random() * 4.5; G.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: .03 + Math.random() * .03, r: 1.5 + Math.random() * 2, col }); }
+function spawnFx(i, p) {
+  const x = hx(i), y = hy(i), col = p === 0 ? "#36e2ff" : "#ff9b50";
+  for (let k = 0; k < 10; k++) { const a = Math.random() * Math.PI * 2, s = Math.random() * 4; G.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: .04 + Math.random() * .03, r: 1.4 + Math.random() * 2, col }); }
 }
 
-// ---- sizing ----------------------------------------------------
+// ---- geometry / sizing ----------------------------------------
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
   const maxW = Math.min(window.innerWidth - 24, 680), maxH = window.innerHeight - 180;
-  CELL = Math.max(46, Math.floor(Math.min(maxW / C, maxH / R)));
-  const w = CELL * C + 2 * OX, h = CELL * R + 2 * OY;
+  // rhombus extent: width ~ (n + n/2)*sqrt3*size ; height ~ (1.5n+0.5)*size
+  SIZE = Math.max(15, Math.floor(Math.min(maxW / ((n * 1.5 + 1) * Math.sqrt(3)), maxH / (n * 1.5 + 1))));
+  const w = Math.ceil((n * 1.5 + 1) * Math.sqrt(3) * SIZE) + 8, h = Math.ceil((n * 1.5 + 1) * SIZE) + 8;
   cv.width = Math.floor(w * DPR); cv.height = Math.floor(h * DPR);
   cv.style.width = w + "px"; cv.style.height = h + "px";
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  OX = Math.sqrt(3) * SIZE; OY = SIZE * 1.2;
 }
 window.addEventListener("resize", () => { if (G.phase !== "menu") resize(); });
-const cellX = i => OX + (i % C) * CELL, cellY = i => OY + ((i / C) | 0) * CELL;
+const hx = i => OX + ((i % n) + ((i / n | 0)) * 0.5) * Math.sqrt(3) * SIZE;
+const hy = i => OY + (i / n | 0) * 1.5 * SIZE;
 
 // ---- input -----------------------------------------------------
-function idxAt(px, py) { const c = ((px - OX) / CELL) | 0, r = ((py - OY) / CELL) | 0; if (r < 0 || r >= R || c < 0 || c >= C) return -1; return r * C + c; }
+function idxAt(px, py) { let best = -1, bd = SIZE * SIZE; for (let i = 0; i < n * n; i++) { const dx = px - hx(i), dy = py - hy(i); const d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } } return best; }
 function evtPos(e) { const rect = cv.getBoundingClientRect(); const p = (e.touches && e.touches[0]) || e; return { x: p.clientX - rect.left, y: p.clientY - rect.top }; }
-function onMove(e) { if (G.phase !== "you") { G.hover = -1; return; } const { x, y } = evtPos(e); const i = idxAt(x, y); G.hover = (i >= 0 && cooking(cells, i)) ? i : -1; }
-function onDown(e) { if (G.phase !== "you") return; const { x, y } = evtPos(e); const i = idxAt(x, y); if (i >= 0) youStir(i); }
+function onMove(e) { if (G.phase !== "you") { G.hover = -1; return; } const { x, y } = evtPos(e); const i = idxAt(x, y); G.hover = (i >= 0 && owner[i] < 0) ? i : -1; }
+function onDown(e) { if (G.phase !== "you") return; const { x, y } = evtPos(e); const i = idxAt(x, y); if (i >= 0) youPlay(i); }
 
 // ---- render ----------------------------------------------------
+function hexPath(cx, cy, s) { ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = Math.PI / 180 * (60 * k - 90); const x = cx + s * Math.cos(a), y = cy + s * Math.sin(a); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.closePath(); }
 function draw() {
   if (!ctx) return;
   ctx.clearRect(0, 0, cv.width, cv.height);
   if (G.phase === "menu") return;
-
-  // pulse preview (which cells this stir touches + which would plate)
-  const pulse = G.hover >= 0 ? new Set([G.hover].concat(nbrs[G.hover])) : null;
-
-  for (let i = 0; i < N; i++) {
-    const x = cellX(i), y = cellY(i), s = CELL;
-    const cellc = cells[i];
-    // base pot
-    ctx.fillStyle = "#0d1730";
-    roundRect(x + 4, y + 4, s - 8, s - 8, 10); ctx.fill();
-    if (cellc.o >= 0) {
-      // plated dish
-      const col = cellc.o === 0 ? "#36e2ff" : "#ff9b50";
-      ctx.fillStyle = hexA(col, 0.16); roundRect(x + 4, y + 4, s - 8, s - 8, 10); ctx.fill();
-      drawDish(x + s / 2, y + s / 2, s * 0.24, col);
-    } else {
-      // cooking: ring + doneness number
-      const willPlate = pulse && pulse.has(i) && cellc.v === 1;
-      const inPulse = pulse && pulse.has(i);
-      ctx.strokeStyle = inPulse ? (willPlate ? "#9affd0" : "rgba(54,226,255,0.8)") : "#2b3a6b";
-      ctx.lineWidth = inPulse ? 3 : 2; roundRect(x + 4, y + 4, s - 8, s - 8, 10); ctx.stroke();
-      ctx.fillStyle = willPlate ? "#9affd0" : "#cfe0ff";
-      ctx.font = "bold " + Math.round(s * 0.4) + "px Segoe UI"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(cellc.v, x + s / 2, y + s / 2 + 1);
-    }
+  const s = SIZE * 0.92;
+  // colored side borders (which edges belong to whom)
+  drawSideMarkers();
+  for (let i = 0; i < n * n; i++) {
+    const cx = hx(i), cy = hy(i);
+    hexPath(cx, cy, s);
+    if (owner[i] === 0) ctx.fillStyle = "#1c6e96";
+    else if (owner[i] === 1) ctx.fillStyle = "#9a5a25";
+    else ctx.fillStyle = "#0e1830";
+    ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = "#27365e"; ctx.stroke();
+    if (owner[i] >= 0) { ctx.fillStyle = owner[i] === 0 ? "#7fe9ff" : "#ffc089"; ctx.beginPath(); ctx.arc(cx, cy, s * 0.42, 0, Math.PI * 2); ctx.fill(); }
   }
-  // hovered target marker
-  if (G.hover >= 0) { ctx.strokeStyle = "#36e2ff"; ctx.lineWidth = 3; roundRect(cellX(G.hover) + 2, cellY(G.hover) + 2, CELL - 4, CELL - 4, 11); ctx.stroke(); }
-
+  // winning line highlight
+  if (G.winPath) {
+    ctx.strokeStyle = G.winner === 0 ? "#9affff" : "#ffd9a8"; ctx.lineWidth = 4; ctx.lineJoin = "round";
+    ctx.beginPath(); for (let k = 0; k < G.winPath.length; k++) { const i = G.winPath[k]; if (k) ctx.lineTo(hx(i), hy(i)); else ctx.moveTo(hx(i), hy(i)); } ctx.stroke();
+  }
+  // hover
+  if (G.hover >= 0) { hexPath(hx(G.hover), hy(G.hover), s); ctx.fillStyle = "rgba(54,226,255,0.25)"; ctx.fill(); ctx.strokeStyle = "#36e2ff"; ctx.lineWidth = 2; ctx.stroke(); }
   for (const f of G.fx) { ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.col; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill(); }
-  ctx.globalAlpha = 1; ctx.textBaseline = "alphabetic";
+  ctx.globalAlpha = 1;
 }
-function drawDish(x, y, r, col) {
-  ctx.fillStyle = hexA(col, 0.92); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#0b1024"; ctx.beginPath(); ctx.arc(x, y, r * 0.6, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = hexA(col, 0.92);
-  ctx.beginPath(); ctx.moveTo(x - r * 0.5, y - r * 0.5); ctx.lineTo(x - r * 0.16, y - r * 0.95); ctx.lineTo(x, y - r * 0.5); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(x + r * 0.5, y - r * 0.5); ctx.lineTo(x + r * 0.16, y - r * 0.95); ctx.lineTo(x, y - r * 0.5); ctx.closePath(); ctx.fill();
+function drawSideMarkers() {
+  ctx.lineWidth = 5; ctx.lineCap = "round";
+  // your edges: left (c=0) and right (c=n-1) -> cyan
+  ctx.strokeStyle = "#36e2ff";
+  edgeLine(0, "L"); edgeLine(0, "R");
+  // rival edges: top (r=0) and bottom -> orange
+  ctx.strokeStyle = "#ff9b50";
+  edgeLine(1, "T"); edgeLine(1, "B");
 }
-function roundRect(x, y, w, h, rr) { ctx.beginPath(); ctx.moveTo(x + rr, y); ctx.arcTo(x + w, y, x + w, y + h, rr); ctx.arcTo(x + w, y + h, x, y + h, rr); ctx.arcTo(x, y + h, x, y, rr); ctx.arcTo(x, y, x + w, y, rr); ctx.closePath(); }
-function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")"; }
+function edgeLine(p, which) {
+  ctx.beginPath();
+  for (let k = 0; k < n; k++) {
+    let i;
+    if (which === "L") i = idx(k, 0); else if (which === "R") i = idx(k, n - 1);
+    else if (which === "T") i = idx(0, k); else i = idx(n - 1, k);
+    const x = hx(i), y = hy(i);
+    const off = SIZE * 1.05;
+    let ex = x, ey = y;
+    if (which === "L") ex -= off * 0.86, ey -= off * 0.0;
+    else if (which === "R") ex += off * 0.86;
+    else if (which === "T") ey -= off, ex += off * 0.0;
+    else ey += off;
+    if (k) ctx.lineTo(ex, ey); else ctx.moveTo(ex, ey);
+  }
+  ctx.stroke();
+}
 
 // ---- HUD / overlays -------------------------------------------
-const youEl = document.getElementById("youScore"), rivalEl = document.getElementById("rivalScore"), turnPill = document.getElementById("turnPill"), bannerEl = document.getElementById("banner");
+const turnPill = document.getElementById("turnPill"), bannerEl = document.getElementById("banner");
 function updateHud() {
-  youEl.textContent = G.you; rivalEl.textContent = G.rival;
-  if (G.phase === "you") { turnPill.textContent = "Your stir"; turnPill.style.color = "var(--you)"; }
-  else if (G.phase === "ai") { turnPill.textContent = "Rival cooking…"; turnPill.style.color = "var(--rival)"; }
+  if (G.phase === "you") { turnPill.textContent = "Your move"; turnPill.style.color = "var(--you)"; bannerEl.innerHTML = "Build toward <b>left&ndash;right</b> — and notice you're blocking the rival's top&ndash;bottom line at the same time."; }
+  else if (G.phase === "ai") { turnPill.textContent = "Rival plating…"; turnPill.style.color = "var(--rival)"; }
   else { turnPill.textContent = "Service over"; turnPill.style.color = "var(--muted)"; }
-  if (G.phase === "you") {
-    const ones = legalMoves(cells).filter(i => cells[i].v === 1).length;
-    bannerEl.innerHTML = ones > 0
-      ? "<b>" + ones + " pot" + (ones > 1 ? "s" : "") + " on 1</b> — ready to plate. Grab a cluster, but don't leave easy ones for the rival."
-      : "Stir to set up <b>multi-plates</b> — and watch which pots you nudge down to 1.";
-  }
 }
 const resultOverlay = document.getElementById("resultOverlay"), resultTitle = document.getElementById("resultTitle"), resultBody = document.getElementById("resultBody");
 function showResult() {
-  const y = G.you, r = G.rival;
-  resultTitle.textContent = y > r ? "You win the service!" : y < r ? "The rival cat wins" : "Dead heat";
-  resultBody.innerHTML = "Dishes plated — <b style='color:var(--you)'>You " + y + "</b> &middot; <b style='color:var(--rival)'>Rival " + r + "</b>. " +
-    (y > r ? "The Capybara nods, almost." : y < r ? "The Capybara remains unmoved." : "The Capybara is, as ever, indifferent.");
-  resultOverlay.classList.add("show");
+  const youWon = G.winner === 0;
+  resultTitle.textContent = youWon ? "You linked the pass!" : "The rival cat linked first";
+  resultBody.innerHTML = youWon ? "Your sauce crossed left to right in one unbroken line. The Capybara nods, almost."
+    : "Orange crossed top to bottom before you could bridge. The Capybara remains unmoved.";
+  setTimeout(() => resultOverlay.classList.add("show"), 700);
 }
 
 // ---- loop / boot ----------------------------------------------
 function loop() { for (const f of G.fx) { f.x += f.vx; f.y += f.vy; f.vx *= .9; f.vy *= .9; f.life -= f.decay; } G.fx = G.fx.filter(f => f.life > 0); draw(); requestAnimationFrame(loop); }
 function startGame() {
-  N = R * C; buildNbrs();
-  cells = [];
-  for (let i = 0; i < N; i++) cells.push({ v: 1 + ((Math.random() * 3) | 0), o: -1 });
-  G.you = 0; G.rival = 0; G.fx = []; G.hover = -1; G.phase = "you"; G.thinking = false;
+  owner = new Array(n * n).fill(-1);
+  G.phase = "you"; G.hover = -1; G.fx = []; G.winner = -1; G.winPath = null;
   resize(); updateHud();
 }
 function boot() {
@@ -280,7 +290,7 @@ function boot() {
   cv.addEventListener("pointermove", onMove);
   cv.addEventListener("pointerdown", onDown);
   cv.addEventListener("pointerleave", () => { G.hover = -1; });
-  document.getElementById("startBtn").onclick = () => { const s = parseInt(document.getElementById("sizeSel").value, 10); R = s; C = s; document.getElementById("menu").classList.remove("show"); startGame(); };
+  document.getElementById("startBtn").onclick = () => { n = parseInt(document.getElementById("sizeSel").value, 10); document.getElementById("menu").classList.remove("show"); startGame(); };
   document.getElementById("newBtn").onclick = () => { document.getElementById("menu").classList.add("show"); G.phase = "menu"; };
   document.getElementById("resultBtn").onclick = () => { resultOverlay.classList.remove("show"); startGame(); };
   requestAnimationFrame(loop);
