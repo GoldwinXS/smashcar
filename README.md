@@ -1,69 +1,51 @@
-# SIGNAL
+# LINE COOK
 
-**A minimalist network-coverage strategy game** (formerly "WATERSHED" — same
-engine, clearer theme). One verb, one elegant mathematical engine, escalating
-pressure — built deliberately so there is no single "solved" strategy.
+**An AI cat-chef duel where the greedy move is a trap.** You and a rival AI
+cat draw counters on a shared kitchen grid; close all four walls of a station
+to claim its dish — **and cook again**. Most dishes wins. The Capybara of
+Indifference judges, unmoved.
 
-Crowds of **devices** (warm dots) connect to the **nearest tower** you place.
-Signal weakens with distance, so a device far from its tower **clogs** it —
-its capacity is a service budget spent against *distance*. Park a tower on its
-crowd and it serves cleanly; let the crowd drift away and load climbs until
-the tower **congests** and drops connections, costing **uptime**. You have
-**fewer towers than crowds**, so you're always triaging — keep the city
-connected as demand keeps rising.
+## The formula (and why this one works)
 
-## Why it's built this way (the research)
+Built to a specific recipe, and tuned to fix the flaw that solved every
+earlier prototype here (a greedy heuristic always wins a coverage game):
 
-After several prototypes that collapsed into a single dominant strategy, the
-design was grounded in published work on game *depth*:
-
-- **Depth ≠ complexity.** Adding rules/systems doesn't add depth (Lantz,
-  Isaksen, Jaffe, Nealen & Togelius, *Depth in Strategic Games*, AAAI 2017).
-- **Depth = a long "strategy ladder"** — a novice heuristic should be
-  beatable by a slightly cleverer one, indefinitely. A game dies when "one
-  weird trick" exploits a regularity to play near-perfectly (the
-  tower-defense maze-and-chokepoint trap).
-- **Tight coupling** — one state variable doing several jobs — buys depth
-  without adding rules (Nealen, Saltsman & Boxerman, *Towards Minimalist
-  Game Design*, FDG 2011).
-
-WATERSHED applies this directly: the core is a **facility-location / nearest-
-point partition** (k-means cost). It's genuinely hard to optimise, *globally
-coupled* (move one well and every boundary shifts), and the demand **drifts**
-so no static layout stays optimal — there is no dominant trick, only
-ever-better reading of the board. One coupled variable (a well's **charge** =
-capacity, reset when you move it) supplies the *adapt-vs-commit* trade-off.
-
-Verified by simulation: a static "never move" player survives ~half as long
-as one that follows the drift — so placement, not a hidden meter, is the game.
+- **Math concept as the core:** **combinatorial game theory** — the
+  chain-and-parity mathematics of *Dots & Boxes* (Berlekamp's theory). The
+  obvious greedy play ("take every free dish") is *provably* a trap, and the
+  game is **adversarial**, so no fixed routine can solve it. Verified: a
+  greedy bot loses **15/15** to the AI, by huge margins (e.g. 1–24); two equal
+  AIs split ~6–4.
+- **Genre mashup:** competitive **cooking-show** × **abstract territory duel**.
+- **Theme — 2026's biggest internet obsessions:** AI + cats + cooking (the
+  viral "AI cooking-cat" trend), with the Capybara of Indifference as judge.
 
 ## How to play
 
-- **Drag wells** around the field to re-divide it. Every move re-slices the
-  whole map to whatever's nearest.
-- **Moving unsettles a well** (capacity drops, then recharges over a few
-  turns) — so move only where it counts.
-- Each turn, demand **grows and new springs bloom**; next turn's growth is
-  shown as faint **ghosts** before you commit. Plan for what's coming.
-- Keep wells from flooding. Demand never stops rising — last as long as you
-  can. (`Enter` / `Space` advances a turn.)
+- Click an empty edge between two dots to draw a **counter**.
+- Drawing a station's **4th** wall claims its dish (your colour) and gives you
+  **another move** — claims can chain.
+- Drawing a station's **3rd** wall hands your rival a free dish. When you have
+  no safe move, give away the **smallest** run. The expert move is the
+  **double-cross**: sacrifice two dishes to force your rival to open the next
+  big chain. Master that and you beat the AI.
+- Grid size is selectable (4×4 quick → 6×6 long).
 
 ## Run / deploy
 
-Single static file. Open `index.html`, or `python -m http.server 8000`.
-GitHub Pages: push, then Settings → Pages → `main` / root (`.nojekyll`
-included). Tunables live in the `CFG` object at the top of the `<script>`.
+Single static file. Open `index.html` or `python -m http.server 8000`.
+GitHub Pages: push → Settings → Pages → `main` / root (`.nojekyll` included).
+Board/AI tunables live near the top of the `<script>`.
 
 ## Status
 
-v0.1 prototype. The core mechanic is verified sound (placement-driven,
-clear skill gap, escalating, no dominant strategy). Difficulty/feel tuning is
-the open question — best judged by playing.
+v0.1 prototype, fully playable vs the AI. The AI plays "safe moves, then
+minimise the sacrifice"; it does **not** yet do the expert double-cross —
+which is deliberately the player's path to mastery. A stronger
+(double-crossing) AI and difficulty levels are the obvious next step.
 
-### Earlier prototypes in this repo
+### Earlier prototypes in this repo (kept for reference; full history in git)
 
-- `firewall.html` — a tower-defense × tactics game (collapsed into a single
-  dominant maze-and-chokepoint strategy; the reason for the research pivot).
-- `comet-court.html` — the original slingshot/gravity sumo prototype.
-
-Both kept for reference; full history is in git.
+- `signal.html` — network-coverage / Voronoi strategy (solvable once towers ≥ crowds).
+- `firewall.html` — tower-defense × tactics (collapsed to a maze+chokepoint trick).
+- `comet-court.html` — slingshot/gravity sumo.

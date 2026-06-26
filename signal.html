@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>SIGNAL — keep the city connected</title>
+<style>
+  :root {
+    --bg0:#05060f; --bg1:#0b1024; --ink:#e8f0ff; --muted:#8aa0c8;
+    --cyan:#36e2ff; --amber:#ffd166; --foe:#ff6b6b; --line:#233056;
+    --panel:rgba(12,18,40,0.92);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;min-height:100%;overflow:hidden;background:radial-gradient(120% 120% at 50% 0%,var(--bg1),var(--bg0));color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;user-select:none;touch-action:none;}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;gap:9px;padding:10px;}
+  #hud{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:center;font-variant-numeric:tabular-nums;}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;display:flex;align-items:center;gap:8px;}
+  .pill .label{color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
+  #intHearts{display:flex;gap:3px;}
+  .heart{width:11px;height:11px;border-radius:3px;background:var(--cyan);box-shadow:0 0 7px rgba(54,226,255,.6);}
+  .heart.off{background:#2a3554;box-shadow:none;}
+  #reserveLabel.low{color:var(--foe);}
+  #banner{color:var(--muted);font-size:13px;min-height:18px;text-align:center;max-width:900px;}
+  #banner b{color:var(--ink);}
+  canvas{display:block;touch-action:none;border-radius:10px;border:1px solid var(--line);}
+  #controls{display:flex;gap:10px;align-items:center;}
+  button{font:inherit;cursor:pointer;border-radius:11px;border:1px solid var(--line);background:#131c3c;color:var(--ink);padding:11px 20px;font-size:15px;transition:transform .08s,border-color .15s,background .15s;}
+  button:hover{border-color:var(--cyan);}
+  button:active{transform:translateY(1px);}
+  .btn-primary{background:linear-gradient(180deg,#1ea7c4,#1577a8);border-color:#36e2ff;font-weight:700;}
+  .btn-primary:disabled{opacity:.5;cursor:default;background:#131c3c;border-color:var(--line);}
+  .overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,14,.74);backdrop-filter:blur(3px);z-index:9;padding:16px;}
+  .overlay.show{display:grid;}
+  .card{width:min(620px,94vw);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.6);}
+  .card h1{margin:0 0 4px;font-size:30px;letter-spacing:-.5px;}
+  .card .tag{color:var(--cyan);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 12px;}
+  .card p{color:var(--muted);line-height:1.55;margin:0 0 12px;font-size:15px;}
+  .card ul{color:var(--muted);line-height:1.55;margin:0 0 14px;padding-left:18px;font-size:14px;}
+  .card b{color:var(--ink);}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  .note{font-size:12px;color:var(--muted);border-left:2px solid var(--line);padding-left:12px;margin-top:6px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div class="pill"><span class="label">Hour</span> <span id="turnVal">1</span></div>
+    <div class="pill"><span class="label" id="reserveLabel">Uptime</span> <span id="intHearts"></span></div>
+    <div class="pill"><span class="label">Towers</span> <span id="wellsVal">3</span></div>
+    <div class="pill"><span class="label">Data</span> <span id="scoreVal">0</span></div>
+  </div>
+  <div id="banner"></div>
+  <canvas id="field"></canvas>
+  <div id="controls">
+    <button class="btn-primary" id="advBtn">Advance hour</button>
+  </div>
+</div>
+
+<div class="overlay show" id="menu">
+  <div class="card">
+    <p class="tag">A network-coverage strategy game</p>
+    <h1>SIGNAL</h1>
+    <p>Crowds of <b>devices</b> (warm dots) connect to the <b>nearest tower</b>. Signal weakens with distance, so a device far from its tower <b>clogs</b> it — too much load and the tower <b>congests</b>, dropping connections and costing you uptime.</p>
+    <ul>
+      <li><b>You have fewer towers than crowds</b> — so you can't blanket everything. Drag towers to cover the heaviest demand and decide what to leave thin.</li>
+      <li><b>Distance is the whole game:</b> park a tower <i>on</i> its crowd and it serves them cleanly; let the crowd drift away and its load climbs. Moving a tower also <b>re-links</b> it — its capacity dips briefly, then recovers.</li>
+      <li><b>Plan ahead:</b> crowds grow and new ones gather every hour — next hour's surge is shown as faint <b>ghosts</b> before you commit.</li>
+      <li><b>Stay up:</b> keep towers out of the red. Demand never stops rising; keep the city connected as long as you can.</li>
+    </ul>
+    <p class="note">Why it should stay interesting: covering drifting demand with too-few towers is a nearest-point (facility-location) problem that's genuinely hard and shifts every hour — no single trick wins, only ever-better reading of the map. (Grounded in research on game "depth": Lantz et al. 2017; Nealen et al. 2011.)</p>
+    <div class="row"><button class="btn-primary" id="startBtn">Start</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="resultOverlay">
+  <div class="card">
+    <h1 id="resultTitle">Network collapsed</h1>
+    <p id="resultBody"></p>
+    <div class="row"><button class="btn-primary" id="resultBtn">Play again</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   WATERSHED — single-file prototype.
+   ONE mechanic: place/move wells; each spring is served by its
+   NEAREST well (a Voronoi partition). The partition is globally
+   coupled and hard to optimise, demand drifts so no static layout
+   wins, and one coupled variable (a well's "charge" = capacity,
+   reset by moving) supplies the core adapt-vs-commit trade-off.
+   Grounded in Lantz et al. 2017 + Nealen et al. 2011 (see menu).
+   ============================================================ */
+
+let cv, ctx, W = 0, H = 0, DPR = 1;
+let nextId = 1;
+
+const CFG = {
+  startWells: 3, maxWells: 6, newWellEvery: 5,   // towers stay scarcer than crowds
+  baseCap: 16,                 // capacity at full charge
+  capFloorFrac: 0.45,          // capacity at zero charge = baseCap * this
+  chargeGain: 0.3,             // re-link recharge per hour
+  moveReset: 0.45,             // charge a tower drops to when moved
+  startReserve: 100, maxReserve: 100,  // uptime % (proportional, forgiving)
+  step: 20,                    // Voronoi sample size (px)
+  drainBudget: 26,             // service budget per capacity point (weight*px)
+  comfortR: 30,                // within this radius signal is full-strength (forgiving "good zone")
+  floodTol: 4,                 // congestion above this starts dropping connections
+  dmgScale: 1.4,               // uptime lost per unit of congestion beyond floodTol
+  regen: 6,                    // uptime regained per clean hour
+  driftMin: 11, driftMax: 19,  // crowd drift speed (faster = constant re-balancing)
+};
+
+const S = {
+  phase: "menu",   // menu | plan | over
+  turn: 1, reserve: CFG.startReserve, score: 0,
+  wells: [], springs: [], hotspots: [],
+  wellsToPlace: 0,
+  next: null,      // telegraphed events for the coming turn
+  drag: null,
+};
+
+const dist2 = (ax, ay, bx, by) => { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const capacityOf = w => Math.round(CFG.baseCap * (CFG.capFloorFrac + (1 - CFG.capFloorFrac) * w.charge));
+
+// ---- sizing ----------------------------------------------------
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = Math.min(window.innerWidth - 24, 900);
+  H = Math.min(Math.max(window.innerHeight - 230, 320), Math.round(W * 0.64));
+  cv.width = Math.floor(W * DPR); cv.height = Math.floor(H * DPR);
+  cv.style.width = W + "px"; cv.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", () => { resize(); });
+
+// ---- nearest well + load computation ---------------------------
+function nearestWell(x, y) {
+  let best = -1, bd = Infinity;
+  for (let i = 0; i < S.wells.length; i++) {
+    const d = dist2(x, y, S.wells[i].x, S.wells[i].y);
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+// The unified core: a well's capacity is a DRAIN BUDGET spent against
+// distance. Each spring goes to its nearest well; the well drains its
+// springs cheapest-first (nearest), and whatever budget can't reach
+// stays as backlog. So placement directly determines what gets served —
+// sit on your demand and it clears; let it drift away and it floods.
+function resolveDrain(mutate) {
+  const groups = S.wells.map(() => []);
+  for (const sp of S.springs) { const i = nearestWell(sp.x, sp.y); sp.owner = i; if (i >= 0) groups[i].push(sp); }
+  let flooded = 0, served = 0;
+  for (let i = 0; i < S.wells.length; i++) {
+    const w = S.wells[i];
+    const owned = groups[i].sort((a, b) => dist2(a.x, a.y, w.x, w.y) - dist2(b.x, b.y, w.x, w.y));
+    let budget = capacityOf(w) * CFG.drainBudget;
+    let backlog = 0;
+    for (const sp of owned) {
+      // within comfortR the signal is full-strength (a forgiving zone, not a
+      // single pixel-perfect spot); beyond it, distance bites linearly
+      const cost = Math.max(CFG.comfortR, Math.sqrt(dist2(sp.x, sp.y, w.x, w.y)));
+      const can = budget > 0 ? Math.min(sp.w, Math.floor(budget / cost)) : 0;
+      budget -= can * cost; served += can;
+      const remaining = mutate ? (sp.w -= can, sp.w) : (sp.w - can);
+      backlog += remaining;
+    }
+    w.backlog = backlog;
+    w.flooded = backlog > CFG.floodTol;
+    if (w.flooded) flooded++;
+  }
+  return { flooded, served };
+}
+// live (non-mutating) refresh for dragging/UI
+function computeLoads() { resolveDrain(false); }
+
+// ---- telegraph: pre-roll the coming turn's growth --------------
+function rollNext() {
+  const n = 1 + Math.floor((S.turn - 1) / 4);           // spawns escalate
+  const newSprings = [];
+  for (let k = 0; k < n; k++) {
+    const h = S.hotspots[(Math.random() * S.hotspots.length) | 0];
+    const x = clamp(h.x + (Math.random() - 0.5) * 150, 24, W - 24);
+    const y = clamp(h.y + (Math.random() - 0.5) * 150, 24, H - 24);
+    newSprings.push({ x, y, w: 1 });
+  }
+  // a few existing springs intensify
+  const grows = [];
+  const pool = S.springs.slice();
+  const gCount = Math.min(pool.length, 1 + Math.floor(S.turn / 3));
+  for (let k = 0; k < gCount; k++) {
+    if (!pool.length) break;
+    const idx = (Math.random() * pool.length) | 0;
+    grows.push(pool.splice(idx, 1)[0].id);
+  }
+  S.next = { newSprings, grows };
+}
+
+function driftHotspots() {
+  for (const h of S.hotspots) {
+    h.x += h.vx; h.y += h.vy;
+    if (h.x < 60 || h.x > W - 60) h.vx *= -1;
+    if (h.y < 60 || h.y > H - 60) h.vy *= -1;
+    h.x = clamp(h.x, 60, W - 60); h.y = clamp(h.y, 60, H - 60);
+  }
+}
+
+// ---- the turn ---------------------------------------------------
+function advance() {
+  if (S.phase !== "plan") return;
+  // 1) inflow: apply telegraphed growth (new springs + intensifying ones)
+  for (const ns of S.next.newSprings) S.springs.push({ id: nextId++, x: ns.x, y: ns.y, w: ns.w, owner: -1 });
+  const growSet = new Set(S.next.grows);
+  for (const sp of S.springs) if (growSet.has(sp.id)) sp.w += 1;
+  // 2) recharge settled wells
+  for (const w of S.wells) w.charge = Math.min(1, w.charge + CFG.chargeGain);
+  // 3) drain: each tower serves what its budget can reach (placement-driven)
+  const { flooded, served } = resolveDrain(true);
+  S.springs = S.springs.filter(sp => sp.w > 0); // fully-served demand disappears
+  // 4) uptime: damage is PROPORTIONAL to how congested towers are (a tower can
+  //    run a little hot harmlessly; severe/sustained congestion is what hurts)
+  let severity = 0;
+  for (const w of S.wells) if (w.backlog > CFG.floodTol) severity += (w.backlog - CFG.floodTol);
+  if (severity > 0) S.reserve -= severity * CFG.dmgScale;
+  else if (S.reserve < CFG.maxReserve) S.reserve += CFG.regen;
+  S.reserve = clamp(S.reserve, 0, CFG.maxReserve);
+  S.score += served;
+  // 5) hand out wells + drift + escalate
+  driftHotspots();
+  if (S.turn % CFG.newWellEvery === 0 && S.wells.length + S.wellsToPlace < CFG.maxWells) S.wellsToPlace++;
+  if (S.turn % 7 === 0 && S.hotspots.length < 6) S.hotspots.push(makeHotspot());
+  S.turn++;
+  // 6) lose check
+  if (S.reserve <= 0) { S.reserve = 0; S.phase = "over"; updateUI(); showResult(); return; }
+  rollNext();
+  updateUI();
+}
+
+// ---- setup -----------------------------------------------------
+function makeHotspot() {
+  const a = Math.random() * Math.PI * 2, sp = CFG.driftMin + Math.random() * (CFG.driftMax - CFG.driftMin);
+  return { x: 80 + Math.random() * (W - 160), y: 80 + Math.random() * (H - 160), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp };
+}
+function startGame() {
+  resize();
+  S.phase = "plan"; S.turn = 1; S.reserve = CFG.startReserve; S.score = 0;
+  S.wells = []; S.springs = []; S.hotspots = []; S.wellsToPlace = 0; S.drag = null;
+  for (let i = 0; i < 4; i++) S.hotspots.push(makeHotspot()); // more crowds than towers -> triage
+  // seed enough demand that hour 1 already forces hard choices
+  for (let i = 0; i < 7; i++) { const h = S.hotspots[i % S.hotspots.length]; S.springs.push({ id: nextId++, x: clamp(h.x + (Math.random() - 0.5) * 150, 24, W - 24), y: clamp(h.y + (Math.random() - 0.5) * 150, 24, H - 24), w: 1 + (Math.random() * 2 | 0), owner: -1 }); }
+  // starting wells, spread out
+  for (let i = 0; i < CFG.startWells; i++) {
+    S.wells.push({ id: nextId++, x: W * (i + 1) / (CFG.startWells + 1), y: H / 2, charge: 1, load: 0, flooded: false, color: WELL_COLORS[i % WELL_COLORS.length] });
+  }
+  computeLoads();
+  rollNext();
+  updateUI();
+}
+const WELL_COLORS = ["#36e2ff", "#5be3ff", "#7cdfff", "#9ad0ff", "#69eaff", "#86f0e0", "#b388ff", "#62f3a8"];
+
+// ---- input -----------------------------------------------------
+function ptFromEvent(e) {
+  const rect = cv.getBoundingClientRect();
+  const p = (e.touches && e.touches[0]) || e;
+  return { x: p.clientX - rect.left, y: p.clientY - rect.top };
+}
+function onDown(e) {
+  if (S.phase !== "plan") return;
+  const { x, y } = ptFromEvent(e);
+  // grab nearest well within radius
+  let gi = -1, gd = 28 * 28;
+  for (let i = 0; i < S.wells.length; i++) { const d = dist2(x, y, S.wells[i].x, S.wells[i].y); if (d < gd) { gd = d; gi = i; } }
+  if (gi >= 0) {
+    S.drag = { i: gi, ox: x, oy: y, moved: false };
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+  } else if (S.wellsToPlace > 0) {
+    S.wells.push({ id: nextId++, x: clamp(x, 12, W - 12), y: clamp(y, 12, H - 12), charge: 1, load: 0, flooded: false, color: WELL_COLORS[S.wells.length % WELL_COLORS.length] });
+    S.wellsToPlace--; computeLoads(); updateUI();
+  }
+}
+function onMove(e) {
+  if (!S.drag) return;
+  const { x, y } = ptFromEvent(e);
+  const w = S.wells[S.drag.i];
+  w.x = clamp(x, 12, W - 12); w.y = clamp(y, 12, H - 12);
+  if (dist2(x, y, S.drag.ox, S.drag.oy) > 36) S.drag.moved = true;
+  computeLoads();
+}
+function onUp(e) {
+  if (!S.drag) return;
+  const w = S.wells[S.drag.i];
+  if (S.drag.moved) w.charge = Math.min(w.charge, CFG.moveReset); // unsettle on relocate
+  S.drag = null; computeLoads(); updateUI();
+}
+
+// =================== RENDER ====================================
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  if (S.phase === "menu") return;
+  const step = CFG.step;
+
+  // Voronoi field — colour each sample cell by its nearest well
+  if (S.wells.length) {
+    for (let x = 0; x < W; x += step) for (let y = 0; y < H; y += step) {
+      const i = nearestWell(x + step / 2, y + step / 2);
+      const w = S.wells[i];
+      ctx.fillStyle = w.flooded ? "rgba(255,90,90,0.14)" : hexA(w.color, 0.085);
+      ctx.fillRect(x, y, step, step);
+    }
+    // region borders (where neighbours differ)
+    ctx.strokeStyle = "rgba(54,226,255,0.18)"; ctx.lineWidth = 1;
+    for (let x = step; x < W; x += step) for (let y = 0; y < H; y += step) {
+      if (nearestWell(x - step / 2, y + step / 2) !== nearestWell(x + step / 2, y + step / 2)) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + step); ctx.stroke(); }
+    }
+    for (let y = step; y < H; y += step) for (let x = 0; x < W; x += step) {
+      if (nearestWell(x + step / 2, y - step / 2) !== nearestWell(x + step / 2, y + step / 2)) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + step, y); ctx.stroke(); }
+    }
+  }
+
+  const t = (typeof performance !== "undefined" ? performance.now() : 0) / 1000;
+
+  // flow lines spring -> serving well
+  for (const sp of S.springs) {
+    if (sp.owner < 0 || sp.owner >= S.wells.length) continue;
+    const w = S.wells[sp.owner];
+    ctx.strokeStyle = hexA(w.color, w.flooded ? 0.5 : 0.32); ctx.lineWidth = Math.min(3, 1 + sp.w * 0.25);
+    ctx.setLineDash([3, 5]); ctx.lineDashOffset = -(t * 22) % 8;
+    ctx.beginPath(); ctx.moveTo(sp.x, sp.y); ctx.lineTo(w.x, w.y); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // telegraph ghosts: where new springs will bloom + which will grow
+  if (S.phase === "plan" && S.next) {
+    for (const ns of S.next.newSprings) {
+      ctx.strokeStyle = "rgba(255,209,102,0.55)"; ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.arc(ns.x, ns.y, 7, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(255,209,102,0.5)"; ctx.font = "10px Segoe UI"; ctx.textAlign = "center"; ctx.fillText("+", ns.x, ns.y + 3.5);
+    }
+    const gs = new Set(S.next.grows);
+    for (const sp of S.springs) if (gs.has(sp.id)) {
+      ctx.strokeStyle = "rgba(255,209,102,0.5)"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(sp.x, sp.y, 4 + Math.sqrt(sp.w) * 3 + 4 + Math.sin(t * 4) * 1.5, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+
+  // springs
+  for (const sp of S.springs) {
+    const r = 3 + Math.sqrt(sp.w) * 3;
+    const g = ctx.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, r * 2.2);
+    g.addColorStop(0, "#ffb070"); g.addColorStop(0.5, "rgba(255,150,90,0.4)"); g.addColorStop(1, "rgba(255,150,90,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sp.x, sp.y, r * 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#ffd0a0"; ctx.beginPath(); ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2); ctx.fill();
+    if (sp.w > 1) { ctx.fillStyle = "#3a1a08"; ctx.font = "bold " + Math.round(r * 1.3) + "px Segoe UI"; ctx.textAlign = "center"; ctx.fillText(sp.w, sp.x, sp.y + r * 0.45); }
+  }
+
+  // wells
+  for (const w of S.wells) {
+    const over = !!w.flooded;
+    const R = 15;
+    // glow
+    const g = ctx.createRadialGradient(w.x, w.y, 0, w.x, w.y, R * 2.4);
+    const col = over ? "#ff5a5a" : w.color;
+    g.addColorStop(0, hexA(col, 0.9)); g.addColorStop(0.5, hexA(col, 0.25)); g.addColorStop(1, hexA(col, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(w.x, w.y, R * 2.4, 0, Math.PI * 2); ctx.fill();
+    // charge ring (capacity readiness)
+    ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(w.x, w.y, R + 5, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = hexA(col, 0.9); ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(w.x, w.y, R + 5, -Math.PI / 2, -Math.PI / 2 + w.charge * Math.PI * 2); ctx.stroke();
+    // body
+    ctx.fillStyle = "#0b1430"; ctx.beginPath(); ctx.arc(w.x, w.y, R, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.stroke();
+    // backlog text (0 = comfortably served; rising = falling behind)
+    ctx.fillStyle = over ? "#ff8a8a" : "#dff1ff"; ctx.font = "bold 12px Segoe UI"; ctx.textAlign = "center";
+    ctx.fillText(Math.round(w.backlog || 0), w.x, w.y + 4);
+    if (over) { ctx.strokeStyle = "rgba(255,90,90," + (0.5 + 0.5 * Math.sin(t * 6)) + ")"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(w.x, w.y, R + 11, 0, Math.PI * 2); ctx.stroke(); }
+  }
+
+  // hint for an unplaced well
+  if (S.wellsToPlace > 0 && S.phase === "plan") {
+    ctx.fillStyle = "rgba(54,226,255,0.85)"; ctx.font = "600 14px Segoe UI"; ctx.textAlign = "center";
+    ctx.fillText("Tap an empty spot to deploy a new tower (" + S.wellsToPlace + ")", W / 2, 22);
+  }
+}
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+}
+
+// =================== UI ========================================
+const turnVal = document.getElementById("turnVal");
+const intHearts = document.getElementById("intHearts");
+const reserveLabel = document.getElementById("reserveLabel");
+const wellsVal = document.getElementById("wellsVal");
+const scoreVal = document.getElementById("scoreVal");
+const bannerEl = document.getElementById("banner");
+const advBtn = document.getElementById("advBtn");
+
+function updateUI() {
+  turnVal.textContent = S.turn;
+  intHearts.innerHTML = "";
+  const segs = Math.ceil(S.reserve / 20); // 5 segments of uptime
+  for (let i = 0; i < 5; i++) { const h = document.createElement("span"); h.className = "heart" + (i < segs ? "" : " off"); intHearts.appendChild(h); }
+  reserveLabel.classList.toggle("low", S.reserve <= 40);
+  wellsVal.textContent = S.wells.length + (S.wellsToPlace ? " (+" + S.wellsToPlace + ")" : "");
+  scoreVal.textContent = S.score;
+  advBtn.disabled = S.phase !== "plan";
+  // banner: warn about floods for the CURRENT arrangement
+  let over = 0; for (const w of S.wells) if (w.flooded) over++;
+  if (S.phase === "plan") {
+    bannerEl.innerHTML = over > 0
+      ? "<b style='color:#ff8a8a'>" + over + " tower" + (over > 1 ? "s" : "") + " congested</b> — move a tower onto that demand before you advance, or lose uptime."
+      : "<b>All connected.</b> Plan for the ghosts (next hour's surge), then advance.";
+  }
+}
+
+// ---- result ----------------------------------------------------
+const resultOverlay = document.getElementById("resultOverlay");
+const resultTitle = document.getElementById("resultTitle");
+const resultBody = document.getElementById("resultBody");
+const resultBtn = document.getElementById("resultBtn");
+function showResult() {
+  resultTitle.textContent = "Network down";
+  resultBody.innerHTML = "You kept the city connected for <b>" + (S.turn - 1) + "</b> hours and pushed <b>" + S.score + "</b> data before uptime ran out.";
+  resultBtn.textContent = "Play again";
+  resultOverlay.classList.add("show");
+}
+resultBtn.onclick = () => { resultOverlay.classList.remove("show"); startGame(); };
+
+// ---- loop / boot ----------------------------------------------
+function loop() { draw(); requestAnimationFrame(loop); }
+function boot() {
+  cv = document.getElementById("field"); ctx = cv.getContext("2d");
+  resize(); updateUI();
+  cv.addEventListener("pointerdown", onDown);
+  cv.addEventListener("pointermove", onMove);
+  cv.addEventListener("pointerup", onUp);
+  advBtn.addEventListener("click", advance);
+  window.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && S.phase === "plan") { e.preventDefault(); advance(); } });
+  document.getElementById("startBtn").onclick = () => { document.getElementById("menu").classList.remove("show"); startGame(); };
+  requestAnimationFrame(loop);
+}
+boot();
+</script>
+</body>
+</html>
