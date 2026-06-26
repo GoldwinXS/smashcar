@@ -3,62 +3,70 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>DRIFT — smear the most plate</title>
+<title>DINNER RUSH — a cat-kitchen tug-of-war</title>
 <style>
-  :root{--bg0:#05060f;--bg1:#0b1024;--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--line:#233056;--panel:rgba(12,18,40,0.92);}
+  :root{--bg0:#05060f;--bg1:#0b1024;--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--rival:#ff6b6b;--prep:#ffd166;--line:#233056;--panel:rgba(12,18,40,0.92);}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;min-height:100%;overflow:hidden;background:radial-gradient(120% 120% at 50% 0%,var(--bg1),var(--bg0));color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;user-select:none;touch-action:none;}
-  #app{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;gap:9px;padding:10px;}
-  #hud{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;font-variant-numeric:tabular-nums;}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px;}
+  #hud{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:center;font-variant-numeric:tabular-nums;}
   .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 13px;font-size:14px;display:flex;align-items:center;gap:7px;}
   .pill .label{color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;}
-  .swatch{width:11px;height:11px;border-radius:3px;}
-  #timer{font-weight:700;}
-  #banner{color:var(--muted);font-size:13px;min-height:18px;text-align:center;}
-  #banner b{color:var(--ink);}
   canvas{display:block;touch-action:none;border-radius:12px;border:1px solid var(--line);background:#0a1020;}
-  #controls{display:flex;gap:10px;}
-  button{font:inherit;cursor:pointer;border-radius:11px;border:1px solid var(--line);background:#131c3c;color:var(--ink);padding:10px 18px;font-size:14px;}
-  button:hover{border-color:var(--you);}
+  #prepwrap{width:100%;max-width:760px;display:flex;align-items:center;gap:10px;}
+  #prepbar{flex:1;height:14px;background:#10182f;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  #prepfill{height:100%;width:0;background:linear-gradient(90deg,#caa233,#ffd166);}
+  #prepnum{color:var(--prep);font-weight:700;font-variant-numeric:tabular-nums;min-width:60px;text-align:right;}
+  #deck{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+  .unitbtn{background:#111a38;border:1px solid var(--line);border-radius:12px;padding:8px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:96px;transition:border-color .12s,opacity .12s;}
+  .unitbtn .un{font-weight:700;font-size:14px;}
+  .unitbtn .uc{font-size:12px;color:var(--prep);}
+  .unitbtn .ub{font-size:11px;color:var(--muted);}
+  .unitbtn:hover{border-color:var(--you);}
+  .unitbtn.dis{opacity:.4;cursor:default;}
+  button{font:inherit;cursor:pointer;border-radius:11px;border:1px solid var(--line);background:#131c3c;color:var(--ink);padding:9px 16px;font-size:14px;}
   .btn-primary{background:linear-gradient(180deg,#1ea7c4,#1577a8);border-color:#36e2ff;font-weight:700;}
   .overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,14,.74);backdrop-filter:blur(3px);z-index:9;padding:16px;}
   .overlay.show{display:grid;}
-  .card{width:min(560px,94vw);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.6);}
+  .card{width:min(580px,94vw);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.6);}
   .card h1{margin:0 0 4px;font-size:30px;letter-spacing:-.5px;}
   .card .tag{color:var(--you);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 12px;}
   .card p{color:var(--muted);line-height:1.55;margin:0 0 12px;font-size:15px;}
   .card ul{color:var(--muted);line-height:1.55;margin:0 0 14px;padding-left:18px;font-size:14px;}
   .card b{color:var(--ink);}
   .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
-  .note{font-size:12px;color:var(--muted);border-left:2px solid var(--line);padding-left:12px;}
+  .rps{display:flex;gap:10px;justify-content:center;margin:8px 0;font-size:13px;color:var(--muted);}
 </style>
 </head>
 <body>
 <div id="app">
-  <div id="hud"></div>
-  <div id="banner"></div>
+  <div id="hud">
+    <div class="pill" style="border-color:var(--you)"><span class="label" style="color:var(--you)">Your pass</span> <b id="youHP">20</b></div>
+    <div class="pill" id="clock"><span class="label">Time</span> <b id="timer">90</b></div>
+    <div class="pill" style="border-color:var(--rival)"><span class="label" style="color:var(--rival)">Rival pass</span> <b id="rivalHP">20</b></div>
+  </div>
   <canvas id="cv"></canvas>
-  <div id="controls"><button id="newBtn">New round</button></div>
+  <div id="prepwrap"><span class="label" style="color:var(--prep);font-size:11px;letter-spacing:.06em;text-transform:uppercase">Prep</span><div id="prepbar"><div id="prepfill"></div></div><span id="prepnum">0</span></div>
+  <div id="deck"></div>
 </div>
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">Drift-racing &times; territory painting</p>
-    <h1>DRIFT</h1>
-    <p>Drift your cat around the plate, smearing sauce. The floor belongs to whoever painted it <b>most recently</b> &mdash; and sauce <b>fades</b>, so you have to keep moving and keep re-claiming. Most plate covered when the timer runs out wins.</p>
+    <p class="tag">Real-time tug-of-war &times; economy</p>
+    <h1>DINNER RUSH</h1>
+    <p>Two cat kitchens, one pass. <b>Prep</b> builds up over time &mdash; spend it to send <b>dishes</b> down the lane. They march, clash, and whatever breaks through damages the rival's pass. Smash the rival's pass to 0 (or be ahead at time) to win the rush.</p>
     <ul>
-      <li><b>Steer:</b> move your mouse / finger and your cat drifts toward it (it has momentum &mdash; lean into the slides).</li>
-      <li><b>Paint &amp; re-paint:</b> drive over a rival's turf to flip it to yours. It's a constant tug-of-war over area.</li>
-      <li>Three rival cats are doing the same. No upgrades, no menus &mdash; just claim the most plate.</li>
+      <li><b>It's economy + counters, not reflexes:</b> every dish beats one type and loses to another. Read what the rival sends and answer with its counter.</li>
+      <li><b>Bank or push:</b> spam cheap dishes now, or save prep for a heavy hitter and a big push?</li>
     </ul>
-    <p class="note">Mash-up of real-time drift-racing and territory control; the scoring is a live <b>area / nearest-claim</b> partition (the Voronoi idea from earlier, made real-time and adversarial so there's no greedy solution).</p>
-    <div class="row"><button class="btn-primary" id="startBtn">Start</button></div>
+    <div class="rps" id="rpsNote"></div>
+    <div class="row"><button class="btn-primary" id="startBtn">Start the rush</button></div>
   </div>
 </div>
 
 <div class="overlay" id="resultOverlay">
   <div class="card">
-    <h1 id="resultTitle">Time!</h1>
+    <h1 id="resultTitle">Rush over</h1>
     <p id="resultBody"></p>
     <div class="row"><button class="btn-primary" id="resultBtn">Rematch</button></div>
   </div>
@@ -67,171 +75,193 @@
 <script>
 "use strict";
 /* ============================================================
-   DRIFT — real-time drift-racing x territory painting.
-   You + 3 AI cats drift around an arena smearing sauce. Each
-   grid cell is owned by whoever painted it most recently; paint
-   FADES, so area is a live tug-of-war. Most plate at time wins.
-   (Scoring = a real-time, adversarial area/nearest-claim
-   partition — the Voronoi idea, dynamic instead of placed.)
+   DINNER RUSH — real-time tug-of-war x economy. One lane.
+   Prep regenerates; spend it to deploy dishes that march and
+   auto-fight. Rock-paper-scissors counters + economy timing.
+   You (cyan, left) vs an AI cat (red, right). Smash the rival's
+   pass (HP) to 0, or be ahead when the clock ends. No twitch:
+   every input is a deploy DECISION.
    ============================================================ */
 
 let cv, ctx, DPR = 1, W = 0, H = 0;
-let GX = 0, GY = 0, CW = 14;          // grid dims + cell size (px)
-let ownerGrid, freshGrid;             // Int8 owner (-1..3), Float fresh (0..1)
-const COLORS = ["#36e2ff", "#ff6b6b", "#ffd166", "#62f3a8"];
-const NAMES = ["You", "Red", "Gold", "Mint"];
+let laneY = 0;
 
+// unit types: rock-paper-scissors  soup>spice, spice>roast, roast>soup
+const TYPES = {
+  soup:  { name: "Soup",  cost: 2,  hp: 7,  dmg: 3,   speed: 70,  beats: "spice", color: "#9ad0ff", r: 12 },
+  roast: { name: "Roast", cost: 4,  hp: 20, dmg: 3,   speed: 40,  beats: "soup",  color: "#ffb070", r: 16 },
+  spice: { name: "Spice", cost: 6,  hp: 9,  dmg: 7,   speed: 55,  beats: "roast", color: "#ff7ad0", r: 13 },
+};
+const ORDER = ["soup", "roast", "spice"];
 const CFG = {
-  accel: 0.55, friction: 0.92, maxSpeed: 5.6, radius: 11,
-  brush: 1.7,                 // paint radius in cells
-  fade: 0.0016,               // fresh lost per frame (~ claim lifetime)
-  roundMs: 45000,
+  baseHP: 20, prepStart: 4, prepRate: 1.6, prepCap: 16,
+  range: 6, breakthrough: 4, roundSec: 90,
+  spacing: 30,
 };
 
-const G = { phase: "menu", cats: [], pointer: { x: 0, y: 0 }, t0: 0, scores: [0,0,0,0], fx: [] };
+const G = { phase: "menu", units: [], prep: [CFG.prepStart, CFG.prepStart], hp: [CFG.baseHP, CFG.baseHP], t: 0, aiTimer: 0, fx: [], over: -1 };
+let nextId = 1;
 
+// ---- sizing ----------------------------------------------------
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
-  W = Math.max(320, Math.min(window.innerWidth - 24, 760));
-  H = Math.max(240, Math.min(Math.max(window.innerHeight - 170, 320), Math.round(W * 0.64)));
+  W = Math.max(360, Math.min(window.innerWidth - 24, 760));
+  H = 220;
   cv.width = Math.floor(W * DPR); cv.height = Math.floor(H * DPR);
   cv.style.width = W + "px"; cv.style.height = H + "px";
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  CW = 14; GX = Math.ceil(W / CW); GY = Math.ceil(H / CW);
+  laneY = H * 0.56;
 }
-window.addEventListener("resize", () => { if (G.phase !== "menu") { resize(); allocGrid(); } });
+window.addEventListener("resize", () => { if (G.phase !== "menu") resize(); });
+const baseX = side => side === 0 ? 34 : W - 34;
 
-function allocGrid() {
-  if (!ownerGrid || ownerGrid.length !== GX * GY) {
-    ownerGrid = new Int8Array(GX * GY).fill(-1);
-    freshGrid = new Float32Array(GX * GY);
-  }
-}
-
-// ---- claim cells along a cat's path ---------------------------
-function paint(cat) {
-  const cx = cat.x / CW, cy = cat.y / CW, br = CFG.brush;
-  const x0 = Math.max(0, Math.floor(cx - br)), x1 = Math.min(GX - 1, Math.ceil(cx + br));
-  const y0 = Math.max(0, Math.floor(cy - br)), y1 = Math.min(GY - 1, Math.ceil(cy + br));
-  for (let gx = x0; gx <= x1; gx++) for (let gy = y0; gy <= y1; gy++) {
-    const dx = gx + 0.5 - cx, dy = gy + 0.5 - cy;
-    if (dx * dx + dy * dy <= br * br) { const i = gy * GX + gx; ownerGrid[i] = cat.id; freshGrid[i] = 1; }
-  }
+// ---- deploy ----------------------------------------------------
+function deploy(type, side) {
+  const t = TYPES[type]; if (G.prep[side] < t.cost) return false;
+  G.prep[side] -= t.cost;
+  G.units.push({ id: nextId++, side, type, x: baseX(side) + (side === 0 ? 16 : -16), hp: t.hp, maxhp: t.hp });
+  return true;
 }
 
+// ---- simulation ------------------------------------------------
 function step(dt) {
-  // move cats
-  for (const c of G.cats) {
-    let tx, ty;
-    if (c.id === 0) { tx = G.pointer.x; ty = G.pointer.y; }
-    else { tx = c.tx; ty = c.ty; }
-    let ax = tx - c.x, ay = ty - c.y; const d = Math.hypot(ax, ay) || 1;
-    c.vx += (ax / d) * CFG.accel * dt; c.vy += (ay / d) * CFG.accel * dt;
-    const sp = Math.hypot(c.vx, c.vy); if (sp > CFG.maxSpeed) { c.vx = c.vx / sp * CFG.maxSpeed; c.vy = c.vy / sp * CFG.maxSpeed; }
-    c.vx *= CFG.friction; c.vy *= CFG.friction;
-    c.x += c.vx * dt; c.y += c.vy * dt;
-    // bounce off walls
-    if (c.x < CFG.radius) { c.x = CFG.radius; c.vx = Math.abs(c.vx); } if (c.x > W - CFG.radius) { c.x = W - CFG.radius; c.vx = -Math.abs(c.vx); }
-    if (c.y < CFG.radius) { c.y = CFG.radius; c.vy = Math.abs(c.vy); } if (c.y > H - CFG.radius) { c.y = H - CFG.radius; c.vy = -Math.abs(c.vy); }
-    paint(c);
-    // AI retarget
-    if (c.id !== 0) { c.think -= dt; if (c.think <= 0 || Math.hypot(c.x - c.tx, c.y - c.ty) < 40) aiRetarget(c); }
+  // economy
+  for (let s = 0; s < 2; s++) G.prep[s] = Math.min(CFG.prepCap, G.prep[s] + CFG.prepRate * dt);
+  // AI
+  aiThink(dt);
+  // movement + combat (process units; front ones fight, others queue)
+  const dir = u => u.side === 0 ? 1 : -1;
+  // sort each side by progress so we can keep spacing/queue
+  for (const u of G.units) {
+    const t = TYPES[u.type];
+    // find nearest enemy unit ahead within range
+    let foe = null, fd = 1e9;
+    for (const o of G.units) {
+      if (o.side === u.side || o.hp <= 0) continue;
+      const ahead = (u.side === 0) ? (o.x > u.x) : (o.x < u.x);
+      if (!ahead) continue;
+      const d = Math.abs(o.x - u.x); if (d < fd) { fd = d; foe = o; }
+    }
+    if (foe && fd <= t.r + TYPES[foe.type].r + CFG.range) {
+      // attack
+      // decisive counters: the type you beat takes a lot more; the type that
+      // beats you, you barely scratch. So sending the right counter wins the clash.
+      const mult = t.beats === foe.type ? 2.2 : (TYPES[foe.type].beats === u.type ? 0.45 : 1);
+      foe.hp -= t.dmg * mult * dt;
+      u.attacking = true;
+    } else {
+      u.attacking = false;
+      // move forward, but keep spacing behind a friendly directly ahead
+      let nx = u.x + dir(u) * t.speed * dt;
+      for (const o of G.units) {
+        if (o === u || o.side !== u.side || o.hp <= 0) continue;
+        const ahead = (u.side === 0) ? (o.x > u.x) : (o.x < u.x);
+        if (ahead && Math.abs(o.x - u.x) < CFG.spacing) { nx = u.side === 0 ? Math.min(nx, o.x - CFG.spacing) : Math.max(nx, o.x + CFG.spacing); }
+      }
+      u.x = nx;
+      // reach enemy base?
+      const ex = baseX(1 - u.side);
+      if ((u.side === 0 && u.x >= ex - 14) || (u.side === 1 && u.x <= ex + 14)) {
+        G.hp[1 - u.side] = Math.max(0, G.hp[1 - u.side] - CFG.breakthrough);
+        burst(ex, laneY, "#fff", 16); u.hp = 0;
+      }
+    }
   }
-  // fade claims
-  const f = CFG.fade * dt;
-  for (let i = 0; i < ownerGrid.length; i++) { if (ownerGrid[i] >= 0) { freshGrid[i] -= f; if (freshGrid[i] <= 0) ownerGrid[i] = -1; } }
-  // tally
-  G.scores = [0, 0, 0, 0];
-  for (let i = 0; i < ownerGrid.length; i++) if (ownerGrid[i] >= 0) G.scores[ownerGrid[i]]++;
+  // remove dead
+  for (const u of G.units) if (u.hp <= 0 && !u.dead) { u.dead = true; if (u.x > 20 && u.x < W - 20) burst(u.x, laneY, TYPES[u.type].color, 10); }
+  G.units = G.units.filter(u => u.hp > 0);
+  // win check
+  G.t += dt;
+  if (G.hp[0] <= 0 || G.hp[1] <= 0 || G.t >= CFG.roundSec) endGame();
 }
 
-// AI: aim at a spot that's neutral or enemy-owned, away from other cats
-function aiRetarget(c) {
-  let best = null, bestScore = -1e9;
-  for (let s = 0; s < 14; s++) {
-    const x = 30 + Math.random() * (W - 60), y = 30 + Math.random() * (H - 60);
-    const gi = (Math.floor(y / CW) * GX + Math.floor(x / CW));
-    const own = ownerGrid[gi];
-    let val = own === c.id ? -1 : (own < 0 ? 1.4 : 1.0);     // prefer unclaimed / enemy
-    // spread from other cats
-    for (const o of G.cats) if (o !== c) { const dd = Math.hypot(o.x - x, o.y - y); val += Math.min(dd, 200) / 400; }
-    if (val > bestScore) { bestScore = val; best = { x, y }; }
-  }
-  c.tx = best.x; c.ty = best.y; c.think = 700 + Math.random() * 900;
+function aiThink(dt) {
+  G.aiTimer -= dt;
+  if (G.aiTimer > 0) return;
+  G.aiTimer = 0.7 + Math.random() * 0.6;
+  // read player's units on the field; counter the most common
+  const cnt = { soup: 0, roast: 0, spice: 0 };
+  for (const u of G.units) if (u.side === 0) cnt[u.type]++;
+  // what beats X:  soup<-roast, roast<-spice, spice<-soup
+  const counterOf = { soup: "roast", roast: "spice", spice: "soup" };
+  let threat = null, mx = 0;
+  for (const k of ORDER) if (cnt[k] > mx) { mx = cnt[k]; threat = k; }
+  let want = threat ? counterOf[threat] : "soup";
+  // economy: if not much pressure, sometimes bank toward spice; else answer now
+  if (!threat && G.prep[1] < 6 && Math.random() < 0.5) return; // save
+  if (G.prep[1] >= TYPES[want].cost) deploy(want, 1);
+  else if (G.prep[1] >= TYPES.soup.cost && Math.random() < 0.6) deploy("soup", 1);
 }
 
-// ---- lifecycle -------------------------------------------------
-function startGame() {
-  resize(); allocGrid();
-  ownerGrid.fill(-1); freshGrid.fill(0);
-  G.cats = [];
-  const spots = [[W * 0.25, H * 0.25], [W * 0.75, H * 0.25], [W * 0.25, H * 0.75], [W * 0.75, H * 0.75]];
-  for (let i = 0; i < 4; i++) G.cats.push({ id: i, x: spots[i][0], y: spots[i][1], vx: 0, vy: 0, tx: W / 2, ty: H / 2, think: 0 });
-  G.pointer = { x: W / 2, y: H / 2 };
-  G.scores = [0, 0, 0, 0]; G.fx = [];
-  G.phase = "play"; G.t0 = now();
-  for (const c of G.cats) if (c.id !== 0) aiRetarget(c);
-}
-function now() { return (typeof performance !== "undefined") ? performance.now() : 0; }
-function timeLeft() { return Math.max(0, CFG.roundMs - (now() - G.t0)); }
-
-// ---- input -----------------------------------------------------
-function evtPos(e) { const r = cv.getBoundingClientRect(); const p = (e.touches && e.touches[0]) || e; return { x: p.clientX - r.left, y: p.clientY - r.top }; }
-function onMove(e) { if (G.phase !== "play") return; const p = evtPos(e); G.pointer.x = Math.max(0, Math.min(W, p.x)); G.pointer.y = Math.max(0, Math.min(H, p.y)); }
+// ---- fx --------------------------------------------------------
+function burst(x, y, col, n) { for (let k = 0; k < n; k++) { const a = Math.random() * Math.PI * 2, s = Math.random() * 60; G.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: 1.6 + Math.random(), r: 1.5 + Math.random() * 2, col }); } }
 
 // ---- render ----------------------------------------------------
 function draw() {
   if (!ctx) return;
   ctx.clearRect(0, 0, W, H);
   if (G.phase === "menu") return;
-  // territory
-  for (let gy = 0; gy < GY; gy++) for (let gx = 0; gx < GX; gx++) {
-    const i = gy * GX + gx, o = ownerGrid[i];
-    if (o < 0) continue;
-    ctx.globalAlpha = 0.2 + 0.55 * freshGrid[i];
-    ctx.fillStyle = COLORS[o];
-    ctx.fillRect(gx * CW, gy * CW, CW + 0.5, CW + 0.5);
-  }
-  ctx.globalAlpha = 1;
-  // cats
-  for (const c of G.cats) {
-    const col = COLORS[c.id];
-    const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, CFG.radius * 2.2);
-    g.addColorStop(0, col); g.addColorStop(0.5, col + "66"); g.addColorStop(1, col + "00");
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, CFG.radius * 2.2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(c.x, c.y, CFG.radius, 0, Math.PI * 2); ctx.fill();
+  // lane
+  ctx.strokeStyle = "#1c2950"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(20, laneY); ctx.lineTo(W - 20, laneY); ctx.stroke();
+  // bases
+  drawBase(0, "#36e2ff", G.hp[0]); drawBase(1, "#ff6b6b", G.hp[1]);
+  // units
+  for (const u of G.units) {
+    const t = TYPES[u.type], col = u.side === 0 ? t.color : t.color;
+    const g = ctx.createRadialGradient(u.x, laneY, 0, u.x, laneY, t.r * 1.8);
+    g.addColorStop(0, col); g.addColorStop(0.6, col + "55"); g.addColorStop(1, col + "00");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(u.x, laneY, t.r * 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(u.x, laneY, t.r, 0, Math.PI * 2); ctx.fill();
     // ears
-    ctx.beginPath(); ctx.moveTo(c.x - CFG.radius * 0.7, c.y - CFG.radius * 0.5); ctx.lineTo(c.x - CFG.radius * 0.2, c.y - CFG.radius * 1.2); ctx.lineTo(c.x + CFG.radius * 0.1, c.y - CFG.radius * 0.6); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(c.x + CFG.radius * 0.7, c.y - CFG.radius * 0.5); ctx.lineTo(c.x + CFG.radius * 0.2, c.y - CFG.radius * 1.2); ctx.lineTo(c.x - CFG.radius * 0.1, c.y - CFG.radius * 0.6); ctx.closePath(); ctx.fill();
-    if (c.id === 0) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.x, c.y, CFG.radius * 1.4, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(u.x - t.r * 0.6, laneY - t.r * 0.4); ctx.lineTo(u.x - t.r * 0.2, laneY - t.r * 1.1); ctx.lineTo(u.x + t.r * 0.05, laneY - t.r * 0.5); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(u.x + t.r * 0.6, laneY - t.r * 0.4); ctx.lineTo(u.x + t.r * 0.2, laneY - t.r * 1.1); ctx.lineTo(u.x - t.r * 0.05, laneY - t.r * 0.5); ctx.closePath(); ctx.fill();
+    // hp bar
+    const w = t.r * 1.8, hpf = Math.max(0, u.hp / u.maxhp);
+    ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(u.x - w / 2, laneY - t.r - 9, w, 4);
+    ctx.fillStyle = u.side === 0 ? "#7fe9ff" : "#ff9a9a"; ctx.fillRect(u.x - w / 2, laneY - t.r - 9, w * hpf, 4);
   }
+  for (const f of G.fx) { ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.col; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill(); }
+  ctx.globalAlpha = 1;
+}
+function drawBase(side, col, hp) {
+  const x = baseX(side);
+  ctx.fillStyle = col + "22"; ctx.fillRect(side === 0 ? 0 : W - 28, laneY - 34, 28, 68);
+  ctx.fillStyle = col; ctx.fillRect(side === 0 ? 4 : W - 24, laneY - 30, 20, 60 * Math.max(0, hp / CFG.baseHP));
+  ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.strokeRect(side === 0 ? 4 : W - 24, laneY - 30, 20, 60);
 }
 
-// ---- HUD -------------------------------------------------------
-const hud = document.getElementById("hud"), bannerEl = document.getElementById("banner");
-function syncHud() {
-  const total = GX * GY || 1;
-  let html = '<div class="pill" id="timerPill"><span class="label">Time</span> <span id="timer">' + Math.ceil(timeLeft() / 1000) + 's</span></div>';
-  // order: you first, then rivals by score
-  const order = [0, 1, 2, 3];
-  for (const id of order) {
-    const pct = Math.round(100 * G.scores[id] / total);
-    html += '<div class="pill"><span class="swatch" style="background:' + COLORS[id] + '"></span>' + NAMES[id] + ' <b>' + pct + '%</b></div>';
+// ---- HUD / deck ------------------------------------------------
+const youHP = document.getElementById("youHP"), rivalHP = document.getElementById("rivalHP"), timerEl = document.getElementById("timer");
+const prepfill = document.getElementById("prepfill"), prepnum = document.getElementById("prepnum"), deck = document.getElementById("deck");
+function buildDeck() {
+  deck.innerHTML = "";
+  for (const k of ORDER) {
+    const t = TYPES[k], b = document.createElement("div"); b.className = "unitbtn"; b.dataset.k = k;
+    b.innerHTML = '<span class="un" style="color:' + t.color + '">' + t.name + '</span><span class="uc">' + t.cost + ' prep</span><span class="ub">beats ' + TYPES[t.beats].name + '</span>';
+    b.onclick = () => { if (G.phase === "play") deploy(k, 0); };
+    deck.appendChild(b);
   }
-  hud.innerHTML = html;
-  bannerEl.innerHTML = G.phase === "play" ? "Keep drifting &mdash; sauce <b>fades</b>, so standing still loses turf." : "";
+  const rps = document.getElementById("rpsNote");
+  rps.innerHTML = ORDER.map(k => "<span style='color:" + TYPES[k].color + "'>" + TYPES[k].name + "</span> beats " + TYPES[TYPES[k].beats].name).join(" &middot; ");
+}
+function syncHud() {
+  youHP.textContent = Math.ceil(G.hp[0]); rivalHP.textContent = Math.ceil(G.hp[1]);
+  timerEl.textContent = Math.max(0, Math.ceil(CFG.roundSec - G.t));
+  prepfill.style.width = (100 * G.prep[0] / CFG.prepCap) + "%"; prepnum.textContent = Math.floor(G.prep[0]);
+  for (const b of deck.children) b.classList.toggle("dis", G.prep[0] < TYPES[b.dataset.k].cost || G.phase !== "play");
 }
 
 // ---- result ----------------------------------------------------
 const resultOverlay = document.getElementById("resultOverlay"), resultTitle = document.getElementById("resultTitle"), resultBody = document.getElementById("resultBody");
-function endRound() {
+function endGame() {
+  if (G.phase !== "play") return;
   G.phase = "over";
-  let win = 0; for (let i = 1; i < 4; i++) if (G.scores[i] > G.scores[win]) win = i;
-  const total = GX * GY || 1;
-  resultTitle.textContent = win === 0 ? "You smeared the most plate!" : NAMES[win] + " took the plate";
-  let body = "Final coverage — ";
-  body += [0,1,2,3].map(id => "<b style='color:" + COLORS[id] + "'>" + NAMES[id] + " " + Math.round(100 * G.scores[id] / total) + "%</b>").join(" &middot; ");
-  resultBody.innerHTML = body + ". " + (win === 0 ? "The Capybara nods, almost." : "The Capybara remains unmoved.");
+  let youWon;
+  if (G.hp[1] <= 0 && G.hp[0] > 0) youWon = true; else if (G.hp[0] <= 0 && G.hp[1] > 0) youWon = false;
+  else youWon = G.hp[0] >= G.hp[1];
+  G.over = youWon ? 0 : 1;
+  resultTitle.textContent = youWon ? "You won the rush!" : "The rival kitchen wins";
+  resultBody.innerHTML = "Pass standing &mdash; <b style='color:var(--you)'>You " + Math.ceil(G.hp[0]) + "</b> &middot; <b style='color:var(--rival)'>Rival " + Math.ceil(G.hp[1]) + "</b>. " + (youWon ? "The Capybara nods, almost." : "The Capybara remains unmoved.");
   resultOverlay.classList.add("show");
 }
 
@@ -239,22 +269,25 @@ function endRound() {
 let last = 0;
 function loop(ts) {
   if (G.phase === "play") {
-    if (!last) last = ts;
-    let dt = (ts - last) / 16.67; last = ts; if (dt > 3) dt = 3; // clamp
-    step(dt);
-    if (timeLeft() <= 0) endRound();
-    syncHud();
+    if (!last) last = ts; let dt = (ts - last) / 1000; last = ts; if (dt > 0.1) dt = 0.1;
+    step(dt); syncHud();
   }
-  draw();
-  requestAnimationFrame(loop);
+  for (const f of G.fx) { f.x += f.vx * 0.016; f.y += f.vy * 0.016; f.vx *= 0.9; f.vy *= 0.9; f.life -= f.decay * 0.016; }
+  G.fx = G.fx.filter(f => f.life > 0);
+  draw(); requestAnimationFrame(loop);
+}
+function startGame() {
+  resize();
+  G.units = []; G.prep = [CFG.prepStart, CFG.prepStart]; G.hp = [CFG.baseHP, CFG.baseHP]; G.t = 0; G.aiTimer = 1; G.fx = []; G.over = -1;
+  G.phase = "play"; last = 0; syncHud();
 }
 function boot() {
   cv = document.getElementById("cv"); ctx = cv.getContext("2d");
-  cv.addEventListener("pointermove", onMove);
-  cv.addEventListener("pointerdown", onMove);
-  document.getElementById("startBtn").onclick = () => { document.getElementById("menu").classList.remove("show"); last = 0; startGame(); };
-  document.getElementById("newBtn").onclick = () => { document.getElementById("menu").classList.add("show"); G.phase = "menu"; };
-  document.getElementById("resultBtn").onclick = () => { resultOverlay.classList.remove("show"); last = 0; startGame(); };
+  buildDeck();
+  document.getElementById("startBtn").onclick = () => { document.getElementById("menu").classList.remove("show"); startGame(); };
+  document.getElementById("resultBtn").onclick = () => { resultOverlay.classList.remove("show"); startGame(); };
+  // keyboard 1/2/3 deploy
+  window.addEventListener("keydown", e => { if (G.phase !== "play") return; const i = parseInt(e.key, 10); if (i >= 1 && i <= 3) deploy(ORDER[i - 1], 0); });
   requestAnimationFrame(loop);
 }
 boot();
