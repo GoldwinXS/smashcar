@@ -91,6 +91,23 @@
   .perk .pdesc { color: var(--muted); font-size: 13px; }
   .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
   .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
+
+  /* PULSE ability button */
+  #pulse {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+    display: none; align-items: center; gap: 11px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 11px 20px; cursor: pointer; z-index: 4;
+    transition: border-color .15s, box-shadow .15s, opacity .15s;
+  }
+  #pulse .pl { font-weight: 700; letter-spacing: .1em; font-size: 15px; }
+  #pulse .pips { display: flex; gap: 5px; }
+  #pulse .pip { width: 10px; height: 10px; border-radius: 50%; background: var(--cyan); }
+  #pulse .pip.off { background: #33405f; }
+  #pulse .key { color: var(--muted); font-size: 12px; }
+  #pulse.ready { border-color: var(--cyan); box-shadow: 0 0 26px rgba(54,226,255,.4); }
+  #pulse.ready .pl { color: var(--cyan); }
+  #pulse.spent { opacity: .42; }
 </style>
 </head>
 <body>
@@ -107,17 +124,23 @@
   <span class="sub" id="bannerSub">Drag back from your comet to launch</span>
 </div>
 
+<div id="pulse" title="Fire a shockwave (Space)">
+  <span class="pl">PULSE</span>
+  <span class="pips" id="pulsePips"></span>
+  <span class="key">Space</span>
+</div>
+
 <!-- Start menu -->
 <div class="overlay show" id="menu">
   <div class="card">
     <p class="tag">Mini-golf &times; Sumo &middot; in orbit</p>
     <h1>Comet Court</h1>
-    <p><b>Goal: be the last comet on the platform.</b> You are the <b style="color:#36e2ff">cyan</b> comet. Slingshot yourself into the 3 rivals and shove them off the edge — but don't get shoved off yourself.</p>
+    <p><b>Goal: be the last comet on the platform.</b> You are the <b style="color:#36e2ff">cyan</b> comet. You and the rivals take turns flicking — last one on the platform wins.</p>
     <ul>
-      <li><b>Aim:</b> press &amp; drag <b>back</b> from your cyan comet, release to launch (like a slingshot). Pull farther = more power.</li>
-      <li><b>Knock them off:</b> hit a rival on its inner side so it flies out past the glowing edge. That's a knockout.</li>
-      <li><b>The swirls are hazards,</b> not goals — gravity wells curve every shot. The dotted line shows your path.</li>
-      <li><b>Take turns:</b> you flick, then each rival flicks. Last comet standing wins the round; the platform then shrinks.</li>
+      <li><b>Aim:</b> drag <b>back</b> from your comet and release, like a slingshot. Farther = more power. The dotted line previews your curve through the gravity wells.</li>
+      <li><b>PULSE (Space / button):</b> your defense. A rival's shot is shown as a dashed line before it fires — tap PULSE to shove it away, or to knock a nearby rival off the edge yourself. <b>One charge per round.</b></li>
+      <li><b>Play the angles:</b> rivals go after whoever is most <b>exposed</b>. Hang back from the edge and let them shove <i>each other</i> off.</li>
+      <li><b>Perks stack</b> each round — build a tank, a sniper, or a pulse-bomber.</li>
     </ul>
     <div class="row"><button class="btn-primary" id="startBtn">Start match</button></div>
   </div>
@@ -164,8 +187,10 @@ const CFG = {
   restitution: 0.92,      // base bounciness of comet collisions
   ringShrink: 0.93,       // ring radius multiplier each round
   simCap: 9 * 60,         // max frames a single shot may simulate
-  aiPower: 0.9,           // fraction of max power AI uses
-  aiSpread: 0.14,         // AI aim inaccuracy (radians, smaller = sharper)
+  aiPower: 0.86,          // fraction of max power AI uses
+  aiSpread: 0.17,         // AI aim inaccuracy (radians, smaller = sharper)
+  pulseRange: 0.55,       // shockwave radius as fraction of ringR
+  pulsePower: 17,         // shockwave push strength
 };
 
 const PALETTE = {
@@ -189,14 +214,19 @@ const game = {
   score: 0,
   combo: 1,
   comboPeak: 1,
-  turnQueue: [],
-  turnIdx: 0,
   shotKnockouts: 0,
   simFrames: 0,
   playerPerks: [],
   comboFlashes: [],
   particles: [],
   shake: 0,
+  currentShooter: null,   // comet taking the current turn
+  lastWasPlayer: false,   // for 1:1 player/rival alternation
+  aiCounter: 0,           // round-robins which rival shoots
+  pulseCharges: 0,
+  pulseBase: 1,
+  pulseCredit: 0,         // frames during which eject is credited to the player's pulse
+  pulseRings: [],
 };
 
 // ---- Juice: particles + screen shake --------------------------
@@ -251,7 +281,7 @@ function makeStars() {
 function makeComet(color, isPlayer, name) {
   return {
     x: 0, y: 0, vx: 0, vy: 0,
-    r: unit * 0.05,
+    r: unit * 0.05,          // radius is FIXED — perks never grow your hitbox
     mass: 1,
     color,
     name: name || "You",
@@ -260,17 +290,30 @@ function makeComet(color, isPlayer, name) {
     powerMult: 1,
     frictionMult: 1,
     restBonus: 0,
+    pulseRangeMult: 1,
+    pulsePowerMult: 1,
+    bonusCharges: 0,
+    telegraph: null,         // AI's intended shot, shown before it fires
     trail: [],
   };
 }
 
 // ---- Perk pool (roguelike-lite) -------------------------------
+// Perks STACK additively/multiplicatively and carry real trade-offs.
+// None of them grow your radius, so you never become a bigger target.
 const PERKS = [
-  { name: "Heavyweight",  desc: "+65% mass — much harder to shove out.", apply: c => { c.mass = 1.65; c.r *= 1.12; } },
-  { name: "Slingshot",    desc: "+28% launch power. Reach across the court.", apply: c => { c.powerMult = 1.28; } },
-  { name: "Bumper",       desc: "Bouncier hits — you transfer more knockback.", apply: c => { c.restBonus = 0.45; } },
-  { name: "Glider",       desc: "Less drag — your comet coasts much farther.", apply: c => { c.frictionMult = 0.55; } },
-  { name: "Featherweight",desc: "-30% mass + extra glide. Slippery and fast.", apply: c => { c.mass = 0.7; c.frictionMult = 0.7; } },
+  { name: "Bulwark",    desc: "+90% mass, but -20% launch reach. A hard-to-shove tank.",
+    apply: c => { c.mass += 0.9; c.powerMult *= 0.8; } },
+  { name: "Slingshot",  desc: "+30% launch power. Reach clear across the platform.",
+    apply: c => { c.powerMult *= 1.3; } },
+  { name: "Twin Pulse", desc: "+1 PULSE charge every round. Defend twice.",
+    apply: c => { c.bonusCharges += 1; } },
+  { name: "Shockwave",  desc: "PULSE hits +60% wider and +35% harder — a real weapon.",
+    apply: c => { c.pulseRangeMult *= 1.6; c.pulsePowerMult *= 1.35; } },
+  { name: "Counterweight", desc: "+50% mass and you bounce attackers back harder.",
+    apply: c => { c.mass += 0.5; c.restBonus += 0.5; } },
+  { name: "Glider",     desc: "Less drag — your comet coasts much farther for trick shots.",
+    apply: c => { c.frictionMult *= 0.6; } },
 ];
 
 function rollPerks(n) {
@@ -293,7 +336,7 @@ function placeComets(count) {
   }
   // arrange on a circle inside the ring
   const ringNow = ringR0 * Math.pow(CFG.ringShrink, game.round - 1);
-  const rad = ringNow * 0.66;
+  const rad = ringNow * 0.58;
   const start = -Math.PI / 2;
   game.comets.forEach((c, i) => {
     const a = start + (i / count) * Math.PI * 2;
@@ -333,11 +376,18 @@ function beginRound(askPerk) {
   placeComets(count);
   placeWells();
   applyPlayerPerks();
-  game.comboFlashes = [];
+  const pl = game.comets.find(c => c.isPlayer);
+  game.pulseBase = 1 + (pl ? pl.bonusCharges : 0);
+  game.pulseCharges = game.pulseBase;
+  game.currentShooter = null;
+  game.lastWasPlayer = false;
+  game.aiCounter = 0;
+  game.pulseCredit = 0;
+  game.comboFlashes = []; game.particles = []; game.pulseRings = []; game.shake = 0;
   if (askPerk) {
     showPerkPick();
   } else {
-    beginPlayerTurn();
+    startTurnCycle();
   }
 }
 
@@ -350,14 +400,32 @@ function applyPlayerPerks() {
 // ---- Turn flow -------------------------------------------------
 function aliveComets() { return game.comets.filter(c => c.alive); }
 
-function beginPlayerTurn() {
+// Turns alternate 1:1 — you, a rival, you, a rival... so you are never
+// hit several times in a row, and you always get to answer.
+function startTurnCycle() {
+  game.lastWasPlayer = false; // player goes first each round
+  nextShooter();
+}
+
+function nextShooter() {
+  if (checkRoundOver()) return;
   const player = game.comets.find(c => c.isPlayer && c.alive);
-  if (!player) { return endRound(false); }
-  // build a fresh turn order starting after the player
-  game.turnQueue = aliveComets();
-  game.turnIdx = 0;
-  game.state = "aim";
-  showBanner();
+  const ais = game.comets.filter(c => !c.isPlayer && c.alive);
+  let shooter = null;
+  if (player && !game.lastWasPlayer) {
+    shooter = player; game.lastWasPlayer = true;
+  } else if (ais.length) {
+    shooter = ais[game.aiCounter % ais.length]; game.aiCounter++; game.lastWasPlayer = false;
+  } else if (player) {
+    shooter = player; game.lastWasPlayer = true;
+  } else { return; }
+  game.currentShooter = shooter;
+  if (shooter.isPlayer) {
+    game.state = "aim";
+    showBanner();
+  } else {
+    aiTakeTurn(shooter);
+  }
 }
 
 function launch(comet, vx, vy) {
@@ -367,45 +435,58 @@ function launch(comet, vx, vy) {
   game.state = "sim";
 }
 
-function nextTurn() {
-  game.turnIdx++;
-  // skip dead comets
-  while (game.turnIdx < game.turnQueue.length && !game.turnQueue[game.turnIdx].alive) {
-    game.turnIdx++;
-  }
-  if (game.turnIdx >= game.turnQueue.length) {
-    // full round of turns complete -> shrink ring slightly mid-round? no, only between rounds.
-    if (checkRoundOver()) return;
-    beginPlayerTurn();
-    return;
-  }
-  const c = game.turnQueue[game.turnIdx];
-  if (c.isPlayer) {
-    game.state = "aim";
-  } else {
-    aiTakeTurn(c);
-  }
-}
-
 function aiTakeTurn(c) {
   game.state = "ai";
+  // Decide the shot up front so we can TELEGRAPH it (dashed aim line),
+  // giving the player a window to react with PULSE.
+  const targets = aliveComets().filter(t => t !== c);
+  if (!targets.length) { nextShooter(); return; }
+  // target whoever is most exposed, with a little randomness so the opener
+  // isn't always the player and ties break unpredictably
+  targets.sort((a, b) =>
+    (distFromCenter(b) + Math.random() * 30) - (distFromCenter(a) + Math.random() * 30));
+  const tgt = targets[0];
+  const outAng = Math.atan2(tgt.y - cy, tgt.x - cx);
+  let ang = Math.atan2(tgt.y - c.y, tgt.x - c.x);
+  ang = ang * 0.6 + outAng * 0.4;
+  ang += (Math.random() - 0.5) * CFG.aiSpread;
+  const power = CFG.maxLaunch * CFG.aiPower * c.powerMult * (0.9 + Math.random() * 0.1);
+  c.telegraph = { vx: Math.cos(ang) * power, vy: Math.sin(ang) * power };
   showBanner(c);
-  // small think delay so the player can see whose turn it is
   setTimeout(() => {
-    if (!c.alive) { nextTurn(); return; }
-    // pick a target: prefer the comet nearest the edge (easiest eject)
-    const targets = aliveComets().filter(t => t !== c);
-    if (!targets.length) { nextTurn(); return; }
-    targets.sort((a, b) => distFromCenter(b) - distFromCenter(a));
-    const tgt = targets[0];
-    // aim from the center-side of the target so impact shoves it outward
-    const outAng = Math.atan2(tgt.y - cy, tgt.x - cx);
-    let ang = Math.atan2(tgt.y - c.y, tgt.x - c.x);
-    ang = ang * 0.6 + outAng * 0.4;
-    ang += (Math.random() - 0.5) * CFG.aiSpread; // inaccuracy
-    const power = CFG.maxLaunch * CFG.aiPower * c.powerMult * (0.9 + Math.random() * 0.1);
-    launch(c, Math.cos(ang) * power, Math.sin(ang) * power);
-  }, 620);
+    if (!c.alive) { c.telegraph = null; nextShooter(); return; }
+    const t = c.telegraph; c.telegraph = null;
+    if (!t) { nextShooter(); return; } // pre-empted by the player's pulse
+    launch(c, t.vx, t.vy);
+  }, 720);
+}
+
+// ---- PULSE: the player's defensive/offensive shockwave ---------
+function doPulse() {
+  const p = game.comets.find(c => c.isPlayer && c.alive);
+  if (!p) return;
+  if (game.state !== "ai" && game.state !== "sim") return; // reactive tool only
+  if (game.pulseCharges <= 0) return;
+  game.pulseCharges--;
+  // if a rival is mid-telegraph, it fires NOW and we react simultaneously
+  if (game.state === "ai" && game.currentShooter && game.currentShooter.telegraph) {
+    const c = game.currentShooter, t = c.telegraph; c.telegraph = null;
+    launch(c, t.vx, t.vy);
+  }
+  const R = ringR * CFG.pulseRange * p.pulseRangeMult;
+  const strength = CFG.pulsePower * p.pulsePowerMult;
+  for (const c of game.comets) {
+    if (!c.alive || c === p) continue;
+    const dx = c.x - p.x, dy = c.y - p.y, d = Math.max(len(dx, dy), 1);
+    if (d < R) {
+      const f = (1 - d / R) * strength;
+      c.vx += (dx / d) * f; c.vy += (dy / d) * f;
+    }
+  }
+  game.pulseRings.push({ x: p.x, y: p.y, r: p.r * 2, max: R, t: 1 });
+  burst(p.x, p.y, PALETTE.player, 30, 9);
+  addShake(11);
+  game.pulseCredit = 55; // knockouts in this window count for you
 }
 
 function distFromCenter(c) { return len(c.x - cx, c.y - cy); }
@@ -448,9 +529,9 @@ function stepPhysics() {
       burst(c.x, c.y, c.color, 26, 6);
       addShake(c.isPlayer ? 16 : 12);
       if (!c.isPlayer) {
-        // award knockout to whoever is taking the current shot
-        const shooter = game.turnQueue[game.turnIdx];
-        if (shooter && shooter.isPlayer) {
+        // credit the player if it was their shot OR their recent pulse
+        const byPlayer = (game.currentShooter && game.currentShooter.isPlayer) || game.pulseCredit > 0;
+        if (byPlayer) {
           game.shotKnockouts++;
           registerKnockout(c);
         }
@@ -459,6 +540,7 @@ function stepPhysics() {
     }
     if (len(c.vx, c.vy) > CFG.stopSpeed) movers++;
   }
+  if (game.pulseCredit > 0) game.pulseCredit--;
   game.simFrames++;
   const settled = movers === 0 || game.simFrames > CFG.simCap;
   if (settled) onShotSettled();
@@ -509,11 +591,10 @@ function registerKnockout(c) {
 
 function onShotSettled() {
   if (game.state !== "sim") return;
-  // reset combo display after a player shot resolves
   if (checkRoundOver()) return;
-  nextTurn();
-  // combo resets to 1 once a fresh shot begins; keep peak in score already
+  // combo resets to 1 once a fresh shot begins; peak is already banked in score
   if (game.shotKnockouts > 0) game.combo = 1;
+  nextShooter();
 }
 
 function checkRoundOver() {
@@ -553,7 +634,7 @@ function pointerPos(e) {
 
 function activePlayer() {
   if (game.state !== "aim") return null;
-  const c = game.turnQueue[game.turnIdx];
+  const c = game.currentShooter;
   return (c && c.isPlayer && c.alive) ? c : null;
 }
 
@@ -716,7 +797,7 @@ function draw() {
       }
     }
     // whose-turn chevron above the current shooter
-    const shooter = game.turnQueue[game.turnIdx];
+    const shooter = game.currentShooter;
     if (c === shooter && (game.state === "aim" || game.state === "ai")) {
       const bob = Math.sin(performance.now() / 220) * 4;
       const ay = c.y - c.r * 2.7 + bob;
@@ -725,6 +806,29 @@ function draw() {
       ctx.moveTo(c.x, ay + 9); ctx.lineTo(c.x - 7, ay); ctx.lineTo(c.x + 7, ay);
       ctx.closePath(); ctx.fill();
     }
+  }
+
+  // enemy shot telegraph — shows where the rival is about to fire
+  if (game.state === "ai" && game.currentShooter && game.currentShooter.telegraph) {
+    const c = game.currentShooter, t = c.telegraph;
+    const pts = previewPath(c, t.vx, t.vy);
+    ctx.save();
+    ctx.setLineDash([4, 7]); ctx.globalAlpha = 0.65;
+    ctx.strokeStyle = c.color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(c.x, c.y);
+    for (const q of pts) ctx.lineTo(q.x, q.y);
+    ctx.stroke();
+    ctx.restore();
+    ctx.globalAlpha = 1; ctx.setLineDash([]);
+  }
+
+  // pulse shockwave rings
+  for (const ring of game.pulseRings) {
+    const rr = ring.r + (ring.max - ring.r) * (1 - ring.t);
+    ctx.globalAlpha = ring.t * 0.6;
+    ctx.strokeStyle = PALETTE.player; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(ring.x, ring.y, rr, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
   }
 
   // aim preview
@@ -796,7 +900,9 @@ function showBanner(aiComet) {
   if (aiComet) {
     bannerWho.textContent = aiComet.name + " is taking a shot";
     bannerWho.classList.remove("danger");
-    bannerSub.textContent = "Watch where it aims";
+    bannerSub.innerHTML = game.pulseCharges > 0
+      ? "Dashed line = its shot &middot; tap PULSE to deflect it"
+      : "No pulse left — brace for it";
   } else {
     const p = game.comets.find(c => c.isPlayer);
     const danger = p && distFromCenter(p) > ringR * 0.76;
@@ -809,11 +915,38 @@ function showBanner(aiComet) {
 }
 function hideBanner() { bannerEl.style.display = "none"; }
 function pulse(el) { el.style.transform = "scale(1.35)"; setTimeout(() => el.style.transform = "scale(1)", 130); }
+
+const pulseBtn = document.getElementById("pulse");
+const pulsePips = document.getElementById("pulsePips");
+let lastPipKey = "";
 function syncHud() {
   roundEl.textContent = game.round;
   comboEl.textContent = "x" + game.combo;
   scoreEl.textContent = game.score;
+  // pulse button
+  const playing = game.state === "aim" || game.state === "ai" || game.state === "sim";
+  pulseBtn.style.display = playing ? "flex" : "none";
+  if (playing) {
+    const usable = (game.state === "ai" || game.state === "sim") && game.pulseCharges > 0;
+    pulseBtn.classList.toggle("ready", usable);
+    pulseBtn.classList.toggle("spent", !usable);
+    const key = game.pulseBase + "/" + game.pulseCharges;
+    if (key !== lastPipKey) {
+      lastPipKey = key;
+      let pips = "";
+      for (let i = 0; i < game.pulseBase; i++) {
+        pips += '<span class="pip' + (i < game.pulseCharges ? "" : " off") + '"></span>';
+      }
+      pulsePips.innerHTML = pips;
+    }
+  }
 }
+
+// PULSE input: Space or tapping the button
+window.addEventListener("keydown", e => {
+  if (e.code === "Space") { e.preventDefault(); doPulse(); }
+});
+pulseBtn.addEventListener("click", doPulse);
 
 // ---- Main loop -------------------------------------------------
 function frame() {
@@ -829,6 +962,8 @@ function frame() {
     pt.x += pt.vx; pt.y += pt.vy; pt.vx *= 0.92; pt.vy *= 0.92; pt.life -= pt.decay;
   }
   game.particles = game.particles.filter(pt => pt.life > 0);
+  for (const ring of game.pulseRings) ring.t -= 0.045;
+  game.pulseRings = game.pulseRings.filter(r => r.t > 0);
   game.shake *= 0.86; if (game.shake < 0.4) game.shake = 0;
   draw();
   syncHud();
@@ -854,8 +989,12 @@ function showPerkPick() {
     b.onclick = () => {
       game.playerPerks.push(perk);
       applyPlayerPerks();
+      // recompute pulse charges in case a perk granted more
+      const pl = game.comets.find(c => c.isPlayer);
+      game.pulseBase = 1 + (pl ? pl.bonusCharges : 0);
+      game.pulseCharges = game.pulseBase;
       perkEl.classList.remove("show");
-      beginPlayerTurn();
+      startTurnCycle();
     };
     perkListEl.appendChild(b);
   });
