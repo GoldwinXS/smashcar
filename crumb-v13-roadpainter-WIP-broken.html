@@ -27,8 +27,6 @@
   .tbtn{position:fixed;bottom:54px;width:78px;height:78px;border-radius:50%;background:var(--panel);border:1px solid var(--line);display:none;align-items:center;justify-content:center;font-size:24px;color:var(--you);}
   #tl{left:14px;} #tr{left:104px;} #tboost{right:14px;border-color:var(--boost);color:var(--boost);font-size:12px;font-weight:700;} #tjump{right:104px;font-size:12px;font-weight:700;} #tfire{right:14px;bottom:140px;border-color:#ff6b6b;color:#ff6b6b;font-size:12px;font-weight:700;} #tdrift{left:194px;bottom:54px;border-color:#62f3a8;color:#62f3a8;font-size:12px;font-weight:700;} #tbuild{right:104px;bottom:140px;border-color:#36e2ff;color:#36e2ff;font-size:12px;font-weight:700;} #tcycle{left:194px;bottom:144px;border-color:#ffd166;color:#ffd166;font-size:11px;font-weight:700;}
   .touch .tbtn{display:flex;}
-  /* BUILD SHELVED: keep the build/cycle touch buttons hidden even on touch devices */
-  #tbuild,#tcycle{display:none !important;}
   .overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,14,.8);backdrop-filter:blur(3px);z-index:9;padding:16px;}
   .overlay.show{display:grid;}
   .card{width:min(600px,94vw);background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.6);}
@@ -61,7 +59,7 @@
 <div id="drophint">Press SPACE / JUMP to launch out of the rocket!</div>
 <div class="tbtn" id="tl">&#9664;</div><div class="tbtn" id="tr">&#9654;</div>
 <div class="tbtn" id="tjump">JUMP</div><div class="tbtn" id="tboost">BOOST</div><div class="tbtn" id="tfire">FIRE</div><div class="tbtn" id="tdrift">DRIFT</div>
-<div class="tbtn" id="tbuild">BUILD</div><div class="tbtn" id="tcycle">PIECE</div>
+<div class="tbtn" id="tbuild">ROAD</div><div class="tbtn" id="tcycle">RAMP</div>
 
 <div class="overlay show" id="menu">
   <div class="card">
@@ -73,6 +71,7 @@
       <li><b>Rocket League moves:</b> <b>jump</b> Shift; in the air tap jump again to <b>dodge</b> &mdash; forward = speed burst, &larr;/&rarr; = <b>side-dodge</b>, back = <b>half-flip</b> (snap 180). Press jump just before landing to <b>wavedash</b>. Hold <b>C</b> to drift; a long slide grants a release boost. Double-jump + air control on ramps &amp; jump pads.</li>
       <li><b>Loot</b> &mdash; just <b>four</b> items, and rarity (the color) = how BIG the boost is: <span style="color:#62f3a8">common</span>→<span style="color:#4da6ff">uncommon</span>→<span style="color:#b388ff">rare</span>→<span style="color:#ffb02e">epic</span>→<span style="color:#ff3df0">MYTHIC</span>. <b>Speed</b> (top speed), <b>Boost</b> (longer-lasting / faster-refilling boost), and <b>Jump</b> (higher jumps) all stack &amp; show on your truck. Pickups <b>don't respawn</b> &mdash; kills drop the loot.</li>
       <li><b>Seeking Rocket</b> (the only gadget): <b>fire</b> with F. It locks the nearest enemy in front of you and homes &mdash; but it turns slowly, so a target that jukes or boosts can <b>escape</b> it. ~38 damage, not a one-shot. Rarer pickups give more rockets.</li>
+      <li><b>ROAD PAINTER</b>: smash the gold <b>scrap crates</b> all over the map (drive into them) to bank <b>scrap</b> &mdash; they recharge. <b>Hold B</b> (ROAD) to paint a smooth <b>road/bridge</b> along your path &mdash; it holds its height, so it <b>bridges gaps</b> and keeps you out of canyons. <b>Hold G</b> (RAMP) to paint a <b>climbing ramp</b> that rises into the air &mdash; gun it off the lip to launch. Each node costs scrap, and <b>you (and the AI) drive on any painted road</b>. AI trucks paint ramps to scale steep slopes.</li>
     </ul>
     <div class="row"><button class="btn-primary" id="startBtn">Launch</button></div>
   </div>
@@ -96,35 +95,42 @@ import * as THREE from "three";
    ram collisions, shrinking storm, jump pads, minimap.
    ============================================================ */
 const R = 850, NCARS = 100;
-const BASE = { hull: 120, maxSpeed: 66, accel: 50, steer: 2.6, ramK: 0.5 };
+const BASE = { hull: 120, maxSpeed: 66, accel: 50, steer: 2.3, ramK: 0.5 };
 const C = {
   boostSpeed: 122, brake: 92, drag: 16, ride: 1.1, grav: 62, jumpV: 27, padV: 44, dodge: 34, airCtrl: 0.85,
   knock: 1.35, stormDmg: 6, seaDmg: 0, waterLevel: 0.8, boostRegen: 0.05, boostUse: 0.5, airLift: 30,
-  camDist: 19, camHeight: 10, stormSec: 165, stormMin: 55, shieldTime: 6, shockRadius: 30, shockDmg: 24,
+  camDist: 19, camHeight: 10, stormSec: 200, stormMin: 70, shieldTime: 6, shockRadius: 30, shockDmg: 24,
   glideSpeed: 52, fallSpeed: 26, dropY: 230, dropMax: 14, flyTime: 13, rocketAlt: 250,
   // ---- Rocket League fusion (bursts ~25-35% of base 66) ----
   wavedashWin: 0.15,   // press jump within this window before landing -> wavedash
   wavedashBurst: 22,   // ground speed burst on a clean wavedash
-  driftYaw: 2.0,       // yaw-rate multiplier while powersliding (snappier corners)
-  driftFric: 0.32,     // fraction of normal drag applied while drifting (carries more speed)
-  driftMinHold: 0.45,  // seconds of drift charge needed to earn the release boost
-  driftBurst: 18,      // speed burst granted on a charged powerslide release
+  driftYaw: 1.8,       // yaw-rate multiplier while powersliding
+  driftFric: 0.35,     // fraction of normal drag applied while drifting
+  driftMinHold: 0.5,   // seconds of drift charge needed to earn the release boost
+  driftBurst: 15,      // speed burst granted on a charged powerslide release
   sideDodge: 18,       // lateral speed gained on a directional side-dodge
   halfFlipDelay: 0.4,  // time after a back-dodge before the 180 yaw snap fires
 };
-// ---- BUILDING system tuning ----
+// ---- ROAD-PAINTER system tuning ----
+// You no longer place grid pieces; you HOLD a paint button to lay a continuous
+// ribbon of road nodes along your path "at drawing speed". Bridge gaps by holding
+// height (road), or climb into the air with a graded ramp.
 const BUILD = {
-  cell: 12,           // world grid cell size (snap x,z to this)
-  cost: 12,           // scrap per piece
-  rise: 6,            // ramp rises this many units low->high edge across one cell
-  climb: 3.5,         // car can only adopt a structure top within this delta of its current y
+  half: 4,            // ribbon half-width (units) — the drivable strip is 8 wide
+  spacing: 5,         // min distance the car must travel before a new node is laid
+  ahead: 6,           // place each node this far AHEAD of the car along its heading
+  cost: 2,            // scrap per node
+  rampGrade: 1.2,     // ramp: each node rises this many units above the previous
+  climb: 3.5,         // car can only adopt a road top within this delta of its current y
+  cell: 8,            // spatial-hash cell size for segment lookup (units)
   startScrap: 25,     // each car starts with this much scrap
   capScrap: 200,      // carried scrap cap
   crateGive: 20,      // scrap from a crate
   crateRecharge: 12,  // seconds for a depleted crate to refill
   crateCount: 40,     // scrap crates scattered on the map
-  maxStructs: 400,    // cap total placed pieces (drop oldest if exceeded)
-  aiCooldown: 4.5,    // min seconds between AI builds
+  maxNodes: 600,      // cap total ribbon nodes (drop oldest segment if exceeded)
+  aiCooldown: 4.5,    // min seconds between AI paint bursts
+  aiPaint: 0.6,       // how long the AI holds its paint intent once triggered
 };
 const COLORS = [0x36e2ff]; // player + generated rivals
 // Rarity = how GOOD an item is (intrinsic). Pickup glow color tells you its value at a glance; rarer = better AND spawns less.
@@ -168,15 +174,16 @@ const ROCKET = {
 function pickItem() { let t = 0; for (const it of ITEMS) t += RARITY[it.tier].w; let x = Math.random() * t; for (const it of ITEMS) { if ((x -= RARITY[it.tier].w) < 0) return it; } return ITEMS[0]; }
 let renderer, scene, cam, clock, cars = [], pickups = [], jumpPads = [], boostPads = [], stormMesh, player, phase = "menu", over = false, alive = 0, placement = 0, dropTimer = 0;
 let stormR = R, stormT = 0, particles = [], mapCtx, sunLight, seaMesh, rocketObj = null, rocketT = 0, rocketX0 = 0, rocketZ0 = 0, rocketDX = 0, rocketDZ = 0;
-// ---- visual juice (additive) ----
-let shake = 0, camFov = 64;                       // camera-shake amount + smoothed FOV for speed-feel
-function addShake(a) { shake = Math.min(2.2, shake + a); }   // cap so it never gets nauseating
 const keys = {}, touch = { left: false, right: false, boost: false, jump: false, fire: false, drift: false, build: false, cycle: false };
-// ---- BUILDING state ----
-let structures = [], structMap = new Map(), crates = [], buildGhost = null, playerPiece = "ramp", cyclePrev = false, buildPrev = false;
-let RAMPGEO = null, FLOORGEO = null, RAMPMAT = null, FLOORMAT = null, GHOSTRAMPMAT = null, GHOSTFLOORMAT = null, CRATEGEO = null, CRATEMAT = null, CRATEDEADMAT = null;
+// ---- ROAD-PAINTER state ----
+// roadNodes: ordered list of {x,z,y,strokeStart} laid along cars' paths.
+// roadSegs: consecutive node pairs forming a drivable quad; indexed into roadCellMap
+// (a spatial hash keyed by integer cells) so structureHeightAt is O(1)-ish.
+let roadNodes = [], roadSegs = [], roadCellMap = new Map(), crates = [];
+let roadMesh = null, roadGeo = null, roadPos = null, roadIdx = null, roadPreview = null;
+let CRATEGEO = null, CRATEMAT = null, CRATEDEADMAT = null;
+const ROAD_MAX_VERTS = (BUILD.maxNodes + 2) * 2; // 2 side vertices per node
 const RACER = window.RACER = {};
-RACER.addShake = addShake; // (defined above; assigned here after RACER exists)
 function rollRarity() { let t = 0; for (const r of RARITY) t += r.w; let x = Math.random() * t; for (const r of RARITY) { if ((x -= r.w) < 0) return r; } return RARITY[0]; }
 
 // ---- heightfield (scaled to big island) -----------------------
@@ -194,142 +201,170 @@ function terrainH(x, z) {
 RACER.terrainH = terrainH;
 
 // ============================================================
-// BUILDING — Fortnite-style ramps + floors you can drive on.
-// Pieces snap to a world grid; cars sample structureHeightAt()
-// each frame so EVERYONE drives on placed builds.
+// ROAD PAINTER — a continuous drivable ribbon you HOLD to paint.
+// A "road" is a chain of NODES {x,z,y} laid along the car's path.
+// Consecutive nodes form quad SEGMENTS (the drivable surface),
+// each indexed into a spatial hash so structureHeightAt() is fast.
+// Hold ROAD (B) to bridge at a held height; hold RAMP (G) to climb.
 // ============================================================
 function buildBuildResources() {
-  // RAMP: a slab tilted along +z so it rises BUILD.rise over one cell.
-  // Built flat (cell x cell), then we tilt the mesh; structureHeightAt
-  // interpolates the surface analytically (mesh tilt is just visual).
-  RAMPGEO = new THREE.BoxGeometry(BUILD.cell, 0.8, BUILD.cell);
-  FLOORGEO = new THREE.BoxGeometry(BUILD.cell, 0.8, BUILD.cell);
-  RAMPMAT = new THREE.MeshStandardMaterial({ color: 0x9aa6c0, metalness: 0.3, roughness: 0.6 });
-  FLOORMAT = new THREE.MeshStandardMaterial({ color: 0xbfc9dd, metalness: 0.25, roughness: 0.65 });
-  GHOSTRAMPMAT = new THREE.MeshStandardMaterial({ color: 0x36e2ff, transparent: true, opacity: 0.32, emissive: 0x1a6b85, emissiveIntensity: 0.4 });
-  GHOSTFLOORMAT = new THREE.MeshStandardMaterial({ color: 0x62f3a8, transparent: true, opacity: 0.32, emissive: 0x1a7050, emissiveIntensity: 0.4 });
+  // shared road material — metallic so it picks up the scene environment.
+  if (!ROADMAT) ROADMAT = new THREE.MeshStandardMaterial({ color: 0x9aa6c0, metalness: 0.55, roughness: 0.42, envMapIntensity: 1.1, side: THREE.DoubleSide });
   CRATEGEO = new THREE.BoxGeometry(5, 5, 5);
   CRATEMAT = new THREE.MeshStandardMaterial({ color: 0xc9a23a, emissive: 0x4a3a00, emissiveIntensity: 0.45, roughness: 0.7 });
   CRATEDEADMAT = new THREE.MeshStandardMaterial({ color: 0x4a4232, roughness: 0.9, transparent: true, opacity: 0.45 });
 }
-const gKey = (gx, gz) => gx + "," + gz;
-function snapCell(v) { return Math.round(v / BUILD.cell); }
-function cellCenter(g) { return g * BUILD.cell; }
-// Top surface of any placed piece under (x,z), or -Infinity if none.
-// O(1): index by grid cell. Ramp interpolates along its yaw axis.
-function structureHeightAt(x, z) {
-  const gx = snapCell(x), gz = snapCell(z), s = structMap.get(gKey(gx, gz));
-  if (!s) return -Infinity;
-  if (s.kind === "floor") return s.base;
-  // ramp: local coordinate along its facing axis, -0.5..0.5 across the cell
-  const lx = x - cellCenter(gx), lz = z - cellCenter(gz);
-  // axis unit vector along yaw (the direction the ramp rises toward)
-  const ax = Math.sin(s.yaw), az = Math.cos(s.yaw);
-  const along = (lx * ax + lz * az) / BUILD.cell; // -0.5 (low) .. +0.5 (high)
-  return s.base + (along + 0.5) * BUILD.rise;
+let ROADMAT = null;
+const rKey = (cx, cz) => cx + "," + cz;
+const roadCell = v => Math.floor(v / BUILD.cell);
+// One dynamic BufferGeometry grown as nodes are added (2 side-verts per node,
+// 2 triangles between consecutive nodes). drawRange exposes only live segments.
+function ensureRoadMesh() {
+  if (roadMesh) return;
+  if (!ROADMAT) buildBuildResources();
+  roadGeo = new THREE.BufferGeometry();
+  roadPos = new Float32Array(ROAD_MAX_VERTS * 3);
+  roadGeo.setAttribute("position", new THREE.BufferAttribute(roadPos, 3));
+  roadIdx = new Uint32Array(BUILD.maxNodes * 6);
+  roadGeo.setIndex(new THREE.BufferAttribute(roadIdx, 1));
+  roadGeo.setDrawRange(0, 0);
+  roadMesh = new THREE.Mesh(roadGeo, ROADMAT);
+  roadMesh.frustumCulled = false; roadMesh.renderOrder = 1;
+  scene.add(roadMesh);
 }
-RACER.structureHeightAt = structureHeightAt;
-function makeStructMesh(kind) {
-  if (!RAMPGEO) buildBuildResources();
-  if (kind === "ramp") return new THREE.Mesh(RAMPGEO, RAMPMAT);
-  return new THREE.Mesh(FLOORGEO, FLOORMAT);
+// Write the two side vertices for node i into the position buffer, using the
+// heading derived from neighbouring nodes so the ribbon stays perpendicular.
+function writeNodeVerts(i) {
+  const n = roadNodes[i];
+  // heading: from prev->this (or this->next for the very first node of a stroke)
+  let hx = 0, hz = 1;
+  const prev = roadNodes[i - 1], next = roadNodes[i + 1];
+  if (prev && !n.strokeStart) { hx = n.x - prev.x; hz = n.z - prev.z; }
+  else if (next) { hx = next.x - n.x; hz = next.z - n.z; }
+  const hl = Math.hypot(hx, hz) || 1; hx /= hl; hz /= hl;
+  // right vector (perpendicular, in xz)
+  const rx = hz, rz = -hx, h = BUILD.half;
+  const o = i * 2 * 3;
+  roadPos[o]     = n.x - rx * h; roadPos[o + 1] = n.y; roadPos[o + 2] = n.z - rz * h;
+  roadPos[o + 3] = n.x + rx * h; roadPos[o + 4] = n.y; roadPos[o + 5] = n.z + rz * h;
 }
-// BUILDING SHELVED (v13): the whole grid-build system is kept intact but dormant.
-// Flip BUILD_ENABLED back to true to revive it (also re-add the menu bullet + HUD).
-const BUILD_ENABLED = false;
-// Place a piece for car c. Returns true if placed (scrap spent).
-function placeBuild(c, kind, gx, gz, yaw) {
-  if (!BUILD_ENABLED) return false;        // shelved: never place
+// Remove a segment from every spatial-hash cell it was indexed into.
+function unindexSeg(seg) {
+  for (const k of seg.cells) { const arr = roadCellMap.get(k); if (!arr) continue; const i = arr.indexOf(seg); if (i >= 0) arr.splice(i, 1); if (!arr.length) roadCellMap.delete(k); }
+}
+// Append ONE node for car c (mode 'road' = hold height & bridge; 'ramp' = climb).
+// Returns true if a node was laid (scrap spent). This is the painter's core.
+function paintNode(c, mode) {
   if (!c || c.scrap < BUILD.cost) return false;
-  if (kind == null) kind = "floor";
-  // snap yaw to 90 deg
-  yaw = Math.round((yaw || 0) / (Math.PI / 2)) * (Math.PI / 2);
-  const cx = cellCenter(gx), cz = cellCenter(gz);
-  // base height: match an adjacent piece if one exists, else terrain.
-  let base = terrainH(cx, cz) + 0.4;
-  for (const [dgx, dgz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    const nb = structMap.get(gKey(gx + dgx, gz + dgz));
-    if (nb) {
-      // top edge of neighbor facing this cell -> match so ramp tops meet floors
-      const nbTop = nb.kind === "floor" ? nb.base : structureHeightAt(cellCenter(gx + dgx) + dgx * (BUILD.cell * 0.49), cellCenter(gz + dgz) + dgz * (BUILD.cell * 0.49));
-      if (isFinite(nbTop)) { base = nbTop; break; }
-    }
+  ensureRoadMesh();
+  const last = roadNodes.length ? roadNodes[roadNodes.length - 1] : null;
+  const fresh = !c.painting; // first node of a new stroke
+  // place the node slightly AHEAD of the car so it drives onto what it paints
+  const nx = c.x + Math.sin(c.yaw) * BUILD.ahead, nz = c.z + Math.cos(c.yaw) * BUILD.ahead;
+  // height: a fresh stroke starts at ground; otherwise hold (road) or climb (ramp)
+  let ny;
+  if (fresh || !last) ny = terrainH(nx, nz) + 0.4;
+  else ny = last.y + (mode === "ramp" ? BUILD.rampGrade : 0);
+  const node = { x: nx, y: ny, z: nz, strokeStart: fresh };
+  const idx = roadNodes.length;
+  roadNodes.push(node);
+  writeNodeVerts(idx);
+  // if continuing a stroke, this node + the previous one form a new segment
+  if (!fresh && last) {
+    const a = idx - 1, b = idx;
+    // refresh the previous node's verts too (its heading now uses prev->this)
+    writeNodeVerts(a);
+    const seg = { a, b, cells: [] };
+    // record overlapped cells then index
+    const A = roadNodes[a], B = roadNodes[b], pad = BUILD.half + 1;
+    for (let cx = roadCell(Math.min(A.x, B.x) - pad); cx <= roadCell(Math.max(A.x, B.x) + pad); cx++)
+      for (let cz = roadCell(Math.min(A.z, B.z) - pad); cz <= roadCell(Math.max(A.z, B.z) + pad); cz++) seg.cells.push(rKey(cx, cz));
+    for (const k of seg.cells) { let arr = roadCellMap.get(k); if (!arr) { arr = []; roadCellMap.set(k, arr); } arr.push(seg); }
+    roadSegs.push(seg);
   }
-  // replace any existing piece in this cell
-  const existing = structMap.get(gKey(gx, gz));
-  if (existing) removeStructure(existing);
-  const mesh = makeStructMesh(kind);
-  mesh.position.set(cx, 0, cz);
-  if (kind === "ramp") {
-    // tilt so low edge sits at base, high edge at base+rise, along yaw
-    mesh.rotation.order = "YXZ";
-    mesh.rotation.y = yaw;
-    mesh.rotation.x = -Math.atan2(BUILD.rise, BUILD.cell);
-    mesh.position.y = base + BUILD.rise * 0.5;
-  } else {
-    mesh.position.y = base;
-  }
-  scene.add(mesh);
-  const s = { kind, gx, gz, yaw, base, mesh };
-  structures.push(s); structMap.set(gKey(gx, gz), s);
   c.scrap -= BUILD.cost;
-  emit(cx, base + 1, cz, kind === "ramp" ? 0x36e2ff : 0x62f3a8, 8, 8, 4);
-  // cap: drop oldest if over budget
-  while (structures.length > BUILD.maxStructs) { const old = structures[0]; removeStructure(old); }
+  c.painting = true;
+  rebuildRoadIndex();
+  roadGeo.attributes.position.needsUpdate = true;
+  roadGeo.computeBoundingSphere();
+  if (!c.ai) emit(nx, ny + 0.6, nz, mode === "ramp" ? 0xffd166 : 0x36e2ff, 4, 5, 3);
+  // CAP: drop the oldest segment (and its first node) when over budget
+  while (roadNodes.length > BUILD.maxNodes) dropOldestSegment();
   return true;
 }
-RACER.placeBuild = placeBuild;
-function removeStructure(s) {
-  const i = structures.indexOf(s); if (i >= 0) structures.splice(i, 1);
-  if (structMap.get(gKey(s.gx, s.gz)) === s) structMap.delete(gKey(s.gx, s.gz));
-  if (s.mesh) scene.remove(s.mesh);
-}
-function clearStructures() {
-  for (const s of structures) if (s.mesh) scene.remove(s.mesh);
-  structures.length = 0; structMap.clear(); // mutate in place: RACER.structures keeps its reference
-}
-// The grid cell directly IN FRONT of the car (best build spot).
-function frontCell(c) {
-  const fx = c.x + Math.sin(c.yaw) * BUILD.cell, fz = c.z + Math.cos(c.yaw) * BUILD.cell;
-  return { gx: snapCell(fx), gz: snapCell(fz) };
-}
-function updateGhost() {
-  if (!BUILD_ENABLED) { if (buildGhost) buildGhost.visible = false; return; }  // shelved: no build ghost
-  if (!player || !player.alive || !player.dropped || player.onRocket) { if (buildGhost) buildGhost.visible = false; return; }
-  if (!buildGhost) {
-    if (!RAMPGEO) buildBuildResources();
-    buildGhost = new THREE.Group();
-    const r = new THREE.Mesh(RAMPGEO, GHOSTRAMPMAT); r.name = "ramp";
-    const f = new THREE.Mesh(FLOORGEO, GHOSTFLOORMAT); f.name = "floor";
-    buildGhost.add(r); buildGhost.add(f); scene.add(buildGhost);
+RACER.paintNode = paintNode;
+// Rebuild the triangle index from the current segment list (cheap: a few hundred).
+function rebuildRoadIndex() {
+  let w = 0;
+  for (const seg of roadSegs) {
+    const a = seg.a, b = seg.b, a0 = a * 2, a1 = a * 2 + 1, b0 = b * 2, b1 = b * 2 + 1;
+    roadIdx[w++] = a0; roadIdx[w++] = a1; roadIdx[w++] = b1;
+    roadIdx[w++] = a0; roadIdx[w++] = b1; roadIdx[w++] = b0;
   }
-  const { gx, gz } = frontCell(player), cx = cellCenter(gx), cz = cellCenter(gz);
-  // preview base height the same way placeBuild computes it
-  let base = terrainH(cx, cz) + 0.4;
-  for (const [dgx, dgz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    const nb = structMap.get(gKey(gx + dgx, gz + dgz));
-    if (nb) { const t = nb.kind === "floor" ? nb.base : structureHeightAt(cellCenter(gx + dgx) + dgx * (BUILD.cell * 0.49), cellCenter(gz + dgz) + dgz * (BUILD.cell * 0.49)); if (isFinite(t)) { base = t; break; } }
+  roadGeo.index.needsUpdate = true;
+  roadGeo.setDrawRange(0, w);
+}
+// Drop the oldest node + the oldest segment, then re-pack (segments reference
+// node INDICES, so on a shift every index decrements by one).
+function dropOldestSegment() {
+  if (!roadSegs.length) { roadNodes.shift(); return; }
+  const old = roadSegs.shift(); unindexSeg(old);
+  roadNodes.shift();
+  // shift every segment's node indices down by 1 and rebuild its cell list
+  for (const seg of roadSegs) { unindexSeg(seg); seg.a--; seg.b--; }
+  // repack the position buffer (drop the first node's 2 verts)
+  roadPos.copyWithin(0, 6, roadNodes.length * 6 + 6);
+  // re-index remaining segments fresh
+  for (const seg of roadSegs) { seg.cells = []; const A = roadNodes[seg.a], B = roadNodes[seg.b], pad = BUILD.half + 1; for (let cx = roadCell(Math.min(A.x, B.x) - pad); cx <= roadCell(Math.max(A.x, B.x) + pad); cx++) for (let cz = roadCell(Math.min(A.z, B.z) - pad); cz <= roadCell(Math.max(A.z, B.z) + pad); cz++) seg.cells.push(rKey(cx, cz)); for (const k of seg.cells) { let arr = roadCellMap.get(k); if (!arr) { arr = []; roadCellMap.set(k, arr); } arr.push(seg); } }
+  rebuildRoadIndex();
+  roadGeo.attributes.position.needsUpdate = true;
+}
+function clearRoad() {
+  roadNodes.length = 0; roadSegs.length = 0; roadCellMap.clear();
+  if (roadGeo) { roadGeo.setDrawRange(0, 0); }
+}
+// Top surface of the ribbon under (x,z), or -Infinity if outside every segment.
+// O(1)-ish: only test segments hashed into this point's cell.
+function structureHeightAt(x, z) {
+  const arr = roadCellMap.get(rKey(roadCell(x), roadCell(z)));
+  if (!arr || !arr.length) return -Infinity;
+  let best = -Infinity;
+  for (const seg of arr) {
+    const a = roadNodes[seg.a], b = roadNodes[seg.b];
+    // project (x,z) onto the segment centerline a->b => t in [0,1]
+    const dx = b.x - a.x, dz = b.z - a.z, len2 = dx * dx + dz * dz || 1e-6;
+    let t = ((x - a.x) * dx + (z - a.z) * dz) / len2;
+    if (t < 0 || t > 1) continue;
+    // perpendicular distance from centerline must be within the half-width
+    const px = a.x + dx * t, pz = a.z + dz * t;
+    const perp = Math.hypot(x - px, z - pz);
+    if (perp > BUILD.half) continue;
+    const h = a.y + (b.y - a.y) * t; // height interpolated ALONG the segment
+    if (h > best) best = h;
   }
-  const yaw = Math.round(player.yaw / (Math.PI / 2)) * (Math.PI / 2);
-  const r = buildGhost.children[0], f = buildGhost.children[1];
-  const isRamp = playerPiece === "ramp";
-  r.visible = isRamp; f.visible = !isRamp;
-  buildGhost.visible = true;
-  if (isRamp) {
-    r.rotation.order = "YXZ"; r.rotation.y = yaw; r.rotation.x = -Math.atan2(BUILD.rise, BUILD.cell);
-    r.position.set(cx, base + BUILD.rise * 0.5, cz);
-  } else {
-    f.rotation.set(0, yaw, 0); f.position.set(cx, base, cz);
+  return best;
+}
+RACER.structureHeightAt = structureHeightAt;
+// Faint preview marker at the next node spot while a paint button is held.
+function updateRoadPreview() {
+  const painting = player && player.alive && player.dropped && !player.onRocket && (keys["b"] || keys["g"] || touch.build || touch.cycle) && player.scrap >= BUILD.cost;
+  if (!painting) { if (roadPreview) roadPreview.visible = false; return; }
+  if (!roadPreview) {
+    roadPreview = new THREE.Mesh(new THREE.RingGeometry(BUILD.half * 0.6, BUILD.half, 16), new THREE.MeshBasicMaterial({ color: 0x36e2ff, transparent: true, opacity: 0.45, side: THREE.DoubleSide }));
+    roadPreview.rotation.x = -Math.PI / 2; scene.add(roadPreview);
   }
-  // dim ghost when player can't afford it
-  const aff = player.scrap >= BUILD.cost;
-  r.material.opacity = aff ? 0.32 : 0.12; f.material.opacity = aff ? 0.32 : 0.12;
+  const ramp = (keys["g"] || touch.cycle);
+  const nx = player.x + Math.sin(player.yaw) * BUILD.ahead, nz = player.z + Math.cos(player.yaw) * BUILD.ahead;
+  const last = roadNodes.length ? roadNodes[roadNodes.length - 1] : null;
+  let ny = (player.painting && last) ? last.y + (ramp ? BUILD.rampGrade : 0) : terrainH(nx, nz) + 0.4;
+  roadPreview.position.set(nx, ny + 0.3, nz);
+  roadPreview.material.color.setHex(ramp ? 0xffd166 : 0x36e2ff);
+  roadPreview.visible = true;
 }
 // ---- scrap crates ----
 function spawnCrates() {
   for (const cr of crates) if (cr.mesh) scene.remove(cr.mesh);
   crates.length = 0; // mutate in place: RACER.crates keeps its reference
-  if (!BUILD_ENABLED) return;              // shelved: spawn 0 scrap crates
   if (!CRATEGEO) buildBuildResources();
   for (let i = 0; i < BUILD.crateCount; i++) {
     let x = 0, z = 0, t = 0;
@@ -586,11 +621,6 @@ function registerHit(c, dmg, hx, hz) {
   if (c === player && player === cars[0]) {
     if (hx == null) { const a = Math.random() * 6.28; hx = c.x + Math.cos(a) * 1.6; hz = c.z + Math.sin(a) * 1.6; }
     dentPlayer(hx, hz, Math.min(20, dmg));
-    // HIT FLASH + SHAKE: quick white/red feedback on the body, scaled to damage.
-    const fud = player.mesh.userData;
-    if (fud.bodyMat) fud.hitFlash = Math.min(1, 0.5 + dmg * 0.05);   // decays in updateDamageLook
-    emit(c.x, c.y + 1.2, c.z, 0xffffff, 5, 9, 4);
-    addShake(Math.min(1.4, 0.35 + dmg * 0.05));
     // low-HP cosmetic: fling/hide an exhaust stack once badly hurt
     const ud = player.mesh.userData;
     if (!ud.stackGone && c.hp < c.maxHull * 0.35) {
@@ -606,7 +636,6 @@ function registerHit(c, dmg, hx, hz) {
 // Update scorch tint for a car based on missing HP (ALL cars, called each frame
 // from updateCar). Throttled smoke is emitted near-player or at random.
 const _scorch = new THREE.Color(0x1a1410);
-const _flashCol = new THREE.Color(0xffd0d0); // white/red hit-flash tint
 function updateDamageLook(c, dt) {
   const ud = c.mesh.userData, mat = (c === cars[0]) ? ud.bodyMat : ud.body.material;
   if (!mat || !mat.userData.baseColor) return;
@@ -615,14 +644,6 @@ function updateDamageLook(c, dt) {
   // darken/scorch the body toward soot as HP drops
   mat.color.copy(mat.userData.baseColor).lerp(_scorch, dmg * 0.8);
   mat.emissiveIntensity = 0.06 + dmg * 0.18; // faint glow of stressed metal
-  // HIT FLASH (player only): brief white/red blowout on the body emissive, decaying fast.
-  if (c === cars[0] && ud.hitFlash > 0) {
-    ud.hitFlash = Math.max(0, ud.hitFlash - dt * 3.2);
-    mat.color.lerp(_flashCol, ud.hitFlash * 0.7);
-    if (mat.emissive) { mat.emissive.copy(mat.userData.baseColor).lerp(_flashCol, ud.hitFlash); mat.emissiveIntensity = 0.06 + dmg * 0.18 + ud.hitFlash * 1.6; }
-  } else if (c === cars[0] && mat.emissive) {
-    mat.emissive.copy(mat.userData.baseColor);
-  }
   // SMOKE scales with missing HP. Throttle: only near player or random AI.
   if (dmg > 0.45 && c.dropped) {
     const near = !c.ai || (c.x - player.x) ** 2 + (c.z - player.z) ** 2 < 60000;
@@ -637,7 +658,7 @@ function updateDamageLook(c, dt) {
 }
 function resetCarDamage(c) {
   const ud = c.mesh.userData;
-  c.smkT = 0; ud.hitFlash = 0;
+  c.smkT = 0;
   if (ud.stackGone) { const ch = ud.chassis, stk = ch && ch.children.find(o => o.geometry === CARGEO.stack); if (stk) stk.visible = true; ud.stackGone = false; }
   if (c === cars[0]) { c._hpPrev = null; c._lastHitX = null; c._lastHitZ = null; }
   if (c === cars[0] && ud.bodyPristine && ud.body.geometry) {
@@ -677,7 +698,7 @@ function spawnCars() {
     const ring = i % 2, a = (i / NCARS) * 6.28 * 2, rr = R * (ring ? 0.66 : 0.5);
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
     const tx = Math.cos(a) * R * (0.2 + Math.random() * 0.4) + (Math.random() - 0.5) * 200, tz = Math.sin(a) * R * (0.2 + Math.random() * 0.4) + (Math.random() - 0.5) * 200;
-    const c = { id: i, mesh: makeCar(COLORS[i]), x, z, y: C.dropY + Math.random() * 60, yaw: Math.atan2(-x, -z), speed: 0, vy: 0, grounded: false, dropped: false, onRocket: true, dropDelay: 0, hp: BASE.hull, alive: true, boost: 0.5, boosting: false, ai: i !== 0, think: 0, tx, tz, hit: 0, shield: 0, trail: 0, airJumps: 0, jp: false, flip: 0, flipAxis: 0, gadgetName: null, gadgetCd: 0, loot: [], pitch: 0, roll: 0, bob: 0, prevSpeed: 0, prevGroundY: 0, groundVy: 0, gadget: null, gAmmo: 0, gcd: 0, spin: 0, smk: 0, fp: false, jpQueued: 0, drift: false, driftCharge: 0, dust: 0, halfFlip: 0, lateral: 0, lateralDir: 0, scrap: BUILD.startScrap, buildCd: 0, up: { speed: 0, boost: 0, jump: 0 }, bonus: { hull: 0, spd: 0, acc: 0, steer: 0, ram: 0, boost: 0, jump: 0 } };
+    const c = { id: i, mesh: makeCar(COLORS[i]), x, z, y: C.dropY + Math.random() * 60, yaw: Math.atan2(-x, -z), speed: 0, vy: 0, grounded: false, dropped: false, onRocket: true, dropDelay: 0, hp: BASE.hull, alive: true, boost: 0.5, boosting: false, ai: i !== 0, think: 0, tx, tz, hit: 0, shield: 0, trail: 0, airJumps: 0, jp: false, flip: 0, flipAxis: 0, gadgetName: null, gadgetCd: 0, loot: [], pitch: 0, roll: 0, bob: 0, prevSpeed: 0, prevGroundY: 0, groundVy: 0, gadget: null, gAmmo: 0, gcd: 0, spin: 0, smk: 0, fp: false, jpQueued: 0, drift: false, driftCharge: 0, dust: 0, halfFlip: 0, lateral: 0, lateralDir: 0, scrap: BUILD.startScrap, buildCd: 0, painting: false, paintIntent: 0, paintMode: "road", lastNodeX: null, lastNodeZ: null, up: { speed: 0, boost: 0, jump: 0 }, bonus: { hull: 0, spd: 0, acc: 0, steer: 0, ram: 0, boost: 0, jump: 0 } };
     recalc(c); c.hp = c.maxHull; c.dropDelay = c.ai ? (0.6 + Math.random() * (C.flyTime - 1.8)) : 1e9; cars.push(c);
   }
   player = cars[0]; RACER.cars = cars;
@@ -722,42 +743,44 @@ function updateCar(c, dt) {
   let steerIn = 0, brakeIn = false, boostIn = false, jumpHeld = false, driftHeld = false, fwdIn = 0;
   if (c.ai) {
     c.think -= dt; const r = Math.hypot(c.x, c.z), inSea = terrainH(c.x, c.z) < C.waterLevel + 0.5, outStorm = r > stormR;
-    if (c.think <= 0 || outStorm || inSea) { c.think = 0.4 + Math.random() * 0.6; if (outStorm || inSea) { c.tx = 0; c.tz = 0; } else { let best = null, bd = 1e9; for (let k = 0; k < cars.length; k++) { const o = cars[k]; if (o === c || !o.alive) continue; const d = (o.x - c.x) ** 2 + (o.z - c.z) ** 2; if (d < bd) { bd = d; best = o; } } let pk = null, pd = 1e9; for (const p of pickups) { if (!p.active) continue; const d = (p.x - c.x) ** 2 + (p.z - c.z) ** 2; if (d < pd) { pd = d; pk = p; } } c.tgtEnemy = best && bd < 40000; if (pk && pd < 6400 && Math.random() < 0.5) { c.tx = pk.x; c.tz = pk.z; c.tgtEnemy = false; } else if (best && bd < 40000) { c.tx = best.x; c.tz = best.z; } else if (pk) { c.tx = pk.x; c.tz = pk.z; c.tgtEnemy = false; } else { c.tx = c.x * 0.4; c.tz = c.z * 0.4; } } }
-    const des = Math.atan2(c.tx - c.x, c.tz - c.z); let dy = des - c.yaw; while (dy > Math.PI) dy -= 6.283; while (dy < -Math.PI) dy += 6.283; steerIn = Math.max(-1, Math.min(1, dy * 2.2));
-    const tgtD2 = (c.tx - c.x) ** 2 + (c.tz - c.z) ** 2;
-    // livelier AI: boost more readily (lower threshold, wider cone), extra-aggressive when closing on an enemy
-    boostIn = c.boost > 0.22 && Math.abs(dy) < 0.6 && (!inSea);
-    driftHeld = Math.abs(dy) > 0.65 && c.speed > c.maxSpd * 0.4; fwdIn = 1;
-    // occasional jump/dodge: when charging a nearby enemy roughly head-on, hop now and then
-    if (c.tgtEnemy && tgtD2 < 6400 && Math.abs(dy) < 0.5 && c.grounded && Math.random() < 0.03) jumpHeld = true;
-    else if (!c.grounded && c.tgtEnemy && tgtD2 < 4900 && Math.random() < 0.04) jumpHeld = true; // air dodge into target
+    if (c.think <= 0 || outStorm || inSea) { c.think = 0.5 + Math.random() * 0.7; if (outStorm || inSea) { c.tx = 0; c.tz = 0; } else { let best = null, bd = 1e9; for (let k = 0; k < cars.length; k++) { const o = cars[k]; if (o === c || !o.alive) continue; const d = (o.x - c.x) ** 2 + (o.z - c.z) ** 2; if (d < bd) { bd = d; best = o; } } let pk = null, pd = 1e9; for (const p of pickups) { if (!p.active) continue; const d = (p.x - c.x) ** 2 + (p.z - c.z) ** 2; if (d < pd) { pd = d; pk = p; } } if (pk && (pd < bd || Math.random() < 0.5)) { c.tx = pk.x; c.tz = pk.z; } else if (best && bd < 16000) { c.tx = best.x; c.tz = best.z; } else { c.tx = c.x * 0.4; c.tz = c.z * 0.4; } } }
+    const des = Math.atan2(c.tx - c.x, c.tz - c.z); let dy = des - c.yaw; while (dy > Math.PI) dy -= 6.283; while (dy < -Math.PI) dy += 6.283; steerIn = Math.max(-1, Math.min(1, dy * 2.2)); boostIn = c.boost > 0.3 && Math.abs(dy) < 0.4;
+    driftHeld = Math.abs(dy) > 0.7 && c.speed > c.maxSpd * 0.4; fwdIn = 1;
     if (c.gadget && c.gcd <= 0 && c.gAmmo > 0 && fx.length < 120) { if (acquireRocketTarget(c)) fireGadget(c); }
-    // ---- AI building: if stuck slow against a steep up-slope (or target is much
-    // higher) and it has scrap, drop a ramp ahead along its heading then climb it.
-    if (BUILD_ENABLED && c.buildCd <= 0 && c.scrap >= BUILD.cost && c.grounded && structures.length < BUILD.maxStructs) {
-      const aheadX = c.x + Math.sin(c.yaw) * BUILD.cell, aheadZ = c.z + Math.cos(c.yaw) * BUILD.cell;
+    // ---- AI road-painting: if grounded, slow, has scrap and faces a steep
+    // up-slope (or a much-higher target), set a short paint intent to lay a ramp
+    // ahead and climb it. The intent is consumed below in the shared paint step.
+    if (c.buildCd <= 0 && c.scrap >= BUILD.cost && c.grounded && roadNodes.length < BUILD.maxNodes) {
+      const aheadX = c.x + Math.sin(c.yaw) * BUILD.ahead, aheadZ = c.z + Math.cos(c.yaw) * BUILD.ahead;
       const upSlope = terrainH(aheadX, aheadZ) - terrainH(c.x, c.z); // height gain ahead
       const tgtHigher = terrainH(c.tx, c.tz) - terrainH(c.x, c.z);
       const slow = c.speed < c.maxSpd * 0.4;
-      if (slow && (upSlope > 4 || tgtHigher > 10)) {
-        const fc = frontCell(c);
-        if (placeBuild(c, "ramp", fc.gx, fc.gz, c.yaw)) c.buildCd = BUILD.aiCooldown;
-      }
+      if (slow && (upSlope > 4 || tgtHigher > 10)) { c.paintIntent = BUILD.aiPaint; c.paintMode = "ramp"; c.buildCd = BUILD.aiCooldown; }
     }
+    if (c.paintIntent > 0) c.paintIntent -= dt;
   } else {
     if (keys["ArrowLeft"] || keys["a"] || touch.left) steerIn += 1; if (keys["ArrowRight"] || keys["d"] || touch.right) steerIn -= 1;
     brakeIn = keys["ArrowDown"] || keys["s"]; boostIn = keys[" "] || touch.boost; jumpHeld = keys["Shift"] || touch.jump;
     driftHeld = !!(keys["c"] || touch.drift); fwdIn = (keys["ArrowDown"] || keys["s"]) ? -1 : 1;
     const fireHeld = !!(keys["f"] || touch.fire), fireEdge = fireHeld && !c.fp; c.fp = fireHeld;
     if (fireEdge) fireGadget(c);
-    // ---- BUILD input (player): SHELVED — B/G are no-ops while BUILD_ENABLED is false ----
-    if (BUILD_ENABLED) {
-      const cycleHeld = !!(keys["g"] || touch.cycle), cycleEdge = cycleHeld && !cyclePrev; cyclePrev = cycleHeld;
-      if (cycleEdge) playerPiece = playerPiece === "ramp" ? "floor" : "ramp";
-      const buildHeld = !!(keys["b"] || touch.build), buildEdge = buildHeld && !buildPrev; buildPrev = buildHeld;
-      if (buildEdge) { const fc = frontCell(c); placeBuild(c, playerPiece, fc.gx, fc.gz, c.yaw); }
-    }
+    // ---- ROAD-PAINTER input (player): hold B = road/bridge, hold G = ramp ----
+    const roadHeld = !!(keys["b"] || touch.build), rampHeld = !!(keys["g"] || touch.cycle);
+    if (rampHeld) { c.paintIntent = dt + 0.001; c.paintMode = "ramp"; }
+    else if (roadHeld) { c.paintIntent = dt + 0.001; c.paintMode = "road"; }
   }
+  // ---- shared paint step: while paint intent is active AND the car has moved
+  // far enough since its last node, lay a node ahead. Out of scrap -> stop. ----
+  if (c.paintIntent > 0 && c.dropped && !c.onRocket) {
+    if (c.painting && (c.lastNodeX != null)) {
+      if ((c.x - c.lastNodeX) ** 2 + (c.z - c.lastNodeZ) ** 2 >= BUILD.spacing * BUILD.spacing) {
+        if (paintNode(c, c.paintMode)) { c.lastNodeX = c.x; c.lastNodeZ = c.z; }
+        else c.painting = false; // out of scrap
+      }
+    } else { // first node of a fresh stroke
+      if (paintNode(c, c.paintMode)) { c.lastNodeX = c.x; c.lastNodeZ = c.z; }
+    }
+  } else { c.painting = false; } // intent ended -> next press starts a fresh stroke
   const jumpEdge = jumpHeld && !c.jp; c.jp = jumpHeld;
   const inSea = terrainH(c.x, c.z) < C.waterLevel + 0.3, outStorm = Math.hypot(c.x, c.z) > stormR;
   if (boostIn && c.boost > 0) { c.boost = Math.max(0, c.boost - c.boostDrain * dt); c.boosting = true; } else { c.boost = Math.min(1, c.boost + c.boostRegenEff * dt); c.boosting = false; }
@@ -838,42 +861,12 @@ function updateCar(c, dt) {
   }
   c.prevGroundY = groundY;
   if (c.flip > 0) c.flip -= dt;
-  // SKID / TIRE SMOKE: darker, twin-wheel puffs when drifting OR braking hard at speed.
-  const skidding = c.grounded && (c.drift || (brakeIn && c.speed > c.maxSpd * 0.5));
-  if (skidding) {
-    c.dust -= dt;
-    if (c.dust <= 0) {
-      c.dust = 0.045;
-      const visible = !c.ai || (c.x - player.x) ** 2 + (c.z - player.z) ** 2 < 50000;
-      if (visible) {
-        const sn = Math.sin(c.yaw), cs = Math.cos(c.yaw);
-        for (const lx of [-1.95, 1.95]) {      // rear-wheel x offsets
-          const wx = c.x + sn * -2.0 + cs * lx, wz = c.z + cs * -2.0 - sn * lx;
-          emit(wx, c.y + 0.25, wz, c.drift ? 0x6a6258 : 0x8a8378, 1, 3, 1);
-        }
-      } else { emit(c.x - Math.sin(c.yaw) * 2.6, c.y + 0.2, c.z - Math.cos(c.yaw) * 2.6, 0x6a6258, 1, 3, 1); }
-    }
-  }
+  // drift dust / skid puffs
+  if (c.drift && c.grounded) { c.dust -= dt; if (c.dust <= 0) { c.dust = 0.06; emit(c.x - Math.sin(c.yaw) * 2.6, c.y + 0.2, c.z - Math.cos(c.yaw) * 2.6, 0xb0a890, 2, 4, 1); } }
   if (c.shield > 0) c.shield -= dt;
   if (c.shield <= 0) { if (outStorm) c.hp -= C.stormDmg * dt; if (inSea) c.hp -= C.seaDmg * dt; }
   if (c.hit > 0) c.hit -= dt;
-  // BOOST FLAMES: orange/blue jets at the two rear booster nozzles (chassis-local x=+-0.85, z=-3.1).
-  // Throttled to the player + visible nearby cars so 100 trucks don't flood the fixed particle pool.
-  if (c.boosting) {
-    c.trail -= dt;
-    if (c.trail <= 0) {
-      c.trail = 0.035;
-      const visible = !c.ai || (c.x - player.x) ** 2 + (c.z - player.z) ** 2 < 50000;
-      if (visible) {
-        const sn = Math.sin(c.yaw), cs = Math.cos(c.yaw), bz = -3.1;
-        for (const lx of [-0.85, 0.85]) {
-          // rotate local (lx, bz) by yaw -> world rear-nozzle position
-          const wx = c.x + sn * bz + cs * lx, wz = c.z + cs * bz - sn * lx;
-          emit(wx, c.y + 0.6, wz, Math.random() < 0.6 ? 0xffaa33 : 0x36e2ff, 1, 3, 1);
-        }
-      } else { emit(c.x - Math.sin(c.yaw) * 3, c.y + 0.4, c.z - Math.cos(c.yaw) * 3, 0xffd166, 1, 4, 1); }
-    }
-  }
+  if (c.boosting) { c.trail -= dt; if (c.trail <= 0) { c.trail = 0.05; emit(c.x - Math.sin(c.yaw) * 3, c.y + 0.4, c.z - Math.cos(c.yaw) * 3, 0xffd166, 2, 5, 2); } }
   for (const p of pickups) { if (!p.active) continue; if ((p.x - c.x) ** 2 + (p.z - c.z) ** 2 < 44) { applyLoot(c, p); p.active = false; p.mesh.visible = false; scene.remove(p.mesh); } }
   // ---- physicalize: hug the terrain slope, lean under accel/turn, settle on suspension ----
   const eps = 2.4, dHx = (terrainH(c.x + eps, c.z) - terrainH(c.x - eps, c.z)) / (2 * eps), dHz = (terrainH(c.x, c.z + eps) - terrainH(c.x, c.z - eps)) / (2 * eps);
@@ -897,12 +890,7 @@ function updateCar(c, dt) {
 }
 function doShock(c, m) { emit(c.x, c.y + 1, c.z, 0xb388ff, 26, 22, 7); const rad = C.shockRadius * (0.8 + 0.2 * m); for (const o of cars) { if (o === c || !o.alive) continue; const dx = o.x - c.x, dz = o.z - c.z, d = Math.hypot(dx, dz) || 1; if (d < rad) { const f = 1 - d / rad; o.x += dx / d * 13 * f; o.z += dz / d * 13 * f; o.vy = Math.max(o.vy, 15 * f); o.grounded = false; if (o.shield <= 0) { o.hp -= C.shockDmg * m * f; o.hit = 0.45; } } } }
 function carExplode(c) {
-  // BEEFIER DEATH: bright flash + fireball + soot + a few fast debris sparks.
-  emit(c.x, c.y + 1.4, c.z, 0xffffff, 10, 30, 18);                 // white flash core
-  emit(c.x, c.y + 1, c.z, 0xffa033, 48, 38, 18); emit(c.x, c.y + 1, c.z, 0xff4422, 32, 28, 12); emit(c.x, c.y + 1, c.z, 0x2a2a2e, 20, 16, 6);
-  emit(c.x, c.y + 1, c.z, 0xffe066, 8, 44, 24);                    // fast yellow debris sparks
-  // shake the camera based on how close the wreck is to the player
-  if (player) { const d2 = (c.x - player.x) ** 2 + (c.z - player.z) ** 2; addShake(c === player ? 1.8 : 1.3 * Math.max(0, 1 - d2 / 90000)); }
+  emit(c.x, c.y + 1, c.z, 0xffa033, 44, 34, 16); emit(c.x, c.y + 1, c.z, 0xff4422, 28, 26, 11); emit(c.x, c.y + 1, c.z, 0x2a2a2e, 18, 16, 6);
   for (const o of cars) { if (!o.alive || o === c) continue; const d = Math.hypot(o.x - c.x, o.z - c.z); if (d < 26) { const f = 1 - d / 26, dx = o.x - c.x, dz = o.z - c.z, dd = Math.hypot(dx, dz) || 1; o.x += dx / dd * 14 * f; o.z += dz / dd * 14 * f; o.vy = Math.max(o.vy, 18 * f); o.grounded = false; if (o.shield <= 0) { o.hp -= 14 * f; o.hit = 0.4; } } }
 }
 function dropLoot(c) {
@@ -1026,13 +1014,6 @@ function step(dt) {
   }
   if (anyAboard && rocketT > C.flyTime) { for (const c of cars) if (c.alive && c.onRocket) startDrop(c); } // flyover ended -> everyone out
   if (phase === "drop" && player.dropped) { phase = "play"; stormT = 0; $("drophint").style.display = "none"; } // storm starts when YOU hit the ground
-  // HARD-LANDING SHAKE (additive, read-only): player just touched down with a big
-  // suspension compression (bob = vy*0.022 set in the grounded block) -> jolt the cam.
-  if (player.alive && player.dropped) {
-    const landed = player.grounded && !player._wasGrounded && player.bob < -0.32;
-    if (landed) addShake(Math.min(1.2, -player.bob * 1.6));
-    player._wasGrounded = player.grounded;
-  }
   // Centralized player-damage detection -> drive the crush/dent + scorch system.
   // (Captures ram, gadget, explosion, storm, etc. via the single hp delta.)
   if (player.alive) {
@@ -1049,31 +1030,19 @@ function step(dt) {
   collisions(dt); updateFx(dt);
   for (const p of pickups) { if (!p.active) continue; if (p.settling) { p.vy -= 60 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vx *= 0.96; p.vz *= 0.96; const gy = terrainH(p.x, p.z) + 2.6; if (p.y <= gy) { p.y = gy; p.settling = false; } p.mesh.position.set(p.x, p.y, p.z); } p.mesh.rotation.y += dt * 1.6; }
   for (const bp of boostPads) { if (bp.charge < 1) { bp.charge = Math.min(1, bp.charge + dt / 6); bp.mesh.material.opacity = 0.3 + 0.55 * bp.charge; bp.mesh.material.emissiveIntensity = 0.25 + 0.85 * bp.charge; } }
-  updateCrates(dt); updateGhost();
+  updateCrates(dt); updateRoadPreview();
   for (const c of cars) if (c.alive && c.hp <= 0) { c.alive = false; c.mesh.visible = false; carExplode(c); dropLoot(c); if (c.id === 0) placement = alive; alive--; }
   alive = cars.filter(c => c.alive).length;
   if (stormMesh) stormMesh.scale.set(stormR, 1, stormR);
   updateParticles(dt); drawMinimap(); chaseCam(dt);
   if (!over) { if (!player.alive) endGame(false); else if (alive <= 1) { placement = 1; endGame(true); } }
-  RACER.state = { phase, alive, stormR: Math.round(stormR), hp: Math.round(player.hp), maxHull: Math.round(player.maxHull), bonus: { ...player.bonus }, dropped: player.dropped, speed: Math.round(player.speed), scrap: Math.round(player.scrap), piece: playerPiece };
+  RACER.state = { phase, alive, stormR: Math.round(stormR), hp: Math.round(player.hp), maxHull: Math.round(player.maxHull), bonus: { ...player.bonus }, dropped: player.dropped, speed: Math.round(player.speed), scrap: Math.round(player.scrap), roadNodes: roadNodes.length, painting: player.painting };
 }
 function chaseCam(dt) {
   if (!player) return; const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
-  // SPEED FEEL: lerp FOV up while boosting (and a touch of pull-back), back when not.
-  const boostingNow = player.alive && player.dropped && player.boosting;
-  const tgtFov = boostingNow ? 71 : 64;
-  camFov += (tgtFov - camFov) * Math.min(1, dt * 5);
-  if (Math.abs(cam.fov - camFov) > 0.05) { cam.fov = camFov; cam.updateProjectionMatrix(); }
-  const pull = boostingNow ? 2.2 : 0;               // subtle pull-back adds to the rush
-  const want = new THREE.Vector3(player.x - fx * (C.camDist + pull), player.y + C.camHeight, player.z - fz * (C.camDist + pull));
+  const want = new THREE.Vector3(player.x - fx * C.camDist, player.y + C.camHeight, player.z - fz * C.camDist);
   const grd = terrainH(want.x, want.z) + 3; if (want.y < grd) want.y = grd;
-  cam.position.lerp(want, Math.min(1, dt * 4));
-  // CAMERA SHAKE: small random offset scaled by `shake`, decaying each frame.
-  if (shake > 0.0008) {
-    cam.position.x += (Math.random() - 0.5) * shake; cam.position.y += (Math.random() - 0.5) * shake * 0.7; cam.position.z += (Math.random() - 0.5) * shake;
-    shake *= Math.max(0, 1 - dt * 6);               // decay
-  } else shake = 0;
-  cam.lookAt(player.x + fx * 6, player.y + 1.5, player.z + fz * 6);
+  cam.position.lerp(want, Math.min(1, dt * 4)); cam.lookAt(player.x + fx * 6, player.y + 1.5, player.z + fz * 6);
   // keep the shadow camera tightly around the player so the 1k shadow map stays crisp
   if (sunLight) { sunLight.position.set(player.x + 300, player.y + 500, player.z + 200); sunLight.target.position.set(player.x, player.y, player.z); }
   // cheap water shimmer: gently slide the sea + breathe its opacity
@@ -1103,8 +1072,8 @@ function startGame() {
   const ang = Math.random() * 6.28, dx = Math.sin(ang), dz = Math.cos(ang), off = (Math.random() - 0.5) * R * 0.5;
   rocketX0 = -dx * R * 1.3 - dz * off; rocketZ0 = -dz * R * 1.3 + dx * off; rocketDX = dx * R * 2.6; rocketDZ = dz * R * 2.6; rocketT = 0;
   if (rocketObj) rocketObj.visible = true;
-  clearStructures(); spawnCrates();  // reset builds + scrap crates each match
-  spawnCars(); spawnPickups(); stormR = R; stormT = 0; over = false; phase = "drop"; shake = 0; camFov = 64; $("drophint").textContent = "Press SPACE / JUMP to launch out of the rocket!"; $("drophint").style.display = "block"; clock.getDelta();
+  clearRoad(); spawnCrates();  // reset painted road + scrap crates each match
+  spawnCars(); spawnPickups(); stormR = R; stormT = 0; over = false; phase = "drop"; $("drophint").textContent = "Press SPACE / JUMP to launch out of the rocket!"; $("drophint").style.display = "block"; clock.getDelta();
 }
 
 // ---- boot -----------------------------------------------------
@@ -1146,7 +1115,7 @@ function boot() {
     bind($("tbuild"), "build"); bind($("tcycle"), "cycle");
     $("startBtn").onclick = () => { $("menu").classList.remove("show"); startGame(); };
     $("resultBtn").onclick = () => { $("resultOverlay").classList.remove("show"); startGame(); };
-    RACER.step = step; RACER.RARITY = RARITY; RACER.ITEMS = ITEMS; RACER.pickItem = pickItem; RACER.startGame = startGame; RACER.giveGadget = giveGadget; RACER.fireGadget = fireGadget; RACER.boostPads = boostPads; RACER.startDrop = startDrop; RACER.structures = structures; RACER.crates = crates; RACER.ready = true; renderer.setAnimationLoop(loop);
+    RACER.step = step; RACER.RARITY = RARITY; RACER.ITEMS = ITEMS; RACER.pickItem = pickItem; RACER.startGame = startGame; RACER.giveGadget = giveGadget; RACER.fireGadget = fireGadget; RACER.boostPads = boostPads; RACER.startDrop = startDrop; RACER.roadNodes = roadNodes; RACER.crates = crates; RACER.ready = true; renderer.setAnimationLoop(loop);
   } catch (e) { $("err").textContent = "3D init error: " + e.message; RACER.error = e.message; }
 }
 function loop() { const dt = Math.min(0.05, clock ? clock.getDelta() : 0.016); if (phase === "drop" || (phase === "play" && !over)) { step(dt); syncHud(); } if (lootT > 0) { lootT -= 0.016; if (lootT <= 0) $("loot").style.opacity = "0"; } renderer.render(scene, cam); }
