@@ -19,6 +19,7 @@
   #hpfill{height:100%;width:100%;background:linear-gradient(90deg,#1577a8,#36e2ff);transition:width .1s;}
   #boostfill{height:100%;width:0;background:linear-gradient(90deg,#caa233,#ffd166);transition:width .08s;}
   .lab{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+  #map{position:fixed;top:52px;right:10px;width:140px;height:140px;background:rgba(8,12,28,0.65);border:1px solid var(--line);border-radius:10px;pointer-events:none;}
   .tbtn{position:fixed;bottom:54px;width:78px;height:78px;border-radius:50%;background:var(--panel);border:1px solid var(--line);display:none;align-items:center;justify-content:center;font-size:24px;color:var(--you);}
   #tl{left:14px;} #tr{left:104px;} #tboost{right:14px;border-color:var(--boost);color:var(--boost);font-size:12px;font-weight:700;} #tjump{right:104px;font-size:12px;font-weight:700;}
   .touch .tbtn{display:flex;}
@@ -49,6 +50,7 @@
 <div id="hpwrap"><span class="lab">Hull</span><div id="hpbar"><div id="hpfill"></div></div><span class="lab">Boost</span><div id="boostbar"><div id="boostfill"></div></div></div>
 <div class="tbtn" id="tl">&#9664;</div><div class="tbtn" id="tr">&#9654;</div>
 <div class="tbtn" id="tjump">JUMP</div><div class="tbtn" id="tboost">BOOST</div>
+<canvas id="map" width="140" height="140"></canvas>
 
 <div class="overlay show" id="menu">
   <div class="card">
@@ -84,13 +86,15 @@ import * as THREE from "three";
 const R = 320, NCARS = 8;
 const C = {
   maxSpeed: 64, boostSpeed: 100, accel: 48, brake: 90, drag: 16,
-  steer: 2.3, ride: 1.1, grav: 60, jumpV: 26,
+  steer: 2.3, ride: 1.1, grav: 60, jumpV: 26, padV: 36,
   ramK: 0.5, knock: 1.35, stormDmg: 6, seaDmg: 16, waterLevel: 0.8,
   boostRegen: 0.16, boostUse: 0.5, camDist: 17, camHeight: 8.5,
-  stormSec: 95, stormMin: 36,
+  stormSec: 120, stormMin: 34, hull: 130, shieldTime: 6,
+  shockRadius: 26, shockDmg: 22, shockKnock: 70,
 };
 const COLORS = [0x36e2ff, 0xff6b6b, 0xffd166, 0x62f3a8, 0xb388ff, 0xff9b50, 0xff62c8, 0x9affd0];
-let renderer, scene, cam, clock, cars = [], pickups = [], stormMesh, player, started = false, over = false, alive = 0, placement = 0;
+let renderer, scene, cam, clock, cars = [], pickups = [], jumpPads = [], stormMesh, player, started = false, over = false, alive = 0, placement = 0;
+let particles = [], mapCtx;
 let stormR = R, stormT = 0;
 const keys = {}, touch = { left: false, right: false, boost: false, jump: false };
 const RACER = window.RACER = {};
@@ -136,6 +140,19 @@ function buildTerrain() {
   const sg = new THREE.CylinderGeometry(1, 1, 80, 48, 1, true);
   stormMesh = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: 0xb388ff, transparent: true, opacity: 0.18, side: THREE.DoubleSide }));
   stormMesh.position.y = 30; scene.add(stormMesh);
+  // jump pads (launch ramps) — verticality/air
+  const jpSpots = [[20, -40], [-70, 20], [110, -30], [-20, 100], [60, 80]];
+  for (const [x, z] of jpSpots) { const m = new THREE.Mesh(new THREE.BoxGeometry(11, 1.2, 11), new THREE.MeshStandardMaterial({ color: 0x36e2ff, emissive: 0x0a3a55 })); m.position.set(x, terrainH(x, z) + 0.7, z); scene.add(m); jumpPads.push({ mesh: m, x, z }); }
+  // particle pool (wreck bursts + boost trail)
+  const pg = new THREE.SphereGeometry(0.6, 6, 6);
+  for (let i = 0; i < 150; i++) { const m = new THREE.Mesh(pg, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true })); m.visible = false; scene.add(m); particles.push({ mesh: m, life: 0, vx: 0, vy: 0, vz: 0 }); }
+}
+function emit(x, y, z, color, n, spread, up) {
+  let made = 0;
+  for (const p of particles) { if (p.life > 0) continue; const a = Math.random() * 6.28, s = Math.random() * spread; p.vx = Math.cos(a) * s; p.vz = Math.sin(a) * s; p.vy = (up || 0) + Math.random() * spread * 0.6; p.life = 1; p.mesh.material.color.setHex(color); p.mesh.position.set(x, y, z); p.mesh.visible = true; if (++made >= n) break; }
+}
+function updateParticles(dt) {
+  for (const p of particles) { if (p.life <= 0) continue; p.life -= dt * 1.6; if (p.life <= 0) { p.mesh.visible = false; continue; } p.vy -= 40 * dt; p.mesh.position.x += p.vx * dt; p.mesh.position.y += p.vy * dt; p.mesh.position.z += p.vz * dt; p.mesh.material.opacity = p.life; const s = 0.4 + p.life * 0.8; p.mesh.scale.set(s, s, s); }
 }
 
 // ---- cars / pickups -------------------------------------------
@@ -144,6 +161,7 @@ function makeCar(color) {
   const body = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.5, 5.2), new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 })); body.position.y = 1.0; g.add(body);
   const cab = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 2.2), new THREE.MeshStandardMaterial({ color: 0x0b1024 })); cab.position.set(0, 2.0, -0.2); g.add(cab);
   for (const [sx, sz] of [[1.7, 1.8], [-1.7, 1.8], [1.7, -1.8], [-1.7, -1.8]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.6, 10), new THREE.MeshStandardMaterial({ color: 0x111111 })); w.rotation.z = Math.PI / 2; w.position.set(sx, 0.6, sz); g.add(w); }
+  const sh = new THREE.Mesh(new THREE.SphereGeometry(3.7, 12, 10), new THREE.MeshBasicMaterial({ color: 0x62f3a8, transparent: true, opacity: 0.22 })); sh.position.y = 1.4; sh.visible = false; g.add(sh); g.userData.shield = sh;
   scene.add(g); return g;
 }
 function spawnCars() {
@@ -152,19 +170,23 @@ function spawnCars() {
   for (let i = 0; i < NCARS; i++) {
     const a = (i / NCARS) * Math.PI * 2, rr = 150;
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
-    cars.push({ id: i, mesh: makeCar(COLORS[i]), x, z, y: terrainH(x, z) + C.ride, yaw: Math.atan2(-x, -z), speed: 0, vy: 0, grounded: true, hp: 100, alive: true, boost: 0.5, boosting: false, ai: i !== 0, think: 0, tx: 0, tz: 0, hit: 0 });
+    cars.push({ id: i, mesh: makeCar(COLORS[i]), x, z, y: terrainH(x, z) + C.ride, yaw: Math.atan2(-x, -z), speed: 0, vy: 0, grounded: true, hp: C.hull, alive: true, boost: 0.5, boosting: false, ai: i !== 0, think: 0, tx: 0, tz: 0, hit: 0, shield: 0, trail: 0 });
   }
   player = cars[0]; RACER.cars = cars;
 }
+const PK_TYPES = [
+  { t: "boost", c: 0xffd166, e: 0x6a5410 }, { t: "repair", c: 0x62f3a8, e: 0x14401f },
+  { t: "shield", c: 0x36e2ff, e: 0x0a3550 }, { t: "shock", c: 0xb388ff, e: 0x2a1450 },
+];
 function spawnPickups() {
   for (const p of pickups) scene.remove(p.mesh);
   pickups = [];
-  const spots = [[60, -50], [-90, 70], [40, 120], [-130, -60], [120, 40], [0, -120], [-30, 30], [90, -110]];
-  for (const [x, z] of spots) {
-    const repair = Math.random() < 0.4;
-    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(2.4, 0), new THREE.MeshStandardMaterial({ color: repair ? 0x62f3a8 : 0xffd166, emissive: repair ? 0x14401f : 0x6a5410 }));
+  const spots = [[60, -50], [-90, 70], [40, 120], [-130, -60], [120, 40], [0, -120], [-30, 30], [90, -110], [-60, -100], [150, -10], [-150, 60], [10, 60]];
+  for (let i = 0; i < spots.length; i++) {
+    const [x, z] = spots[i], td = PK_TYPES[i % PK_TYPES.length];
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(2.4, 0), new THREE.MeshStandardMaterial({ color: td.c, emissive: td.e }));
     m.position.set(x, terrainH(x, z) + 3, z); scene.add(m);
-    pickups.push({ mesh: m, x, z, type: repair ? "repair" : "boost", active: true, respawn: 0 });
+    pickups.push({ mesh: m, x, z, type: td.t, active: true, respawn: 0 });
   }
   RACER.pickups = pickups;
 }
@@ -209,17 +231,44 @@ function updateCar(c, dt) {
   // vertical: terrain follow + jump + gravity
   const groundY = terrainH(c.x, c.z) + C.ride;
   if (jumpIn && c.grounded) { c.vy = C.jumpV; c.grounded = false; }
+  for (const jp of jumpPads) { if (c.grounded && (jp.x - c.x) ** 2 + (jp.z - c.z) ** 2 < 42) { c.vy = C.padV; c.grounded = false; if (!c.ai || Math.random() < 0.3) emit(c.x, c.y, c.z, 0x36e2ff, 6, 9, 8); break; } }
   if (!c.grounded) { c.vy -= C.grav * dt; c.y += c.vy * dt; if (c.y <= groundY) { c.y = groundY; c.vy = 0; c.grounded = true; } }
   else { if (c.y < groundY - 0.2) { /* climbed */ c.y = groundY; } else if (c.y > groundY + 0.6) { c.grounded = false; } else c.y = groundY; }
-  // damage: storm + sea
-  if (outStorm) c.hp -= C.stormDmg * dt;
-  if (inSea) c.hp -= C.seaDmg * dt;
+  // shield timer + damage (immune while shielded)
+  if (c.shield > 0) c.shield -= dt;
+  if (c.shield <= 0) { if (outStorm) c.hp -= C.stormDmg * dt; if (inSea) c.hp -= C.seaDmg * dt; }
   if (c.hit > 0) c.hit -= dt;
-  // pickups
-  for (const p of pickups) { if (!p.active) continue; if ((p.x - c.x) ** 2 + (p.z - c.z) ** 2 < 36) { if (p.type === "repair") c.hp = Math.min(100, c.hp + 35); else c.boost = 1; p.active = false; p.respawn = 8; p.mesh.visible = false; } }
+  // boost trail juice
+  if (c.boosting) { c.trail -= dt; if (c.trail <= 0) { c.trail = 0.05; emit(c.x - Math.sin(c.yaw) * 3, c.y + 0.4, c.z - Math.cos(c.yaw) * 3, 0xffd166, 2, 5, 2); } }
+  // pickups (boost / repair / shield / shockwave)
+  for (const p of pickups) {
+    if (!p.active) continue;
+    if ((p.x - c.x) ** 2 + (p.z - c.z) ** 2 < 36) {
+      if (p.type === "repair") c.hp = Math.min(C.hull, c.hp + 45);
+      else if (p.type === "boost") c.boost = 1;
+      else if (p.type === "shield") c.shield = C.shieldTime;
+      else if (p.type === "shock") doShock(c);
+      p.active = false; p.respawn = 9; p.mesh.visible = false;
+    }
+  }
   // place mesh
   c.mesh.position.set(c.x, c.y - C.ride, c.z); c.mesh.rotation.y = c.yaw;
   c.mesh.children[0].rotation.z = -steerIn * 0.05;
+  if (c.mesh.userData.shield) c.mesh.userData.shield.visible = c.shield > 0;
+}
+
+// ---- shockwave pickup: shove + damage nearby cars --------------
+function doShock(c) {
+  emit(c.x, c.y + 1, c.z, 0xb388ff, 26, 22, 7);
+  for (const o of cars) {
+    if (o === c || !o.alive) continue;
+    const dx = o.x - c.x, dz = o.z - c.z, d = Math.hypot(dx, dz) || 1;
+    if (d < C.shockRadius) {
+      const nx = dx / d, nz = dz / d, f = 1 - d / C.shockRadius;
+      o.x += nx * 12 * f; o.z += nz * 12 * f; o.vy = Math.max(o.vy, 14 * f); o.grounded = false;
+      if (o.shield <= 0) { o.hp -= C.shockDmg * f; o.hit = 0.45; }
+    }
+  }
 }
 
 // ---- collisions (Rocket-League-ish bump + ram damage) ----------
@@ -254,10 +303,12 @@ function step(dt) {
   // pickup respawns + spin
   for (const p of pickups) { if (!p.active) { p.respawn -= dt; if (p.respawn <= 0) { p.active = true; p.mesh.visible = true; } } else p.mesh.rotation.y += dt * 2; }
   // eliminations
-  for (const c of cars) if (c.alive && c.hp <= 0) { c.alive = false; c.mesh.visible = false; if (c.id === 0) placement = alive; alive--; }
+  for (const c of cars) if (c.alive && c.hp <= 0) { c.alive = false; c.mesh.visible = false; emit(c.x, c.y + 1, c.z, COLORS[c.id], 28, 26, 11); if (c.id === 0) placement = alive; alive--; }
   alive = cars.filter(c => c.alive).length;
-  // storm visual
+  // storm visual + particles + minimap
   if (stormMesh) { stormMesh.scale.set(stormR, 1, stormR); }
+  updateParticles(dt);
+  drawMinimap();
   // camera (chase)
   if (player) {
     const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
@@ -276,7 +327,16 @@ function step(dt) {
 
 // ---- HUD / lifecycle ------------------------------------------
 const $ = id => document.getElementById(id);
-function syncHud() { $("alive").textContent = alive; $("storm").textContent = stormT >= C.stormSec ? "final" : Math.max(0, Math.ceil(C.stormSec - stormT)) + "s"; $("spd").textContent = Math.round(player.speed); $("hpfill").style.width = Math.max(0, player.hp) + "%"; $("boostfill").style.width = (100 * player.boost) + "%"; }
+function syncHud() { $("alive").textContent = alive; $("storm").textContent = stormT >= C.stormSec ? "final" : Math.max(0, Math.ceil(C.stormSec - stormT)) + "s"; $("spd").textContent = Math.round(player.speed); $("hpfill").style.width = Math.max(0, 100 * player.hp / C.hull) + "%"; $("boostfill").style.width = (100 * player.boost) + "%"; }
+function drawMinimap() {
+  if (!mapCtx) return;
+  const W = 140, H = 140, cx = W / 2, cy = H / 2, sc = (W * 0.46) / R;
+  mapCtx.clearRect(0, 0, W, H);
+  mapCtx.fillStyle = "rgba(40,80,55,0.5)"; mapCtx.beginPath(); mapCtx.arc(cx, cy, R * 0.78 * sc, 0, 6.28); mapCtx.fill();
+  mapCtx.strokeStyle = "#b388ff"; mapCtx.lineWidth = 1.5; mapCtx.beginPath(); mapCtx.arc(cx, cy, Math.max(2, stormR * sc), 0, 6.28); mapCtx.stroke();
+  for (const p of pickups) { if (!p.active) continue; mapCtx.fillStyle = "#ffd166"; mapCtx.fillRect(cx + p.x * sc - 1, cy + p.z * sc - 1, 2, 2); }
+  for (const c of cars) { if (!c.alive) continue; mapCtx.fillStyle = "#" + COLORS[c.id].toString(16).padStart(6, "0"); mapCtx.beginPath(); mapCtx.arc(cx + c.x * sc, cy + c.z * sc, c.id === 0 ? 3 : 2, 0, 6.28); mapCtx.fill(); }
+}
 function endGame(won) { if (over) return; over = true; started = false; const place = won ? 1 : (placement || alive + 1); $("resultTitle").textContent = won ? "#1 — last truck standing!" : "Wrecked — #" + place; $("resultBody").innerHTML = won ? "You took the island. The Capybara nods, almost." : "You placed <b>#" + place + "</b> of " + NCARS + ". The Capybara remains unmoved."; $("resultOverlay").classList.add("show"); }
 function startGame() { spawnCars(); spawnPickups(); stormR = R; stormT = 0; started = true; over = false; clock.getDelta(); }
 
@@ -291,6 +351,7 @@ function boot() {
     scene.add(new THREE.AmbientLight(0x90a0d0, 0.7));
     const sun = new THREE.DirectionalLight(0xfff2e0, 1.15); sun.position.set(120, 200, 80); scene.add(sun);
     clock = new THREE.Clock();
+    mapCtx = $("map").getContext("2d");
     buildTerrain(); spawnCars(); spawnPickups();
     addEventListener("resize", resize);
     addEventListener("keydown", e => { keys[e.key] = true; if (e.key === " " || e.key === "Shift") e.preventDefault(); });
