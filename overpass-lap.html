@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>OVERPASS — 3D third-person racer</title>
+<style>
+  :root{--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--boost:#ffd166;--line:#233056;--panel:rgba(12,18,40,0.9);}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;overflow:hidden;background:#05060f;color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;user-select:none;touch-action:none;}
+  #cv{position:fixed;inset:0;width:100%;height:100%;display:block;}
+  #hud{position:fixed;top:10px;left:0;right:0;display:flex;gap:9px;justify-content:center;flex-wrap:wrap;pointer-events:none;}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;display:flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums;}
+  .pill .label{color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;}
+  .pill b{color:var(--you);}
+  #boostwrap{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);width:min(260px,60vw);}
+  #boostbar{height:12px;background:#10182f;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
+  #boostfill{height:100%;width:0;background:linear-gradient(90deg,#caa233,#ffd166);transition:width .08s;}
+  /* touch controls */
+  .tbtn{position:fixed;bottom:46px;width:84px;height:84px;border-radius:50%;background:var(--panel);border:1px solid var(--line);display:none;align-items:center;justify-content:center;font-size:26px;color:var(--you);}
+  #tl{left:16px;} #tr{left:116px;} #tb{right:16px;border-color:var(--boost);color:var(--boost);font-size:14px;font-weight:700;}
+  .touch .tbtn{display:flex;}
+  .overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,14,.8);backdrop-filter:blur(3px);z-index:9;padding:16px;}
+  .overlay.show{display:grid;}
+  .card{width:min(560px,94vw);background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.6);}
+  .card h1{margin:0 0 4px;font-size:30px;letter-spacing:-.5px;}
+  .card .tag{color:var(--you);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 12px;}
+  .card p{color:var(--muted);line-height:1.55;margin:0 0 12px;font-size:15px;}
+  .card ul{color:var(--muted);line-height:1.55;margin:0 0 14px;padding-left:18px;font-size:14px;}
+  .card b{color:var(--ink);}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  button{font:inherit;cursor:pointer;border-radius:11px;border:1px solid var(--line);background:#131c3c;color:var(--ink);padding:11px 20px;font-size:15px;}
+  .btn-primary{background:linear-gradient(180deg,#1ea7c4,#1577a8);border-color:#36e2ff;font-weight:700;}
+  #err{position:fixed;left:10px;bottom:10px;color:#ff8a8a;font-size:12px;max-width:90vw;}
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="hud">
+  <div class="pill"><span class="label">Pos</span> <b id="pos">1</b><span style="color:var(--muted)">/4</span></div>
+  <div class="pill"><span class="label">Lap</span> <b id="lap">1</b><span style="color:var(--muted)">/3</span></div>
+  <div class="pill"><span class="label">Speed</span> <b id="spd">0</b></div>
+</div>
+<div id="boostwrap"><div id="boostbar"><div id="boostfill"></div></div></div>
+<div class="tbtn" id="tl">&#9664;</div>
+<div class="tbtn" id="tr">&#9654;</div>
+<div class="tbtn" id="tb">BOOST</div>
+
+<div class="overlay show" id="menu">
+  <div class="card">
+    <p class="tag">3D third-person racer</p>
+    <h1>OVERPASS</h1>
+    <p>Three laps around the overpass against three rival cat-trucks. You <b>auto-accelerate</b> &mdash; your job is to <b>steer</b> the corners, hit the <b>boost pads</b>, and spend your <b>boost</b> on the straights.</p>
+    <ul>
+      <li><b>Steer:</b> &larr;/&rarr; or A/D (or the on-screen arrows on touch).</li>
+      <li><b>Boost:</b> Space (or the BOOST button) &mdash; the meter refills over time and instantly tops up on golden <b>boost pads</b>.</li>
+      <li><b>Brake:</b> &darr;/S to tuck into a tight corner. Off the track = slow grass.</li>
+    </ul>
+    <div class="row"><button class="btn-primary" id="startBtn">Start race</button></div>
+  </div>
+</div>
+<div class="overlay" id="resultOverlay">
+  <div class="card">
+    <h1 id="resultTitle">Finished</h1>
+    <p id="resultBody"></p>
+    <div class="row"><button class="btn-primary" id="resultBtn">Race again</button></div>
+  </div>
+</div>
+<div id="err"></div>
+
+<script type="module">
+import * as THREE from "three";
+/* ============================================================
+   OVERPASS — 3D third-person arcade racer (Three.js, no build).
+   Curvy looped track, chase cam, auto-accel + steer + boost,
+   boost pads, 3 AI racers, 3 laps + finishing positions.
+   2D physics (x,z,yaw,speed) rendered in 3D + chase camera.
+   ============================================================ */
+const LAPS = 3, HW = 9, NPTS = 400;
+const C = {
+  maxSpeed: 62, boostSpeed: 96, accel: 46, brake: 80, drag: 14,
+  steer: 2.4, grassMax: 26, grassDrag: 50,
+  boostRegen: 0.16, boostUse: 0.5, boostPadGain: 0.6, camDist: 16, camHeight: 7,
+};
+const COLORS = [0x36e2ff, 0xff6b6b, 0xffd166, 0x62f3a8];
+let renderer, scene, cam, clock, track, pads = [], cars = [], player, started = false, finished = [];
+const keys = {};
+const touch = { left: false, right: false, boost: false };
+
+// expose for headless logic checks
+const RACER = window.RACER = {};
+
+// ---- track waypoints (a curvy closed loop in XZ) --------------
+const WP = [[0,-110],[64,-96],[96,-44],[72,4],[104,56],[60,96],[4,108],[-58,92],[-104,52],[-78,2],[-104,-54],[-58,-96]];
+let curve, spaced;
+
+function buildTrack() {
+  const v = WP.map(p => new THREE.Vector3(p[0], 0, p[1]));
+  curve = new THREE.CatmullRomCurve3(v, true, "catmullrom", 0.5);
+  spaced = curve.getSpacedPoints(NPTS); // NPTS+1 pts, evenly spaced loop
+  // road ribbon
+  const pos = [], idx = [];
+  for (let i = 0; i <= NPTS; i++) {
+    const p = spaced[i], pn = spaced[(i + 1) % (NPTS + 1)], pp = spaced[(i - 1 + NPTS + 1) % (NPTS + 1)];
+    let tx = pn.x - pp.x, tz = pn.z - pp.z; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+    const px = -tz * HW, pz = tx * HW;
+    pos.push(p.x + px, 0.02, p.z + pz, p.x - px, 0.02, p.z - pz);
+  }
+  for (let i = 0; i < NPTS; i++) { const a = i * 2, b = i * 2 + 1, c = a + 2, d = a + 3; idx.push(a, b, d, a, d, c); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  const road = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x232c44, roughness: 0.9 }));
+  scene.add(road);
+  // edge lines
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x36e2ff });
+  for (const side of [HW, -HW]) {
+    const lp = [];
+    for (let i = 0; i <= NPTS; i++) { const p = spaced[i], pn = spaced[(i + 1) % (NPTS + 1)], pp = spaced[(i - 1 + NPTS + 1) % (NPTS + 1)]; let tx = pn.x - pp.x, tz = pn.z - pp.z; const tl = Math.hypot(tx, tz) || 1; lp.push(new THREE.Vector3(p.x - tz / tl * side, 0.06, p.z + tx / tl * side)); }
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lp), edgeMat));
+  }
+  // start/finish stripe
+  const sf = new THREE.Mesh(new THREE.PlaneGeometry(HW * 2, 3), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+  sf.rotation.x = -Math.PI / 2; sf.position.copy(spaced[0]); sf.position.y = 0.05; scene.add(sf);
+  // boost pads
+  const padIdx = [Math.round(NPTS * 0.18), Math.round(NPTS * 0.45), Math.round(NPTS * 0.72)];
+  for (const pi of padIdx) {
+    const p = spaced[pi];
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(HW * 1.4, 6), new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0x6a5410, transparent: true, opacity: 0.85 }));
+    m.rotation.x = -Math.PI / 2; m.position.set(p.x, 0.07, p.z); scene.add(m); pads.push(m);
+  }
+  RACER.checkpoints = spaced.length;
+}
+
+// ---- cars ------------------------------------------------------
+function makeCar(color) {
+  const grp = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.5, 5.4), new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 }));
+  body.position.y = 1.1; grp.add(body);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.3, 2.4), new THREE.MeshStandardMaterial({ color: 0x0b1024 }));
+  cab.position.set(0, 2.1, -0.3); grp.add(cab);
+  for (const [sx, sz] of [[1.7, 1.9], [-1.7, 1.9], [1.7, -1.9], [-1.7, -1.9]]) {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.6, 12), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+    w.rotation.z = Math.PI / 2; w.position.set(sx, 0.7, sz); grp.add(w);
+  }
+  scene.add(grp);
+  return grp;
+}
+function spawnCars() {
+  cars = []; finished = [];
+  const start = spaced[0], nxt = spaced[6];
+  const yaw0 = Math.atan2(nxt.x - start.x, nxt.z - start.z);
+  for (let i = 0; i < 4; i++) {
+    const mesh = makeCar(COLORS[i]);
+    // stagger start positions across the road + slightly back
+    const off = (i - 1.5) * 4.2;
+    const px = start.x + Math.cos(yaw0) * off, pz = start.z - Math.sin(yaw0) * off;
+    cars.push({ id: i, mesh, x: px, z: pz, yaw: yaw0, speed: 0, vlat: 0, lap: 0, ni: 0, lastNi: 0, prog: 0, boost: i === 0 ? 0.6 : 0.5, boosting: false, ai: i !== 0 });
+  }
+  player = cars[0];
+  RACER.cars = cars;
+}
+
+// ---- nearest track index + helpers -----------------------------
+function nearestIndex(x, z, hint) {
+  let bi = 0, bd = 1e18;
+  // search near hint for speed, else full
+  if (hint != null) { for (let k = -12; k <= 24; k++) { const i = (hint + k + NPTS + 1) % (NPTS + 1); const p = spaced[i]; const d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < bd) { bd = d; bi = i; } } }
+  else { for (let i = 0; i <= NPTS; i++) { const p = spaced[i]; const d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < bd) { bd = d; bi = i; } } }
+  return { i: bi, d: Math.sqrt(bd) };
+}
+
+// ---- per-car update --------------------------------------------
+function updateCar(c, dt) {
+  // steering input
+  let steerIn = 0, brakeIn = false, boostIn = false;
+  if (c.ai) {
+    // aim at a point ~22 indices ahead
+    const tgt = spaced[(c.ni + 22) % (NPTS + 1)];
+    const desired = Math.atan2(tgt.x - c.x, tgt.z - c.z);
+    let dy = desired - c.yaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+    steerIn = Math.max(-1, Math.min(1, dy * 2.2));
+    boostIn = c.boost > 0.4 && Math.abs(dy) < 0.2;
+  } else {
+    if (keys["ArrowLeft"] || keys["a"] || touch.left) steerIn -= 1;
+    if (keys["ArrowRight"] || keys["d"] || touch.right) steerIn += 1;
+    brakeIn = keys["ArrowDown"] || keys["s"];
+    boostIn = (keys[" "] || touch.boost);
+  }
+  // off-road?
+  const near = nearestIndex(c.x, c.z, c.ni);
+  c.ni = near.i;
+  const offRoad = near.d > HW;
+  // boost meter
+  if (boostIn && c.boost > 0) { c.boost = Math.max(0, c.boost - C.boostUse * dt); c.boosting = true; }
+  else { c.boost = Math.min(1, c.boost + C.boostRegen * dt); c.boosting = false; }
+  // speed
+  let maxS = offRoad ? C.grassMax : (c.boosting ? C.boostSpeed : C.maxSpeed);
+  if (brakeIn) c.speed -= C.brake * dt;
+  else c.speed += C.accel * dt * (c.boosting ? 1.6 : 1);
+  c.speed -= (offRoad ? C.grassDrag : C.drag) * dt * (c.speed > 0 ? 1 : 0);
+  c.speed = Math.max(0, Math.min(c.speed, maxS));
+  // steering (more responsive at speed, some at low speed)
+  const steerAuth = 0.4 + 0.6 * Math.min(1, c.speed / C.maxSpeed);
+  c.yaw += steerIn * C.steer * steerAuth * dt;
+  // move along heading
+  c.x += Math.sin(c.yaw) * c.speed * dt;
+  c.z += Math.cos(c.yaw) * c.speed * dt;
+  // boost pads
+  for (const pad of pads) { const d = (pad.position.x - c.x) ** 2 + (pad.position.z - c.z) ** 2; if (d < 64) c.boost = Math.min(1, c.boost + C.boostPadGain * dt * 6); }
+  // lap detection via wrap
+  if (c.lastNi > NPTS * 0.78 && c.ni < NPTS * 0.22) { c.lap++; if (c.lap >= LAPS && !finished.includes(c)) finished.push(c); }
+  else if (c.lastNi < NPTS * 0.22 && c.ni > NPTS * 0.78) { c.lap = Math.max(0, c.lap - 1); }
+  c.lastNi = c.ni;
+  c.prog = c.lap + c.ni / NPTS;
+  // place mesh
+  c.mesh.position.set(c.x, 0, c.z);
+  c.mesh.rotation.y = c.yaw;
+  c.mesh.children[0].rotation.z = -steerIn * 0.05; // slight body lean
+}
+
+// ---- main step (sim) -------------------------------------------
+function step(dt) {
+  for (const c of cars) updateCar(c, dt);
+  // positions by progress
+  const ranked = cars.slice().sort((a, b) => b.prog - a.prog);
+  player.position = ranked.indexOf(player) + 1;
+  // chase cam
+  const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
+  const camPos = new THREE.Vector3(player.x - fx * C.camDist, C.camHeight, player.z - fz * C.camDist);
+  cam.position.lerp(camPos, Math.min(1, dt * 4));
+  cam.lookAt(player.x + fx * 6, 1.5, player.z + fz * 6);
+  // finish
+  if (player.lap >= LAPS && started) endRace();
+  RACER.player = { lap: player.lap, ni: player.ni, pos: player.position, speed: Math.round(player.speed) };
+}
+
+// ---- HUD / lifecycle -------------------------------------------
+const $ = id => document.getElementById(id);
+function syncHud() {
+  $("pos").textContent = player.position || 1;
+  $("lap").textContent = Math.min(LAPS, player.lap + 1);
+  $("spd").textContent = Math.round(player.speed);
+  $("boostfill").style.width = (100 * player.boost) + "%";
+}
+function endRace() {
+  if (!started) return; started = false;
+  // ensure player recorded
+  if (!finished.includes(player)) finished.push(player);
+  const place = finished.indexOf(player) + 1;
+  $("resultTitle").textContent = place === 1 ? "P1 — you won!" : "Finished P" + place;
+  $("resultBody").innerHTML = place === 1 ? "First across the line. The Capybara nods, almost." : "You placed <b>" + place + "</b> of 4. The Capybara remains unmoved.";
+  $("resultOverlay").classList.add("show");
+}
+function startRace() { spawnCars(); started = true; clock.getDelta(); }
+
+// ---- boot ------------------------------------------------------
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+function boot() {
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas: $("cv"), antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
+    scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b1024); scene.fog = new THREE.Fog(0x0b1024, 120, 320);
+    cam = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 1000); cam.position.set(0, 20, -30);
+    scene.add(new THREE.AmbientLight(0x8090c0, 0.7));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.1); sun.position.set(60, 120, 40); scene.add(sun);
+    // ground
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: 0x0d1326 }));
+    ground.rotation.x = -Math.PI / 2; ground.position.y = -0.05; scene.add(ground);
+    clock = new THREE.Clock();
+    buildTrack(); spawnCars();
+    addEventListener("resize", resize);
+    addEventListener("keydown", e => { keys[e.key] = true; if (e.key === " ") e.preventDefault(); });
+    addEventListener("keyup", e => { keys[e.key] = false; });
+    // touch controls
+    if ("ontouchstart" in window || navigator.maxTouchPoints) document.body.classList.add("touch");
+    const bind = (el, k) => { const d = ev => { ev.preventDefault(); touch[k] = true; }, u = ev => { ev.preventDefault(); touch[k] = false; }; el.addEventListener("pointerdown", d); el.addEventListener("pointerup", u); el.addEventListener("pointerleave", u); };
+    bind($("tl"), "left"); bind($("tr"), "right"); bind($("tb"), "boost");
+    $("startBtn").onclick = () => { $("menu").classList.remove("show"); startRace(); };
+    $("resultBtn").onclick = () => { $("resultOverlay").classList.remove("show"); startRace(); };
+    RACER.step = step; RACER.ready = true;
+    renderer.setAnimationLoop(loop);
+  } catch (e) { $("err").textContent = "3D init error: " + e.message; RACER.error = e.message; }
+}
+function loop() {
+  const dt = Math.min(0.05, clock ? clock.getDelta() : 0.016);
+  if (started) { step(dt); syncHud(); }
+  renderer.render(scene, cam);
+}
+boot();
+</script>
+</body>
+</html>

@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>OVERPASS — 3D third-person racer</title>
+<title>CRUMB ISLAND — car battle royale</title>
 <style>
-  :root{--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--boost:#ffd166;--line:#233056;--panel:rgba(12,18,40,0.9);}
+  :root{--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--boost:#ffd166;--storm:#b388ff;--line:#233056;--panel:rgba(12,18,40,0.9);}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;height:100%;overflow:hidden;background:#05060f;color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;user-select:none;touch-action:none;}
   #cv{position:fixed;inset:0;width:100%;height:100%;display:block;}
@@ -13,12 +13,14 @@
   .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;display:flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums;}
   .pill .label{color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;}
   .pill b{color:var(--you);}
-  #boostwrap{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);width:min(260px,60vw);}
-  #boostbar{height:12px;background:#10182f;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
+  .pill.storm b{color:var(--storm);}
+  #hpwrap{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);width:min(280px,64vw);text-align:center;}
+  #hpbar,#boostbar{height:11px;background:#10182f;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-top:5px;}
+  #hpfill{height:100%;width:100%;background:linear-gradient(90deg,#1577a8,#36e2ff);transition:width .1s;}
   #boostfill{height:100%;width:0;background:linear-gradient(90deg,#caa233,#ffd166);transition:width .08s;}
-  /* touch controls */
-  .tbtn{position:fixed;bottom:46px;width:84px;height:84px;border-radius:50%;background:var(--panel);border:1px solid var(--line);display:none;align-items:center;justify-content:center;font-size:26px;color:var(--you);}
-  #tl{left:16px;} #tr{left:116px;} #tb{right:16px;border-color:var(--boost);color:var(--boost);font-size:14px;font-weight:700;}
+  .lab{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+  .tbtn{position:fixed;bottom:54px;width:78px;height:78px;border-radius:50%;background:var(--panel);border:1px solid var(--line);display:none;align-items:center;justify-content:center;font-size:24px;color:var(--you);}
+  #tl{left:14px;} #tr{left:104px;} #tboost{right:14px;border-color:var(--boost);color:var(--boost);font-size:12px;font-weight:700;} #tjump{right:104px;font-size:12px;font-weight:700;}
   .touch .tbtn{display:flex;}
   .overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,14,.8);backdrop-filter:blur(3px);z-index:9;padding:16px;}
   .overlay.show{display:grid;}
@@ -40,33 +42,32 @@
 <body>
 <canvas id="cv"></canvas>
 <div id="hud">
-  <div class="pill"><span class="label">Pos</span> <b id="pos">1</b><span style="color:var(--muted)">/4</span></div>
-  <div class="pill"><span class="label">Lap</span> <b id="lap">1</b><span style="color:var(--muted)">/3</span></div>
+  <div class="pill"><span class="label">Alive</span> <b id="alive">8</b></div>
+  <div class="pill storm"><span class="label">Storm</span> <b id="storm">—</b></div>
   <div class="pill"><span class="label">Speed</span> <b id="spd">0</b></div>
 </div>
-<div id="boostwrap"><div id="boostbar"><div id="boostfill"></div></div></div>
-<div class="tbtn" id="tl">&#9664;</div>
-<div class="tbtn" id="tr">&#9654;</div>
-<div class="tbtn" id="tb">BOOST</div>
+<div id="hpwrap"><span class="lab">Hull</span><div id="hpbar"><div id="hpfill"></div></div><span class="lab">Boost</span><div id="boostbar"><div id="boostfill"></div></div></div>
+<div class="tbtn" id="tl">&#9664;</div><div class="tbtn" id="tr">&#9654;</div>
+<div class="tbtn" id="tjump">JUMP</div><div class="tbtn" id="tboost">BOOST</div>
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">3D third-person racer</p>
-    <h1>OVERPASS</h1>
-    <p>Three laps around the overpass against three rival cat-trucks. You <b>auto-accelerate</b> &mdash; your job is to <b>steer</b> the corners, hit the <b>boost pads</b>, and spend your <b>boost</b> on the straights.</p>
+    <p class="tag">Fortnite &times; Rocket League &middot; car battle royale</p>
+    <h1>CRUMB ISLAND</h1>
+    <p>Eight cat-trucks dropped on one hilly island. <b>Ram</b> rivals off the cliffs and into the wreck, grab <b>pickups</b>, and stay ahead of the closing <b>storm</b>. Last truck running wins the island.</p>
     <ul>
-      <li><b>Steer:</b> &larr;/&rarr; or A/D (or the on-screen arrows on touch).</li>
-      <li><b>Boost:</b> Space (or the BOOST button) &mdash; the meter refills over time and instantly tops up on golden <b>boost pads</b>.</li>
-      <li><b>Brake:</b> &darr;/S to tuck into a tight corner. Off the track = slow grass.</li>
+      <li><b>Drive:</b> auto-accelerate; steer &larr;/&rarr; or A/D; brake &darr;/S. <b>Jump</b> (Shift) off ramps and ledges.</li>
+      <li><b>Boost</b> (Space): refills over time + on golden pads/orbs. Boosted rams hit hard.</li>
+      <li><b>Storm</b> closes in &mdash; anything caught outside it (or in the sea) takes damage. Wreck rivals or outlast them.</li>
     </ul>
-    <div class="row"><button class="btn-primary" id="startBtn">Start race</button></div>
+    <div class="row"><button class="btn-primary" id="startBtn">Drop in</button></div>
   </div>
 </div>
 <div class="overlay" id="resultOverlay">
   <div class="card">
-    <h1 id="resultTitle">Finished</h1>
+    <h1 id="resultTitle">Wrecked</h1>
     <p id="resultBody"></p>
-    <div class="row"><button class="btn-primary" id="resultBtn">Race again</button></div>
+    <div class="row"><button class="btn-primary" id="resultBtn">Re-drop</button></div>
   </div>
 </div>
 <div id="err"></div>
@@ -74,222 +75,236 @@
 <script type="module">
 import * as THREE from "three";
 /* ============================================================
-   OVERPASS — 3D third-person arcade racer (Three.js, no build).
-   Curvy looped track, chase cam, auto-accel + steer + boost,
-   boost pads, 3 AI racers, 3 laps + finishing positions.
-   2D physics (x,z,yaw,speed) rendered in 3D + chase camera.
+   CRUMB ISLAND — open-island car battle royale (Three.js).
+   Heightfield island (hills, peaks, coast, sea), free-roam
+   driving that hugs terrain + jumps, car-vs-car ram collisions,
+   a shrinking storm, boost + repair pickups, 8 cars, last
+   truck standing. Physics is x/z/yaw/speed + y/vy for air.
    ============================================================ */
-const LAPS = 3, HW = 9, NPTS = 400;
+const R = 320, NCARS = 8;
 const C = {
-  maxSpeed: 62, boostSpeed: 96, accel: 46, brake: 80, drag: 14,
-  steer: 2.4, grassMax: 26, grassDrag: 50,
-  boostRegen: 0.16, boostUse: 0.5, boostPadGain: 0.6, camDist: 16, camHeight: 7,
+  maxSpeed: 64, boostSpeed: 100, accel: 48, brake: 90, drag: 16,
+  steer: 2.3, ride: 1.1, grav: 60, jumpV: 26,
+  ramK: 0.5, knock: 1.35, stormDmg: 6, seaDmg: 16, waterLevel: 0.8,
+  boostRegen: 0.16, boostUse: 0.5, camDist: 17, camHeight: 8.5,
+  stormSec: 95, stormMin: 36,
 };
-const COLORS = [0x36e2ff, 0xff6b6b, 0xffd166, 0x62f3a8];
-let renderer, scene, cam, clock, track, pads = [], cars = [], player, started = false, finished = [];
-const keys = {};
-const touch = { left: false, right: false, boost: false };
-
-// expose for headless logic checks
+const COLORS = [0x36e2ff, 0xff6b6b, 0xffd166, 0x62f3a8, 0xb388ff, 0xff9b50, 0xff62c8, 0x9affd0];
+let renderer, scene, cam, clock, cars = [], pickups = [], stormMesh, player, started = false, over = false, alive = 0, placement = 0;
+let stormR = R, stormT = 0;
+const keys = {}, touch = { left: false, right: false, boost: false, jump: false };
 const RACER = window.RACER = {};
 
-// ---- track waypoints (a curvy closed loop in XZ) --------------
-const WP = [[0,-110],[64,-96],[96,-44],[72,4],[104,56],[60,96],[4,108],[-58,92],[-104,52],[-78,2],[-104,-54],[-58,-96]];
-let curve, spaced;
+// ---- heightfield (shared by mesh build + car sampling) ---------
+function terrainH(x, z) {
+  const r = Math.hypot(x, z), edge = R * 0.78;
+  let land = r < edge ? 1 : Math.max(0, 1 - (r - edge) / (R * 0.3));
+  land = land * land * (3 - 2 * land);
+  const base = -16 + 22 * land;
+  const hills = 10 * Math.sin(x * 0.018) * Math.cos(z * 0.016)
+    + 6 * Math.sin(x * 0.009 + 2.1) * Math.sin(z * 0.011 - 0.5)
+    + 16 * Math.exp(-(((x - 80) ** 2 + (z + 60) ** 2) / 4200))
+    + 13 * Math.exp(-(((x + 120) ** 2 + (z - 90) ** 2) / 5200))
+    + 11 * Math.exp(-(((x + 40) ** 2 + (z + 140) ** 2) / 4000));
+  return base + hills * land;
+}
+RACER.terrainH = terrainH;
 
-function buildTrack() {
-  const v = WP.map(p => new THREE.Vector3(p[0], 0, p[1]));
-  curve = new THREE.CatmullRomCurve3(v, true, "catmullrom", 0.5);
-  spaced = curve.getSpacedPoints(NPTS); // NPTS+1 pts, evenly spaced loop
-  // road ribbon
-  const pos = [], idx = [];
-  for (let i = 0; i <= NPTS; i++) {
-    const p = spaced[i], pn = spaced[(i + 1) % (NPTS + 1)], pp = spaced[(i - 1 + NPTS + 1) % (NPTS + 1)];
-    let tx = pn.x - pp.x, tz = pn.z - pp.z; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
-    const px = -tz * HW, pz = tx * HW;
-    pos.push(p.x + px, 0.02, p.z + pz, p.x - px, 0.02, p.z - pz);
+function buildTerrain() {
+  const S = R * 2.5, SEG = 150;
+  const geo = new THREE.PlaneGeometry(S, S, SEG, SEG);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position, col = [];
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i), h = terrainH(x, z);
+    pos.setY(i, h);
+    let c;
+    if (h < 0.8) c = [0.10, 0.22, 0.42];        // shallow sea floor / shore
+    else if (h < 3) c = [0.78, 0.70, 0.45];     // beach
+    else if (h < 16) c = [0.20, 0.46, 0.28];    // grass
+    else if (h < 26) c = [0.40, 0.36, 0.30];    // rock
+    else c = [0.85, 0.86, 0.92];                // peak
+    col.push(...c);
   }
-  for (let i = 0; i < NPTS; i++) { const a = i * 2, b = i * 2 + 1, c = a + 2, d = a + 3; idx.push(a, b, d, a, d, c); }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx); g.computeVertexNormals();
-  const road = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x232c44, roughness: 0.9 }));
-  scene.add(road);
-  // edge lines
-  const edgeMat = new THREE.LineBasicMaterial({ color: 0x36e2ff });
-  for (const side of [HW, -HW]) {
-    const lp = [];
-    for (let i = 0; i <= NPTS; i++) { const p = spaced[i], pn = spaced[(i + 1) % (NPTS + 1)], pp = spaced[(i - 1 + NPTS + 1) % (NPTS + 1)]; let tx = pn.x - pp.x, tz = pn.z - pp.z; const tl = Math.hypot(tx, tz) || 1; lp.push(new THREE.Vector3(p.x - tz / tl * side, 0.06, p.z + tx / tl * side)); }
-    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(lp), edgeMat));
-  }
-  // start/finish stripe
-  const sf = new THREE.Mesh(new THREE.PlaneGeometry(HW * 2, 3), new THREE.MeshStandardMaterial({ color: 0xffffff }));
-  sf.rotation.x = -Math.PI / 2; sf.position.copy(spaced[0]); sf.position.y = 0.05; scene.add(sf);
-  // boost pads
-  const padIdx = [Math.round(NPTS * 0.18), Math.round(NPTS * 0.45), Math.round(NPTS * 0.72)];
-  for (const pi of padIdx) {
-    const p = spaced[pi];
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(HW * 1.4, 6), new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0x6a5410, transparent: true, opacity: 0.85 }));
-    m.rotation.x = -Math.PI / 2; m.position.set(p.x, 0.07, p.z); scene.add(m); pads.push(m);
-  }
-  RACER.checkpoints = spaced.length;
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  scene.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })));
+  // sea
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(S * 1.4, S * 1.4), new THREE.MeshStandardMaterial({ color: 0x0a2a4a, transparent: true, opacity: 0.85, roughness: 0.4 }));
+  sea.rotation.x = -Math.PI / 2; sea.position.y = C.waterLevel; scene.add(sea);
+  // storm wall (cylinder)
+  const sg = new THREE.CylinderGeometry(1, 1, 80, 48, 1, true);
+  stormMesh = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: 0xb388ff, transparent: true, opacity: 0.18, side: THREE.DoubleSide }));
+  stormMesh.position.y = 30; scene.add(stormMesh);
 }
 
-// ---- cars ------------------------------------------------------
+// ---- cars / pickups -------------------------------------------
 function makeCar(color) {
-  const grp = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.5, 5.4), new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 }));
-  body.position.y = 1.1; grp.add(body);
-  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.3, 2.4), new THREE.MeshStandardMaterial({ color: 0x0b1024 }));
-  cab.position.set(0, 2.1, -0.3); grp.add(cab);
-  for (const [sx, sz] of [[1.7, 1.9], [-1.7, 1.9], [1.7, -1.9], [-1.7, -1.9]]) {
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.6, 12), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-    w.rotation.z = Math.PI / 2; w.position.set(sx, 0.7, sz); grp.add(w);
-  }
-  scene.add(grp);
-  return grp;
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.5, 5.2), new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 })); body.position.y = 1.0; g.add(body);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 2.2), new THREE.MeshStandardMaterial({ color: 0x0b1024 })); cab.position.set(0, 2.0, -0.2); g.add(cab);
+  for (const [sx, sz] of [[1.7, 1.8], [-1.7, 1.8], [1.7, -1.8], [-1.7, -1.8]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.6, 10), new THREE.MeshStandardMaterial({ color: 0x111111 })); w.rotation.z = Math.PI / 2; w.position.set(sx, 0.6, sz); g.add(w); }
+  scene.add(g); return g;
 }
 function spawnCars() {
-  cars = []; finished = [];
-  const start = spaced[0], nxt = spaced[6];
-  const yaw0 = Math.atan2(nxt.x - start.x, nxt.z - start.z);
-  for (let i = 0; i < 4; i++) {
-    const mesh = makeCar(COLORS[i]);
-    // stagger start positions across the road + slightly back
-    const off = (i - 1.5) * 4.2;
-    const px = start.x + Math.cos(yaw0) * off, pz = start.z - Math.sin(yaw0) * off;
-    cars.push({ id: i, mesh, x: px, z: pz, yaw: yaw0, speed: 0, vlat: 0, lap: 0, ni: 0, lastNi: 0, prog: 0, boost: i === 0 ? 0.6 : 0.5, boosting: false, ai: i !== 0 });
+  for (const c of cars) scene.remove(c.mesh);
+  cars = []; over = false; placement = 0; alive = NCARS;
+  for (let i = 0; i < NCARS; i++) {
+    const a = (i / NCARS) * Math.PI * 2, rr = 150;
+    const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+    cars.push({ id: i, mesh: makeCar(COLORS[i]), x, z, y: terrainH(x, z) + C.ride, yaw: Math.atan2(-x, -z), speed: 0, vy: 0, grounded: true, hp: 100, alive: true, boost: 0.5, boosting: false, ai: i !== 0, think: 0, tx: 0, tz: 0, hit: 0 });
   }
-  player = cars[0];
-  RACER.cars = cars;
+  player = cars[0]; RACER.cars = cars;
 }
-
-// ---- nearest track index + helpers -----------------------------
-function nearestIndex(x, z, hint) {
-  let bi = 0, bd = 1e18;
-  // search near hint for speed, else full
-  if (hint != null) { for (let k = -12; k <= 24; k++) { const i = (hint + k + NPTS + 1) % (NPTS + 1); const p = spaced[i]; const d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < bd) { bd = d; bi = i; } } }
-  else { for (let i = 0; i <= NPTS; i++) { const p = spaced[i]; const d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < bd) { bd = d; bi = i; } } }
-  return { i: bi, d: Math.sqrt(bd) };
+function spawnPickups() {
+  for (const p of pickups) scene.remove(p.mesh);
+  pickups = [];
+  const spots = [[60, -50], [-90, 70], [40, 120], [-130, -60], [120, 40], [0, -120], [-30, 30], [90, -110]];
+  for (const [x, z] of spots) {
+    const repair = Math.random() < 0.4;
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(2.4, 0), new THREE.MeshStandardMaterial({ color: repair ? 0x62f3a8 : 0xffd166, emissive: repair ? 0x14401f : 0x6a5410 }));
+    m.position.set(x, terrainH(x, z) + 3, z); scene.add(m);
+    pickups.push({ mesh: m, x, z, type: repair ? "repair" : "boost", active: true, respawn: 0 });
+  }
+  RACER.pickups = pickups;
 }
 
 // ---- per-car update --------------------------------------------
 function updateCar(c, dt) {
-  // steering input
-  let steerIn = 0, brakeIn = false, boostIn = false;
+  let steerIn = 0, brakeIn = false, boostIn = false, jumpIn = false;
   if (c.ai) {
-    // aim at a point ~22 indices ahead
-    const tgt = spaced[(c.ni + 22) % (NPTS + 1)];
-    const desired = Math.atan2(tgt.x - c.x, tgt.z - c.z);
-    let dy = desired - c.yaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
-    steerIn = Math.max(-1, Math.min(1, dy * 2.2));
-    boostIn = c.boost > 0.4 && Math.abs(dy) < 0.2;
+    c.think -= dt;
+    const r = Math.hypot(c.x, c.z), inSea = terrainH(c.x, c.z) < C.waterLevel + 0.5, outStorm = r > stormR;
+    if (c.think <= 0 || outStorm || inSea) {
+      c.think = 0.5 + Math.random() * 0.7;
+      if (outStorm || inSea) { c.tx = 0; c.tz = 0; }       // head to centre
+      else {
+        // nearest car to ram, or nearest pickup, else wander toward centre
+        let best = null, bd = 1e9; for (const o of cars) { if (o === c || !o.alive) continue; const d = (o.x - c.x) ** 2 + (o.z - c.z) ** 2; if (d < bd) { bd = d; best = o; } }
+        if (best && bd < 9000) { c.tx = best.x; c.tz = best.z; }
+        else { let pk = null, pd = 1e9; for (const p of pickups) { if (!p.active) continue; const d = (p.x - c.x) ** 2 + (p.z - c.z) ** 2; if (d < pd) { pd = d; pk = p; } } if (pk) { c.tx = pk.x; c.tz = pk.z; } else { c.tx = c.x * 0.3; c.tz = c.z * 0.3; } }
+      }
+    }
+    const des = Math.atan2(c.tx - c.x, c.tz - c.z); let dy = des - c.yaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+    steerIn = Math.max(-1, Math.min(1, dy * 2.2)); boostIn = c.boost > 0.3 && Math.abs(dy) < 0.4;
   } else {
     if (keys["ArrowLeft"] || keys["a"] || touch.left) steerIn -= 1;
     if (keys["ArrowRight"] || keys["d"] || touch.right) steerIn += 1;
-    brakeIn = keys["ArrowDown"] || keys["s"];
-    boostIn = (keys[" "] || touch.boost);
+    brakeIn = keys["ArrowDown"] || keys["s"]; boostIn = keys[" "] || touch.boost; jumpIn = keys["Shift"] || touch.jump;
   }
-  // off-road?
-  const near = nearestIndex(c.x, c.z, c.ni);
-  c.ni = near.i;
-  const offRoad = near.d > HW;
-  // boost meter
-  if (boostIn && c.boost > 0) { c.boost = Math.max(0, c.boost - C.boostUse * dt); c.boosting = true; }
-  else { c.boost = Math.min(1, c.boost + C.boostRegen * dt); c.boosting = false; }
+  const inSea = terrainH(c.x, c.z) < C.waterLevel + 0.3;
+  const outStorm = Math.hypot(c.x, c.z) > stormR;
+  // boost
+  if (boostIn && c.boost > 0) { c.boost = Math.max(0, c.boost - C.boostUse * dt); c.boosting = true; } else { c.boost = Math.min(1, c.boost + C.boostRegen * dt); c.boosting = false; }
   // speed
-  let maxS = offRoad ? C.grassMax : (c.boosting ? C.boostSpeed : C.maxSpeed);
-  if (brakeIn) c.speed -= C.brake * dt;
-  else c.speed += C.accel * dt * (c.boosting ? 1.6 : 1);
-  c.speed -= (offRoad ? C.grassDrag : C.drag) * dt * (c.speed > 0 ? 1 : 0);
+  const maxS = inSea ? 18 : (c.boosting ? C.boostSpeed : C.maxSpeed);
+  if (brakeIn) c.speed -= C.brake * dt; else c.speed += C.accel * dt * (c.boosting ? 1.6 : 1);
+  c.speed -= (inSea ? 40 : C.drag) * dt * (c.speed > 0 ? 1 : 0);
   c.speed = Math.max(0, Math.min(c.speed, maxS));
-  // steering (more responsive at speed, some at low speed)
-  const steerAuth = 0.4 + 0.6 * Math.min(1, c.speed / C.maxSpeed);
-  c.yaw += steerIn * C.steer * steerAuth * dt;
-  // move along heading
-  c.x += Math.sin(c.yaw) * c.speed * dt;
-  c.z += Math.cos(c.yaw) * c.speed * dt;
-  // boost pads
-  for (const pad of pads) { const d = (pad.position.x - c.x) ** 2 + (pad.position.z - c.z) ** 2; if (d < 64) c.boost = Math.min(1, c.boost + C.boostPadGain * dt * 6); }
-  // lap detection via wrap
-  if (c.lastNi > NPTS * 0.78 && c.ni < NPTS * 0.22) { c.lap++; if (c.lap >= LAPS && !finished.includes(c)) finished.push(c); }
-  else if (c.lastNi < NPTS * 0.22 && c.ni > NPTS * 0.78) { c.lap = Math.max(0, c.lap - 1); }
-  c.lastNi = c.ni;
-  c.prog = c.lap + c.ni / NPTS;
+  // steer (needs grounding-ish; allow some air steer)
+  const auth = (0.4 + 0.6 * Math.min(1, c.speed / C.maxSpeed)) * (c.grounded ? 1 : 0.5);
+  c.yaw += steerIn * C.steer * auth * dt;
+  // horizontal move
+  c.x += Math.sin(c.yaw) * c.speed * dt; c.z += Math.cos(c.yaw) * c.speed * dt;
+  // vertical: terrain follow + jump + gravity
+  const groundY = terrainH(c.x, c.z) + C.ride;
+  if (jumpIn && c.grounded) { c.vy = C.jumpV; c.grounded = false; }
+  if (!c.grounded) { c.vy -= C.grav * dt; c.y += c.vy * dt; if (c.y <= groundY) { c.y = groundY; c.vy = 0; c.grounded = true; } }
+  else { if (c.y < groundY - 0.2) { /* climbed */ c.y = groundY; } else if (c.y > groundY + 0.6) { c.grounded = false; } else c.y = groundY; }
+  // damage: storm + sea
+  if (outStorm) c.hp -= C.stormDmg * dt;
+  if (inSea) c.hp -= C.seaDmg * dt;
+  if (c.hit > 0) c.hit -= dt;
+  // pickups
+  for (const p of pickups) { if (!p.active) continue; if ((p.x - c.x) ** 2 + (p.z - c.z) ** 2 < 36) { if (p.type === "repair") c.hp = Math.min(100, c.hp + 35); else c.boost = 1; p.active = false; p.respawn = 8; p.mesh.visible = false; } }
   // place mesh
-  c.mesh.position.set(c.x, 0, c.z);
-  c.mesh.rotation.y = c.yaw;
-  c.mesh.children[0].rotation.z = -steerIn * 0.05; // slight body lean
+  c.mesh.position.set(c.x, c.y - C.ride, c.z); c.mesh.rotation.y = c.yaw;
+  c.mesh.children[0].rotation.z = -steerIn * 0.05;
 }
 
-// ---- main step (sim) -------------------------------------------
+// ---- collisions (Rocket-League-ish bump + ram damage) ----------
+function collisions(dt) {
+  for (let i = 0; i < cars.length; i++) { const a = cars[i]; if (!a.alive) continue;
+    for (let j = i + 1; j < cars.length; j++) { const b = cars[j]; if (!b.alive) continue;
+      const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1, minD = 5.2;
+      if (d < minD) {
+        const nx = dx / d, nz = dz / d;
+        const aInto = Math.max(0, a.speed * (Math.sin(a.yaw) * nx + Math.cos(a.yaw) * nz));
+        const bInto = Math.max(0, b.speed * (-(Math.sin(b.yaw) * nx + Math.cos(b.yaw) * nz)));
+        const bb = (a.boosting ? 1.5 : 1), ba = (b.boosting ? 1.5 : 1);
+        if (aInto * bb > 2 && b.hit <= 0) { b.hp -= aInto * bb * C.ramK; b.hit = 0.45; }
+        if (bInto * ba > 2 && a.hit <= 0) { a.hp -= bInto * ba * C.ramK; a.hit = 0.45; }
+        // separate + knockback
+        const ov = minD - d; a.x -= nx * ov / 2; a.z -= nz * ov / 2; b.x += nx * ov / 2; b.z += nz * ov / 2;
+        a.speed *= 0.8; b.speed *= 0.8;
+        a.x -= nx * aInto * C.knock * dt; a.z -= nz * aInto * C.knock * dt;
+        b.x += nx * aInto * C.knock * dt; b.z += nz * aInto * C.knock * dt;
+      }
+    }
+  }
+}
+
+// ---- step ------------------------------------------------------
 function step(dt) {
-  for (const c of cars) updateCar(c, dt);
-  // positions by progress
-  const ranked = cars.slice().sort((a, b) => b.prog - a.prog);
-  player.position = ranked.indexOf(player) + 1;
-  // chase cam
-  const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
-  const camPos = new THREE.Vector3(player.x - fx * C.camDist, C.camHeight, player.z - fz * C.camDist);
-  cam.position.lerp(camPos, Math.min(1, dt * 4));
-  cam.lookAt(player.x + fx * 6, 1.5, player.z + fz * 6);
-  // finish
-  if (player.lap >= LAPS && started) endRace();
-  RACER.player = { lap: player.lap, ni: player.ni, pos: player.position, speed: Math.round(player.speed) };
+  stormT += dt;
+  const frac = Math.min(1, stormT / C.stormSec);
+  stormR = R + (C.stormMin - R) * frac;
+  for (const c of cars) if (c.alive) updateCar(c, dt);
+  collisions(dt);
+  // pickup respawns + spin
+  for (const p of pickups) { if (!p.active) { p.respawn -= dt; if (p.respawn <= 0) { p.active = true; p.mesh.visible = true; } } else p.mesh.rotation.y += dt * 2; }
+  // eliminations
+  for (const c of cars) if (c.alive && c.hp <= 0) { c.alive = false; c.mesh.visible = false; if (c.id === 0) placement = alive; alive--; }
+  alive = cars.filter(c => c.alive).length;
+  // storm visual
+  if (stormMesh) { stormMesh.scale.set(stormR, 1, stormR); }
+  // camera (chase)
+  if (player) {
+    const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw);
+    const want = new THREE.Vector3(player.x - fx * C.camDist, player.y + C.camHeight, player.z - fz * C.camDist);
+    const grd = terrainH(want.x, want.z) + 3; if (want.y < grd) want.y = grd;
+    cam.position.lerp(want, Math.min(1, dt * 4));
+    cam.lookAt(player.x + fx * 6, player.y + 1.5, player.z + fz * 6);
+  }
+  // win/lose
+  if (!over) {
+    if (!player.alive) endGame(false);
+    else if (alive <= 1) { placement = 1; endGame(true); }
+  }
+  RACER.state = { alive, stormR: Math.round(stormR), playerHp: Math.round(player.hp), playerBoost: +player.boost.toFixed(2), playerY: +player.y.toFixed(1), speed: Math.round(player.speed) };
 }
 
-// ---- HUD / lifecycle -------------------------------------------
+// ---- HUD / lifecycle ------------------------------------------
 const $ = id => document.getElementById(id);
-function syncHud() {
-  $("pos").textContent = player.position || 1;
-  $("lap").textContent = Math.min(LAPS, player.lap + 1);
-  $("spd").textContent = Math.round(player.speed);
-  $("boostfill").style.width = (100 * player.boost) + "%";
-}
-function endRace() {
-  if (!started) return; started = false;
-  // ensure player recorded
-  if (!finished.includes(player)) finished.push(player);
-  const place = finished.indexOf(player) + 1;
-  $("resultTitle").textContent = place === 1 ? "P1 — you won!" : "Finished P" + place;
-  $("resultBody").innerHTML = place === 1 ? "First across the line. The Capybara nods, almost." : "You placed <b>" + place + "</b> of 4. The Capybara remains unmoved.";
-  $("resultOverlay").classList.add("show");
-}
-function startRace() { spawnCars(); started = true; clock.getDelta(); }
+function syncHud() { $("alive").textContent = alive; $("storm").textContent = stormT >= C.stormSec ? "final" : Math.max(0, Math.ceil(C.stormSec - stormT)) + "s"; $("spd").textContent = Math.round(player.speed); $("hpfill").style.width = Math.max(0, player.hp) + "%"; $("boostfill").style.width = (100 * player.boost) + "%"; }
+function endGame(won) { if (over) return; over = true; started = false; const place = won ? 1 : (placement || alive + 1); $("resultTitle").textContent = won ? "#1 — last truck standing!" : "Wrecked — #" + place; $("resultBody").innerHTML = won ? "You took the island. The Capybara nods, almost." : "You placed <b>#" + place + "</b> of " + NCARS + ". The Capybara remains unmoved."; $("resultOverlay").classList.add("show"); }
+function startGame() { spawnCars(); spawnPickups(); stormR = R; stormT = 0; started = true; over = false; clock.getDelta(); }
 
 // ---- boot ------------------------------------------------------
-function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+function resize() { renderer.setSize(innerWidth, innerHeight); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); }
 function boot() {
   try {
     renderer = new THREE.WebGLRenderer({ canvas: $("cv"), antialias: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
-    scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b1024); scene.fog = new THREE.Fog(0x0b1024, 120, 320);
-    cam = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 1000); cam.position.set(0, 20, -30);
-    scene.add(new THREE.AmbientLight(0x8090c0, 0.7));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.1); sun.position.set(60, 120, 40); scene.add(sun);
-    // ground
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: 0x0d1326 }));
-    ground.rotation.x = -Math.PI / 2; ground.position.y = -0.05; scene.add(ground);
+    scene = new THREE.Scene(); scene.background = new THREE.Color(0x141a33); scene.fog = new THREE.Fog(0x141a33, 220, 620);
+    cam = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, 0.1, 2000); cam.position.set(0, 40, -60);
+    scene.add(new THREE.AmbientLight(0x90a0d0, 0.7));
+    const sun = new THREE.DirectionalLight(0xfff2e0, 1.15); sun.position.set(120, 200, 80); scene.add(sun);
     clock = new THREE.Clock();
-    buildTrack(); spawnCars();
+    buildTerrain(); spawnCars(); spawnPickups();
     addEventListener("resize", resize);
-    addEventListener("keydown", e => { keys[e.key] = true; if (e.key === " ") e.preventDefault(); });
+    addEventListener("keydown", e => { keys[e.key] = true; if (e.key === " " || e.key === "Shift") e.preventDefault(); });
     addEventListener("keyup", e => { keys[e.key] = false; });
-    // touch controls
     if ("ontouchstart" in window || navigator.maxTouchPoints) document.body.classList.add("touch");
     const bind = (el, k) => { const d = ev => { ev.preventDefault(); touch[k] = true; }, u = ev => { ev.preventDefault(); touch[k] = false; }; el.addEventListener("pointerdown", d); el.addEventListener("pointerup", u); el.addEventListener("pointerleave", u); };
-    bind($("tl"), "left"); bind($("tr"), "right"); bind($("tb"), "boost");
-    $("startBtn").onclick = () => { $("menu").classList.remove("show"); startRace(); };
-    $("resultBtn").onclick = () => { $("resultOverlay").classList.remove("show"); startRace(); };
+    bind($("tl"), "left"); bind($("tr"), "right"); bind($("tboost"), "boost"); bind($("tjump"), "jump");
+    $("startBtn").onclick = () => { $("menu").classList.remove("show"); startGame(); };
+    $("resultBtn").onclick = () => { $("resultOverlay").classList.remove("show"); startGame(); };
     RACER.step = step; RACER.ready = true;
     renderer.setAnimationLoop(loop);
   } catch (e) { $("err").textContent = "3D init error: " + e.message; RACER.error = e.message; }
 }
-function loop() {
-  const dt = Math.min(0.05, clock ? clock.getDelta() : 0.016);
-  if (started) { step(dt); syncHud(); }
-  renderer.render(scene, cam);
-}
+function loop() { const dt = Math.min(0.05, clock ? clock.getDelta() : 0.016); if (started && !over) { step(dt); syncHud(); } renderer.render(scene, cam); }
 boot();
 </script>
 </body>
