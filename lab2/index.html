@@ -3,29 +3,30 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>HOLDOUT — base-building battle royale</title>
+<title>HOLDOUT — build &amp; defend</title>
 <style>
-  :root{--bg0:#05060f;--bg1:#0b1024;--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--scrap:#ffd166;--zone:#ff6b6b;--line:#233056;--panel:rgba(12,18,40,0.92);}
+  :root{--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--supply:#ffd166;--foe:#ff6b6b;--line:#233056;--panel:rgba(12,18,40,0.92);}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;min-height:100%;overflow:hidden;background:radial-gradient(120% 120% at 50% 0%,var(--bg1),var(--bg0));color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;user-select:none;touch-action:none;}
+  html,body{margin:0;min-height:100%;overflow:hidden;background:radial-gradient(120% 120% at 50% 0%,#0b1024,#05060f);color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;user-select:none;touch-action:none;}
   #app{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;gap:8px;padding:10px;}
   #hud{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:center;font-variant-numeric:tabular-nums;}
   .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 13px;font-size:14px;display:flex;align-items:center;gap:7px;}
   .pill .label{color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;}
-  .pill.scrap{border-color:var(--scrap);} .pill.scrap b{color:var(--scrap);}
-  #banner{color:var(--muted);font-size:13px;min-height:18px;text-align:center;}
+  .pill.supply{border-color:var(--supply);} .pill.supply b{color:var(--supply);}
+  .pill.core{border-color:var(--you);} .pill.core b{color:var(--you);}
+  #banner{color:var(--muted);font-size:13px;min-height:18px;text-align:center;max-width:760px;}
   #banner b{color:var(--ink);}
   canvas{display:block;touch-action:none;border-radius:12px;border:1px solid var(--line);background:#0a1020;}
-  #deck{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
-  .tool{background:#111a38;border:1px solid var(--line);border-radius:11px;padding:7px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:96px;}
-  .tool .tn{font-weight:700;font-size:13px;} .tool .tc{font-size:11px;color:var(--scrap);} .tool .td{font-size:10px;color:var(--muted);}
+  #deck{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;}
+  .tool{background:#111a38;border:1px solid var(--line);border-radius:11px;padding:7px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:84px;}
+  .tool .tn{font-weight:700;font-size:13px;} .tool .tc{font-size:11px;color:var(--supply);} .tool .td{font-size:10px;color:var(--muted);}
   .tool.sel{border-color:var(--you);background:#14224a;box-shadow:0 0 14px rgba(54,226,255,.3);}
   .tool.dis{opacity:.4;}
   button{font:inherit;cursor:pointer;border-radius:11px;border:1px solid var(--line);background:#131c3c;color:var(--ink);padding:9px 16px;font-size:14px;}
   .btn-primary{background:linear-gradient(180deg,#1ea7c4,#1577a8);border-color:#36e2ff;font-weight:700;}
   .overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,14,.74);backdrop-filter:blur(3px);z-index:9;padding:16px;}
   .overlay.show{display:grid;}
-  .card{width:min(560px,94vw);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.6);}
+  .card{width:min(580px,94vw);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.6);}
   .card h1{margin:0 0 4px;font-size:30px;letter-spacing:-.5px;}
   .card .tag{color:var(--you);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 12px;}
   .card p{color:var(--muted);line-height:1.55;margin:0 0 12px;font-size:15px;}
@@ -37,25 +38,24 @@
 <body>
 <div id="app">
   <div id="hud">
-    <div class="pill scrap"><span class="label">Scrap</span> <b id="scrap">0</b></div>
-    <div class="pill"><span class="label">Cores left</span> <b id="cores">3</b></div>
-    <div class="pill" style="border-color:var(--zone)"><span class="label">Zone</span> <b id="zoneT">open</b></div>
+    <div class="pill supply"><span class="label">Supply</span> <b id="supply">0</b></div>
+    <div class="pill core"><span class="label">Core</span> <b id="core">20</b></div>
+    <div class="pill"><span class="label">Wave</span> <b id="wave">0</b><span style="color:var(--muted)">/8</span></div>
   </div>
   <div id="banner"></div>
   <canvas id="cv"></canvas>
   <div id="deck"></div>
-  <div class="row" style="justify-content:center"><button id="newBtn">New match</button></div>
 </div>
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">City-builder &times; battle royale</p>
+    <p class="tag">City-builder &times; tower-defense &middot; build &amp; defend</p>
     <h1>HOLDOUT</h1>
-    <p>Three rival kitchens, one shrinking lot. Spend <b>scrap</b> to build <b>collectors</b> (income) and <b>turrets</b> (auto-fire at the nearest enemy build). Smash the other <b>cores</b> while the <b>zone</b> closes in. Last core standing wins.</p>
+    <p>Defend your <b>core</b> against eight escalating waves that march in from the right. Spend <b>supply</b> to build <b>collectors</b> (income), <b>walls</b> (block &amp; reroute), and <b>turrets</b> (auto-fire). The structure that makes it deep: <b>layout matters</b> &mdash; wall the raiders into a long maze and let your turrets shred them.</p>
     <ul>
-      <li><b>Build:</b> pick a tool, click an empty tile inside the zone. Turrets fight on their own &mdash; no twitch, all placement.</li>
-      <li><b>Economy vs army:</b> rush turrets to attack, or bank collectors for a bigger push later?</li>
-      <li><b>Mind the zone:</b> anything left outside it decays. The closing lot forces everyone together.</li>
+      <li><b>Build:</b> pick a tool, click a tile. Enemies path AROUND your walls to the core &mdash; so a clever maze buys your turrets time.</li>
+      <li><b>Economy vs. defense:</b> bank collectors early, but don't get caught thin when the wave hits.</li>
+      <li>You can't fully wall them out &mdash; if sealed, raiders smash through walls. Leave a kill-corridor, not a fortress.</li>
     </ul>
     <div class="row"><button class="btn-primary" id="startBtn">Break ground</button></div>
   </div>
@@ -63,7 +63,7 @@
 
 <div class="overlay" id="resultOverlay">
   <div class="card">
-    <h1 id="resultTitle">Match over</h1>
+    <h1 id="resultTitle">Holdout over</h1>
     <p id="resultBody"></p>
     <div class="row"><button class="btn-primary" id="resultBtn">Rebuild</button></div>
   </div>
@@ -72,221 +72,208 @@
 <script>
 "use strict";
 /* ============================================================
-   HOLDOUT — city-builder x battle royale (real-time, no twitch).
-   3 factions; each has a CORE. Spend scrap to build collectors
-   (income) + turrets (auto-fire nearest enemy building). A safe
-   ZONE shrinks; anything outside decays. Destroy a faction's
-   core to eliminate it; last core standing wins. You are 0.
+   HOLDOUT (reworked) — build & defend city-builder × TD.
+   Dropped the awkward battle-royale zone. Now: protect a CORE
+   from escalating waves that PATH (BFS) around your walls.
+   Layout (maze) + economy (collectors) + turret coverage are
+   the real decisions. Survive 8 waves. Single-player, real-time,
+   no twitch (placement only).
    ============================================================ */
-
-let cv, ctx, DPR = 1;
-let GX = 15, GY = 11, CW = 36, OX = 6, OY = 6;
-const COLORS = ["#36e2ff", "#ff6b6b", "#ffd166"];
-const NF = 3;
+let GX = 18, GY = 12, CW = 38, OX = 6, OY = 6;
+let cv, ctx;
 const DEF = {
-  core: { hp: 44 },
-  collector: { cost: 4, hp: 9, income: 0.55 },
-  turret: { cost: 6, hp: 13, range: 3.2, dmg: 3.2, cool: 0.9 },
+  collector: { cost: 6, hp: 10, income: 0.9 },
+  wall: { cost: 2, hp: 16 },
+  turret: { cost: 9, hp: 14, range: 3.3, dmg: 7, cool: 0.7 },
 };
-const CFG = { incomeBase: 0.5, startScrap: 8, shrinkSec: 75, zoneMargin: 2, zoneDmg: 5 };
+const CFG = { coreHP: 20, startSupply: 14, incomeBase: 0.7, prepSec: 12, waves: 8 };
+const CORE = { gx: 2, gy: 6 };
 
-const G = { phase: "menu", b: [], scrap: [0, 0, 0], t: 0, zone: null, tool: "collector", winner: -1, fx: [], over: false };
+const G = { phase: "menu", build: [], enemies: [], supply: 0, coreHP: 0, wave: 0, waveTimer: 0, spawnQueue: [], spawnT: 0, tool: "collector", dist: null, fx: [], over: false, win: false };
 let nextId = 1;
 
 const inb = (gx, gy) => gx >= 0 && gx < GX && gy >= 0 && gy < GY;
-const at = (gx, gy) => G.b.find(x => x.gx === gx && x.gy === gy);
-const coreOf = f => G.b.find(x => x.faction === f && x.type === "core");
-const aliveFactions = () => [0, 1, 2].filter(f => coreOf(f));
-function inZone(gx, gy) { const z = G.zone; return gx >= z.x0 && gx <= z.x1 && gy >= z.y0 && gy <= z.y1; }
+const at = (gx, gy) => G.build.find(b => b.gx === gx && b.gy === gy);
+const isWall = (gx, gy) => { const b = at(gx, gy); return b && b.type === "wall"; };
+const isCore = (gx, gy) => gx === CORE.gx && gy === CORE.gy;
+const buildable = (gx, gy) => inb(gx, gy) && !at(gx, gy) && !isCore(gx, gy) && gx < GX - 1; // can't build on spawn column
 
-// ---- build -----------------------------------------------------
-function canPlace(f, gx, gy) { return inb(gx, gy) && !at(gx, gy) && inZone(gx, gy); }
-function place(f, type, gx, gy) {
-  const d = DEF[type]; if (G.scrap[f] < d.cost) return false;
-  if (!canPlace(f, gx, gy)) return false;
-  G.scrap[f] -= d.cost;
-  G.b.push({ id: nextId++, faction: f, type, gx, gy, hp: d.hp, maxhp: d.hp, cool: 0 });
+// ---- BFS distance field from core (around walls) ---------------
+function computeDist() {
+  const N = GX * GY, d = new Int16Array(N).fill(-1), q = [];
+  const ci = CORE.gy * GX + CORE.gx; d[ci] = 0; q.push(ci);
+  let h = 0;
+  while (h < q.length) {
+    const i = q[h++], gx = i % GX, gy = (i / GX) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = gx + dx, ny = gy + dy; if (!inb(nx, ny)) continue;
+      const j = ny * GX + nx; if (d[j] !== -1) continue;
+      if (isWall(nx, ny)) continue;            // walls block the path
+      d[j] = d[i] + 1; q.push(j);
+    }
+  }
+  G.dist = d;
+}
+function distAt(gx, gy) { return inb(gx, gy) ? G.dist[gy * GX + gx] : -1; }
+
+// ---- build / waves ---------------------------------------------
+function place(type, gx, gy) {
+  const def = DEF[type]; if (!def || G.supply < def.cost || !buildable(gx, gy)) return false;
+  G.supply -= def.cost;
+  G.build.push({ id: nextId++, type, gx, gy, hp: def.hp, maxhp: def.hp, cool: 0 });
+  if (type === "wall") { computeDist(); if (pathBlocked()) { /* undo seal */ G.build.pop(); G.supply += def.cost; computeDist(); return false; } }
   return true;
+}
+function pathBlocked() { // any reachable spawn? (ensure raiders can always path in)
+  for (let gy = 0; gy < GY; gy++) if (distAt(GX - 1, gy) >= 0) return false;
+  return true;
+}
+function startWave() {
+  G.wave++;
+  const n = 3 + G.wave * 2, hp = 8 + G.wave * 5;
+  G.spawnQueue = []; for (let k = 0; k < n; k++) G.spawnQueue.push({ hp, delay: k * 0.5 });
+  G.spawnT = 0; G.waveActive = true;
 }
 
 // ---- simulation ------------------------------------------------
 function step(dt) {
-  G.t += dt;
-  // zone shrink (rect closing toward center)
-  const frac = Math.min(1, G.t / CFG.shrinkSec);
-  const maxIn = Math.floor(Math.min(GX, GY) / 2) - 1;
-  const inset = Math.round(maxIn * frac);
-  G.zone = { x0: inset, y0: inset, x1: GX - 1 - inset, y1: GY - 1 - inset };
   // income
-  const coll = [0, 0, 0]; for (const x of G.b) if (x.type === "collector") coll[x.faction]++;
-  for (let f = 0; f < NF; f++) if (coreOf(f)) G.scrap[f] += (CFG.incomeBase + coll[f] * DEF.collector.income) * dt;
-  // turret fire
-  for (const t of G.b) {
-    if (t.type !== "turret") continue;
-    t.cool -= dt; if (t.cool > 0) continue;
+  let coll = 0; for (const b of G.build) if (b.type === "collector") coll++;
+  G.supply += (CFG.incomeBase + coll * DEF.collector.income) * dt;
+  // wave flow: prep timer -> spawn wave; when cleared -> next prep
+  if (!G.waveActive) {
+    G.waveTimer -= dt;
+    if (G.waveTimer <= 0 && G.wave < CFG.waves) startWave();
+  } else {
+    G.spawnT += dt;
+    while (G.spawnQueue.length && G.spawnT >= G.spawnQueue[0].delay) {
+      const s = G.spawnQueue.shift();
+      const gy = (Math.random() * GY) | 0;
+      G.enemies.push({ id: nextId++, x: GX - 1, y: gy, hp: s.hp, maxhp: s.hp, speed: 1.7 });
+    }
+    if (G.spawnQueue.length === 0 && G.enemies.length === 0) { // wave cleared
+      G.waveActive = false; G.waveTimer = CFG.prepSec;
+      if (G.wave >= CFG.waves) return endGame(true);
+    }
+  }
+  // enemies move along dist field toward core (around walls); attack walls if sealed in front
+  for (const e of G.enemies) {
+    const gx = Math.round(e.x), gy = Math.round(e.y), myd = distAt(gx, gy);
+    // pick best neighbor (lowest dist)
+    let best = null, bd = myd;
+    for (const [dx, dy] of [[-1, 0], [0, 1], [0, -1], [1, 0]]) { const nx = gx + dx, ny = gy + dy; if (!inb(nx, ny)) continue; const dd = distAt(nx, ny); if (dd >= 0 && (best === null || dd < bd)) { bd = dd; best = { x: nx, y: ny }; } }
+    if (gx === CORE.gx && gy === CORE.gy) { G.coreHP -= 2; e.hp = 0; spark(e.x, e.y, "#ff6b6b", 8); continue; }
+    if (best) { // move toward best neighbor center
+      const tx = best.x, ty = best.y, ddx = tx - e.x, ddy = ty - e.y, d = Math.hypot(ddx, ddy) || 1;
+      e.x += (ddx / d) * e.speed * dt; e.y += (ddy / d) * e.speed * dt;
+    } else { // sealed: chew the wall nearest the core
+      let w = null, wb = 1e9; for (const [dx, dy] of [[-1, 0], [0, 1], [0, -1], [1, 0]]) { const b = at(gx + dx, gy + dy); if (b && b.type === "wall") { w = b; } }
+      if (w) { w.hp -= 14 * dt; spark(gx, gy, "#9aa", 4); if (w.hp <= 0) { G.build = G.build.filter(x => x !== w); computeDist(); } }
+    }
+  }
+  // turrets fire
+  for (const t of G.build) {
+    if (t.type !== "turret") continue; t.cool -= dt; if (t.cool > 0) continue;
     let tgt = null, bd = DEF.turret.range * DEF.turret.range;
-    for (const o of G.b) { if (o.faction === t.faction) continue; const dd = (o.gx - t.gx) ** 2 + (o.gy - t.gy) ** 2; if (dd <= bd) { bd = dd; tgt = o; } }
-    if (tgt) { tgt.hp -= DEF.turret.dmg; t.cool = DEF.turret.cool; spark(tgt.gx, tgt.gy, COLORS[t.faction]); }
+    for (const e of G.enemies) { const dd = (e.x - t.gx) ** 2 + (e.y - t.gy) ** 2; if (dd <= bd) { bd = dd; tgt = e; } }
+    if (tgt) { tgt.hp -= DEF.turret.dmg; t.cool = DEF.turret.cool; t.shotAt = { x: tgt.x, y: tgt.y, t: 0.08 }; spark(tgt.x, tgt.y, "#36e2ff", 3); }
   }
-  // zone decay — cores are immune (fixed bases can't flee), so the zone
-  // pressures WHERE you can fight rather than auto-killing every core
-  for (const x of G.b) if (x.type !== "core" && !inZone(x.gx, x.gy)) x.hp -= CFG.zoneDmg * dt;
-  // remove dead; eliminate factions whose core died
-  const deadCores = G.b.filter(x => x.type === "core" && x.hp <= 0).map(x => x.faction);
-  G.b = G.b.filter(x => x.hp > 0);
-  for (const f of deadCores) { G.b = G.b.filter(x => x.faction !== f); burstFaction(f); }
-  // AI
-  for (let f = 1; f < NF; f++) if (coreOf(f)) aiBuild(f, dt);
-  // win
-  const alive = aliveFactions();
-  if (alive.length <= 1) endMatch(alive.length ? alive[0] : -1);
-  else if (!coreOf(0)) endMatch(alive[0]); // player out (match decided for the player)
-  else if (G.t >= CFG.shrinkSec + 8) { // time's up: most core HP wins (no stalemate/draw)
-    let best = alive[0], bh = -1; for (const f of alive) { const c = coreOf(f); if (c && c.hp > bh) { bh = c.hp; best = f; } } endMatch(best);
-  }
-}
-
-function aiBuild(f, dt) {
-  // throttle build attempts
-  G._aiTimer = G._aiTimer || {}; G._aiTimer[f] = (G._aiTimer[f] || 0) - dt;
-  if (G._aiTimer[f] > 0) return; G._aiTimer[f] = 0.8 + Math.random() * 0.7;
-  const coll = G.b.filter(x => x.faction === f && x.type === "collector").length;
-  const core = coreOf(f); if (!core) return;
-  // economy first, then turrets pushing toward nearest enemy build
-  if (coll < 3 && G.scrap[f] >= DEF.collector.cost) { placeNear(f, "collector", core.gx, core.gy); return; }
-  if (G.scrap[f] >= DEF.turret.cost) {
-    // find nearest enemy building
-    let en = null, bd = 1e9; for (const o of G.b) { if (o.faction === f) continue; const dd = (o.gx - core.gx) ** 2 + (o.gy - core.gy) ** 2; if (dd < bd) { bd = dd; en = o; } }
-    if (en) placeToward(f, "turret", core, en); else placeNear(f, "turret", core.gx, core.gy);
-  }
-}
-function placeNear(f, type, gx, gy) {
-  for (let r = 1; r <= 3; r++) for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
-    const x = gx + dx, y = gy + dy; if (canPlace(f, x, y)) { if (place(f, type, x, y)) return true; }
-  }
-  return false;
-}
-function placeToward(f, type, core, en) {
-  // frontier creep: among empty in-zone cells adjacent (<=2) to one of this
-  // faction's own buildings, pick the one closest to the enemy — so turrets
-  // advance toward the enemy over time instead of clustering on the core.
-  const own = G.b.filter(b => b.faction === f);
-  let best = null, bs = 1e9;
-  for (let x = G.zone.x0; x <= G.zone.x1; x++) for (let y = G.zone.y0; y <= G.zone.y1; y++) {
-    if (!canPlace(f, x, y)) continue;
-    let near = false; for (const b of own) { if (Math.abs(b.gx - x) <= 2 && Math.abs(b.gy - y) <= 2) { near = true; break; } }
-    if (!near) continue;
-    const dEn = (x - en.gx) ** 2 + (y - en.gy) ** 2;
-    if (dEn < bs) { bs = dEn; best = { x, y }; }
-  }
-  if (best) return place(f, type, best.x, best.y);
-  return placeNear(f, type, core.gx, core.gy);
+  for (const t of G.build) if (t.shotAt) { t.shotAt.t -= dt; if (t.shotAt.t <= 0) t.shotAt = null; }
+  // remove dead enemies (reward supply)
+  G.enemies = G.enemies.filter(e => { if (e.hp <= 0) { if (e.maxhp > 0 && !e._counted) G.supply += 1; return false; } return true; });
+  // lose check
+  if (G.coreHP <= 0) return endGame(false);
 }
 
 // ---- fx --------------------------------------------------------
-function spark(gx, gy, col) { const x = cx(gx), y = cy(gy); for (let k = 0; k < 4; k++) { const a = Math.random() * 6.28, s = Math.random() * 30; G.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: 3, r: 1.5, col }); } }
-function burstFaction(f) { for (const dummy of [0]) {} }
+function spark(gx, gy, col, n) { const x = cx(gx), y = cy(gy); for (let k = 0; k < n; k++) { const a = Math.random() * 6.28, s = Math.random() * 50; G.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: 2.4, r: 1.5, col }); } }
 
-// ---- sizing ----------------------------------------------------
+// ---- sizing / render ------------------------------------------
 function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
-  const maxW = Math.min(window.innerWidth - 24, 720), maxH = window.innerHeight - 200;
-  CW = Math.max(20, Math.floor(Math.min(maxW / GX, maxH / GY)));
-  const w = CW * GX + 2 * OX, h = CW * GY + 2 * OY;
-  cv.width = Math.floor(w * DPR); cv.height = Math.floor(h * DPR);
-  cv.style.width = w + "px"; cv.style.height = h + "px";
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const maxW = Math.min(window.innerWidth - 24, 760), maxH = window.innerHeight - 210;
+  CW = Math.max(22, Math.floor(Math.min(maxW / GX, maxH / GY)));
+  cv.width = (CW * GX + 2 * OX); cv.height = (CW * GY + 2 * OY);
+  cv.style.width = cv.width + "px"; cv.style.height = cv.height + "px";
 }
 window.addEventListener("resize", () => { if (G.phase !== "menu") resize(); });
 const cx = gx => OX + gx * CW + CW / 2, cy = gy => OY + gy * CW + CW / 2;
 
-// ---- input -----------------------------------------------------
-function cellAt(px, py) { return { gx: ((px - OX) / CW) | 0, gy: ((py - OY) / CW) | 0 }; }
-function evtPos(e) { const r = cv.getBoundingClientRect(); const p = (e.touches && e.touches[0]) || e; return { x: p.clientX - r.left, y: p.clientY - r.top }; }
-function onDown(e) { if (G.phase !== "play") return; const { x, y } = evtPos(e); const { gx, gy } = cellAt(x, y); place(0, G.tool, gx, gy); render(); }
-
-// ---- render ----------------------------------------------------
 function draw() {
   if (!ctx) return;
-  ctx.clearRect(0, 0, cv.width / DPR, cv.height / DPR);
+  ctx.clearRect(0, 0, cv.width, cv.height);
   if (G.phase === "menu") return;
-  // grid + zone
   for (let gx = 0; gx < GX; gx++) for (let gy = 0; gy < GY; gy++) {
     const x = OX + gx * CW, y = OY + gy * CW;
-    ctx.fillStyle = inZone(gx, gy) ? "#0e1830" : "#221016";
-    ctx.fillRect(x + 1, y + 1, CW - 2, CW - 2);
-    ctx.strokeStyle = "#1a2748"; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, CW, CW);
+    ctx.fillStyle = gx === GX - 1 ? "#241016" : "#0e1830"; ctx.fillRect(x + 1, y + 1, CW - 2, CW - 2);
+    ctx.strokeStyle = "#172445"; ctx.strokeRect(x + 0.5, y + 0.5, CW, CW);
   }
-  // zone border
-  const z = G.zone; ctx.strokeStyle = "rgba(255,107,107,0.8)"; ctx.lineWidth = 2;
-  ctx.strokeRect(OX + z.x0 * CW, OY + z.y0 * CW, (z.x1 - z.x0 + 1) * CW, (z.y1 - z.y0 + 1) * CW);
+  // core
+  const cxp = OX + CORE.gx * CW, cyp = OY + CORE.gy * CW;
+  ctx.fillStyle = "#36e2ff"; roundRect(cxp + 4, cyp + 4, CW - 8, CW - 8, 6); ctx.fill();
+  ctx.fillStyle = "#0b1024"; ctx.beginPath(); ctx.arc(cx(CORE.gx), cy(CORE.gy), CW * 0.18, 0, 6.28); ctx.fill();
+  // build hover
+  if (G.hover && buildable(G.hover.gx, G.hover.gy) && G.supply >= DEF[G.tool].cost) { ctx.strokeStyle = "#36e2ff"; ctx.lineWidth = 2; ctx.strokeRect(OX + G.hover.gx * CW + 2, OY + G.hover.gy * CW + 2, CW - 4, CW - 4); }
   // buildings
-  for (const b of G.b) {
-    const x = OX + b.gx * CW, y = OY + b.gy * CW, col = COLORS[b.faction], pad = CW * 0.16;
-    if (b.type === "core") { ctx.fillStyle = col; roundRect(x + pad * 0.6, y + pad * 0.6, CW - pad * 1.2, CW - pad * 1.2, 5); ctx.fill(); ctx.fillStyle = "#0b1024"; ctx.beginPath(); ctx.arc(cx(b.gx), cy(b.gy), CW * 0.16, 0, 6.28); ctx.fill(); }
-    else if (b.type === "turret") { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx(b.gx), cy(b.gy), CW * 0.3, 0, 6.28); ctx.fill(); ctx.fillStyle = "#0b1024"; ctx.fillRect(cx(b.gx) - 2, y + pad, 4, CW * 0.4); }
-    else { ctx.fillStyle = col + "99"; roundRect(x + pad, y + pad, CW - pad * 2, CW - pad * 2, 4); ctx.fill(); }
-    // hp bar
-    const w = CW - pad * 2, hpf = Math.max(0, b.hp / b.maxhp);
-    if (hpf < 1) { ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(x + pad, y + CW - 6, w, 3); ctx.fillStyle = col; ctx.fillRect(x + pad, y + CW - 6, w * hpf, 3); }
+  for (const b of G.build) {
+    const x = OX + b.gx * CW, y = OY + b.gy * CW, p = CW * 0.16;
+    if (b.type === "wall") { ctx.fillStyle = "#5a6b96"; roundRect(x + p * 0.5, y + p * 0.5, CW - p, CW - p, 3); ctx.fill(); }
+    else if (b.type === "turret") { ctx.fillStyle = "#36e2ff"; ctx.beginPath(); ctx.arc(cx(b.gx), cy(b.gy), CW * 0.3, 0, 6.28); ctx.fill(); ctx.fillStyle = "#0b1024"; ctx.fillRect(cx(b.gx) - 2, y + p, 4, CW * 0.42); if (b.shotAt) { ctx.strokeStyle = "#9affff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx(b.gx), cy(b.gy)); ctx.lineTo(cx(b.shotAt.x), cy(b.shotAt.y)); ctx.stroke(); } }
+    else { ctx.fillStyle = "#ffd16699"; roundRect(x + p, y + p, CW - p * 2, CW - p * 2, 4); ctx.fill(); }
+    const hpf = b.hp / b.maxhp; if (hpf < 1) { ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(x + p, y + CW - 6, CW - p * 2, 3); ctx.fillStyle = "#62f3a8"; ctx.fillRect(x + p, y + CW - 6, (CW - p * 2) * hpf, 3); }
+  }
+  // enemies
+  for (const e of G.enemies) {
+    ctx.fillStyle = "#ff6b6b"; ctx.beginPath(); ctx.arc(cx(e.x), cy(e.y), CW * 0.24, 0, 6.28); ctx.fill();
+    const hpf = e.hp / e.maxhp; ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(cx(e.x) - CW * 0.24, cy(e.y) - CW * 0.34, CW * 0.48, 3); ctx.fillStyle = "#ff9a9a"; ctx.fillRect(cx(e.x) - CW * 0.24, cy(e.y) - CW * 0.34, CW * 0.48 * hpf, 3);
   }
   for (const f of G.fx) { ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.col; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 6.28); ctx.fill(); }
   ctx.globalAlpha = 1;
 }
 function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
-// ---- HUD / deck ------------------------------------------------
+// ---- input -----------------------------------------------------
+function cellAt(px, py) { return { gx: ((px - OX) / CW) | 0, gy: ((py - OY) / CW) | 0 }; }
+function evtPos(e) { const r = cv.getBoundingClientRect(); const p = (e.touches && e.touches[0]) || e; return { x: (p.clientX - r.left) * (cv.width / r.width), y: (p.clientY - r.top) * (cv.height / r.height) }; }
+function onDown(e) { if (G.phase !== "play") return; const { x, y } = evtPos(e); const c = cellAt(x, y); place(G.tool, c.gx, c.gy); }
+function onMove(e) { if (G.phase !== "play") { G.hover = null; return; } const { x, y } = evtPos(e); G.hover = cellAt(x, y); }
+
+// ---- HUD / lifecycle ------------------------------------------
+const $ = id => document.getElementById(id);
 function buildDeck() {
-  const deck = document.getElementById("deck"); deck.innerHTML = "";
-  for (const k of ["collector", "turret"]) {
-    const d = DEF[k], b = document.createElement("div"); b.className = "tool"; b.dataset.k = k;
-    b.innerHTML = '<span class="tn">' + (k === "collector" ? "Collector" : "Turret") + '</span><span class="tc">' + d.cost + ' scrap</span><span class="td">' + (k === "collector" ? "+income" : "auto-fires") + '</span>';
+  const d = $("deck"); d.innerHTML = "";
+  for (const k of ["collector", "wall", "turret"]) {
+    const def = DEF[k], b = document.createElement("div"); b.className = "tool"; b.dataset.k = k;
+    b.innerHTML = '<span class="tn">' + k[0].toUpperCase() + k.slice(1) + '</span><span class="tc">' + def.cost + '</span><span class="td">' + (k === "collector" ? "+income" : k === "wall" ? "block" : "auto-fire") + '</span>';
     b.onclick = () => { G.tool = k; syncHud(); };
-    deck.appendChild(b);
+    d.appendChild(b);
   }
+  const nb = document.createElement("button"); nb.id = "nextBtn"; nb.textContent = "Send next wave"; nb.onclick = () => { if (!G.waveActive && G.wave < CFG.waves) { G.waveTimer = 0; } }; d.appendChild(nb);
 }
 function syncHud() {
-  document.getElementById("scrap").textContent = Math.floor(G.scrap[0]);
-  document.getElementById("cores").textContent = aliveFactions().length;
-  document.getElementById("zoneT").textContent = Math.max(0, Math.ceil(CFG.shrinkSec - G.t)) + "s";
-  for (const el of document.getElementById("deck").children) { el.classList.toggle("sel", el.dataset.k === G.tool); el.classList.toggle("dis", G.scrap[0] < DEF[el.dataset.k].cost); }
-  document.getElementById("banner").innerHTML = G.phase === "play" ? "Place <b>" + G.tool + "</b> inside the zone &middot; turrets fight on their own." : "";
+  $("supply").textContent = Math.floor(G.supply); $("core").textContent = Math.max(0, G.coreHP); $("wave").textContent = G.wave;
+  for (const el of $("deck").children) if (el.dataset && el.dataset.k) { el.classList.toggle("sel", el.dataset.k === G.tool); el.classList.toggle("dis", G.supply < DEF[el.dataset.k].cost); }
+  if (G.phase === "play") $("banner").innerHTML = G.waveActive ? "<b style='color:var(--foe)'>Wave " + G.wave + " incoming</b> — funnel them past your turrets." : (G.wave >= CFG.waves ? "" : "<b>Prep:</b> build up. Next wave in " + Math.max(0, Math.ceil(G.waveTimer)) + "s (or send it now).");
 }
-function render() { syncHud(); }
-
-// ---- result ----------------------------------------------------
-function endMatch(winner) {
-  if (G.over) return; G.over = true; G.phase = "over"; G.winner = winner;
-  const won = winner === 0;
-  document.getElementById("resultTitle").textContent = won ? "Last core standing!" : "Your core fell";
-  document.getElementById("resultBody").innerHTML = won ? "You outbuilt the lot. The Capybara nods, almost." : "Your kitchen's rubble. The Capybara remains unmoved.";
-  document.getElementById("resultOverlay").classList.add("show");
+function endGame(win) { if (G.over) return; G.over = true; G.win = win; G.phase = "over"; $("resultTitle").textContent = win ? "Held the line!" : "Core destroyed"; $("resultBody").innerHTML = win ? "You survived all " + CFG.waves + " waves. The Capybara nods, almost." : "The raiders broke through on wave " + G.wave + ". The Capybara remains unmoved."; $("resultOverlay").classList.add("show"); }
+function startGame() {
+  resize(); G.build = []; G.enemies = []; G.supply = CFG.startSupply; G.coreHP = CFG.coreHP; G.wave = 0; G.waveActive = false; G.waveTimer = CFG.prepSec; G.spawnQueue = []; G.fx = []; G.over = false; G.win = false; G.tool = "collector"; G.hover = null;
+  computeDist(); G.phase = "play"; last = 0; syncHud();
 }
+window.HOLD = G;
 
 // ---- loop / boot ----------------------------------------------
 let last = 0;
 function loop(ts) {
   if (G.phase === "play") { if (!last) last = ts; let dt = (ts - last) / 1000; last = ts; if (dt > 0.1) dt = 0.1; step(dt); syncHud(); }
-  for (const f of G.fx) { f.x += f.vx * 0.016; f.y += f.vy * 0.016; f.life -= f.decay * 0.016; }
-  G.fx = G.fx.filter(f => f.life > 0);
+  for (const f of G.fx) { f.x += f.vx * 0.016; f.y += f.vy * 0.016; f.life -= f.decay * 0.016; } G.fx = G.fx.filter(f => f.life > 0);
   draw(); requestAnimationFrame(loop);
-}
-function startGame() {
-  resize();
-  G.b = []; G.scrap = [CFG.startScrap, CFG.startScrap, CFG.startScrap]; G.t = 0; G.fx = []; G.over = false; G.winner = -1; G._aiTimer = {};
-  // cores: 3 corners
-  const spots = [[1, GY - 2], [GX - 2, 1], [GX - 2, GY - 2]];
-  for (let f = 0; f < NF; f++) G.b.push({ id: nextId++, faction: f, type: "core", gx: spots[f][0], gy: spots[f][1], hp: DEF.core.hp, maxhp: DEF.core.hp, cool: 0 });
-  G.zone = { x0: 0, y0: 0, x1: GX - 1, y1: GY - 1 };
-  G.phase = "play"; G.tool = "collector"; last = 0; syncHud();
 }
 function boot() {
   cv = document.getElementById("cv"); ctx = cv.getContext("2d");
-  cv.addEventListener("pointerdown", onDown);
+  cv.addEventListener("pointerdown", onDown); cv.addEventListener("pointermove", onMove); cv.addEventListener("pointerleave", () => G.hover = null);
   buildDeck();
-  document.getElementById("startBtn").onclick = () => { document.getElementById("menu").classList.remove("show"); startGame(); };
-  document.getElementById("newBtn").onclick = () => { document.getElementById("menu").classList.add("show"); G.phase = "menu"; };
-  document.getElementById("resultBtn").onclick = () => { document.getElementById("resultOverlay").classList.remove("show"); startGame(); };
+  $("startBtn").onclick = () => { $("menu").classList.remove("show"); startGame(); };
+  $("resultBtn").onclick = () => { $("resultOverlay").classList.remove("show"); startGame(); };
   requestAnimationFrame(loop);
 }
 boot();
