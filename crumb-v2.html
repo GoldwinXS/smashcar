@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>CRUMB ISLAND — car battle royale</title>
+<style>
+  :root{--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--boost:#ffd166;--storm:#b388ff;--line:#233056;--panel:rgba(12,18,40,0.9);}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;overflow:hidden;background:#05060f;color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;user-select:none;touch-action:none;}
+  #cv{position:fixed;inset:0;width:100%;height:100%;display:block;}
+  #hud{position:fixed;top:10px;left:0;right:0;display:flex;gap:9px;justify-content:center;flex-wrap:wrap;pointer-events:none;}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;display:flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums;}
+  .pill .label{color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;}
+  .pill b{color:var(--you);} .pill.storm b{color:var(--storm);}
+  #ups{position:fixed;top:50px;left:10px;display:flex;flex-direction:column;gap:4px;pointer-events:none;}
+  .up{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:12px;display:flex;gap:6px;align-items:center;}
+  .up .d{width:9px;height:9px;border-radius:2px;}
+  #hpwrap{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);width:min(280px,64vw);text-align:center;}
+  #hpbar,#boostbar{height:11px;background:#10182f;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-top:5px;}
+  #hpfill{height:100%;width:100%;background:linear-gradient(90deg,#1577a8,#36e2ff);transition:width .1s;}
+  #boostfill{height:100%;width:0;background:linear-gradient(90deg,#caa233,#ffd166);transition:width .08s;}
+  .lab{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+  #map{position:fixed;top:52px;right:10px;width:150px;height:150px;background:rgba(8,12,28,0.65);border:1px solid var(--line);border-radius:10px;pointer-events:none;}
+  #drophint{position:fixed;top:50%;left:0;right:0;text-align:center;color:var(--you);font-size:20px;font-weight:700;text-shadow:0 2px 12px #000;pointer-events:none;display:none;}
+  .tbtn{position:fixed;bottom:54px;width:78px;height:78px;border-radius:50%;background:var(--panel);border:1px solid var(--line);display:none;align-items:center;justify-content:center;font-size:24px;color:var(--you);}
+  #tl{left:14px;} #tr{left:104px;} #tboost{right:14px;border-color:var(--boost);color:var(--boost);font-size:12px;font-weight:700;} #tjump{right:104px;font-size:12px;font-weight:700;}
+  .touch .tbtn{display:flex;}
+  .overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,14,.8);backdrop-filter:blur(3px);z-index:9;padding:16px;}
+  .overlay.show{display:grid;}
+  .card{width:min(580px,94vw);background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.6);}
+  .card h1{margin:0 0 4px;font-size:30px;letter-spacing:-.5px;}
+  .card .tag{color:var(--you);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 12px;}
+  .card p{color:var(--muted);line-height:1.55;margin:0 0 12px;font-size:15px;}
+  .card ul{color:var(--muted);line-height:1.55;margin:0 0 14px;padding-left:18px;font-size:14px;}
+  .card b{color:var(--ink);}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  button{font:inherit;cursor:pointer;border-radius:11px;border:1px solid var(--line);background:#131c3c;color:var(--ink);padding:11px 20px;font-size:15px;}
+  .btn-primary{background:linear-gradient(180deg,#1ea7c4,#1577a8);border-color:#36e2ff;font-weight:700;}
+  #err{position:fixed;left:10px;bottom:10px;color:#ff8a8a;font-size:12px;max-width:90vw;}
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="hud">
+  <div class="pill"><span class="label">Alive</span> <b id="alive">12</b></div>
+  <div class="pill storm"><span class="label">Storm</span> <b id="storm">—</b></div>
+  <div class="pill"><span class="label">Speed</span> <b id="spd">0</b></div>
+</div>
+<div id="ups"></div>
+<div id="hpwrap"><span class="lab">Hull</span><div id="hpbar"><div id="hpfill"></div></div><span class="lab">Boost</span><div id="boostbar"><div id="boostfill"></div></div></div>
+<canvas id="map" width="150" height="150"></canvas>
+<div id="drophint">Steer your drop — pick a landing spot</div>
+<div class="tbtn" id="tl">&#9664;</div><div class="tbtn" id="tr">&#9654;</div>
+<div class="tbtn" id="tjump">JUMP</div><div class="tbtn" id="tboost">BOOST</div>
+
+<div class="overlay show" id="menu">
+  <div class="card">
+    <p class="tag">Fortnite &times; Rocket League &middot; car battle royale</p>
+    <h1>CRUMB ISLAND</h1>
+    <p>Twelve cat-trucks <b>rocket-drop</b> onto a big hilly island. Steer your fall, land, then loot <b>upgrades</b> that bolt visibly onto your truck &mdash; armor, spikes, turbo, grip. Ram rivals off the cliffs, grab the high ground, and outlast the closing <b>storm</b>. Last truck running wins.</p>
+    <ul>
+      <li><b>Drop:</b> steer with &larr;/&rarr; (or A/D) as you fall; you land where you aim.</li>
+      <li><b>Drive:</b> auto-accelerate, steer, brake &darr;/S, <b>jump</b> Shift off ramps, <b>boost</b> Space.</li>
+      <li><b>Upgrades</b> (cube pickups) stack and show on your truck: <span style="color:#8aa0c8">armor</span> = hull, <span style="color:#ff6b6b">spikes</span> = ram, <span style="color:#ffd166">turbo</span> = speed, <span style="color:#62f3a8">grip</span> = handling. Plus boost/repair/shield/shock orbs.</li>
+    </ul>
+    <div class="row"><button class="btn-primary" id="startBtn">Launch</button></div>
+  </div>
+</div>
+<div class="overlay" id="resultOverlay">
+  <div class="card">
+    <h1 id="resultTitle">Wrecked</h1>
+    <p id="resultBody"></p>
+    <div class="row"><button class="btn-primary" id="resultBtn">Re-drop</button></div>
+  </div>
+</div>
+<div id="err"></div>
+
+<script type="module">
+import * as THREE from "three";
+/* ============================================================
+   CRUMB ISLAND v2 — open-island car battle royale (Three.js).
+   Bigger island + central mountain (verticality), 12 cars,
+   Fortnite-style rocket sky-DROP intro you steer, VISIBLE
+   stacking upgrades (armor/spikes/turbo/grip) + consumable
+   orbs (boost/repair/shield/shock), ram collisions, shrinking
+   storm, jump pads, minimap. Last truck standing.
+   ============================================================ */
+const R = 460, NCARS = 12;
+const BASE = { hull: 120, maxSpeed: 64, accel: 48, steer: 2.3, ramK: 0.5 };
+const C = {
+  boostSpeed: 100, brake: 90, drag: 16, ride: 1.1, grav: 60, jumpV: 26, padV: 40,
+  knock: 1.35, stormDmg: 6, seaDmg: 16, waterLevel: 0.8, boostRegen: 0.16, boostUse: 0.5,
+  camDist: 18, camHeight: 9.5, stormSec: 150, stormMin: 44, shieldTime: 6,
+  shockRadius: 28, shockDmg: 24, glideSpeed: 46, fallSpeed: 22, dropY: 165, dropMax: 12,
+};
+const COLORS = [0x36e2ff, 0xff6b6b, 0xffd166, 0x62f3a8, 0xb388ff, 0xff9b50, 0xff62c8, 0x9affd0, 0xff5d7e, 0x7c8cff, 0xc0ff5a, 0x5af0ff];
+const UPS = { armor: 0x8aa0c8, spikes: 0xff6b6b, turbo: 0xffd166, grip: 0x62f3a8 };
+let renderer, scene, cam, clock, cars = [], pickups = [], jumpPads = [], stormMesh, player, phase = "menu", over = false, alive = 0, placement = 0, dropTimer = 0;
+let stormR = R, stormT = 0, particles = [], mapCtx;
+const keys = {}, touch = { left: false, right: false, boost: false, jump: false };
+const RACER = window.RACER = {};
+
+// ---- heightfield ----------------------------------------------
+function terrainH(x, z) {
+  const r = Math.hypot(x, z), edge = R * 0.80;
+  let land = r < edge ? 1 : Math.max(0, 1 - (r - edge) / (R * 0.27)); land = land * land * (3 - 2 * land);
+  const base = -18 + 24 * land;
+  const mtn = 54 * Math.exp(-(r * r) / 27000);
+  const hills = 12 * Math.sin(x * 0.013) * Math.cos(z * 0.012) + 8 * Math.sin(x * 0.007 + 1.5) * Math.sin(z * 0.009 - 0.7)
+    + 22 * Math.exp(-(((x - 170) ** 2 + (z + 130) ** 2) / 9000))
+    + 20 * Math.exp(-(((x + 200) ** 2 + (z - 150) ** 2) / 11000))
+    + 18 * Math.exp(-(((x + 130) ** 2 + (z + 190) ** 2) / 8500));
+  return base + (hills + mtn) * land;
+}
+RACER.terrainH = terrainH;
+function buildTerrain() {
+  const S = R * 2.5, SEG = 180;
+  const geo = new THREE.PlaneGeometry(S, S, SEG, SEG); geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position, col = [];
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i), h = terrainH(x, z); pos.setY(i, h);
+    let c; if (h < 0.8) c = [0.10, 0.22, 0.42]; else if (h < 3) c = [0.78, 0.70, 0.45]; else if (h < 22) c = [0.20, 0.46, 0.28]; else if (h < 40) c = [0.40, 0.36, 0.30]; else c = [0.86, 0.88, 0.94];
+    col.push(...c);
+  }
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); geo.computeVertexNormals();
+  scene.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })));
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(S * 1.5, S * 1.5), new THREE.MeshStandardMaterial({ color: 0x0a2a4a, transparent: true, opacity: 0.85, roughness: 0.4 }));
+  sea.rotation.x = -Math.PI / 2; sea.position.y = C.waterLevel; scene.add(sea);
+  stormMesh = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 120, 56, 1, true), new THREE.MeshBasicMaterial({ color: 0xb388ff, transparent: true, opacity: 0.16, side: THREE.DoubleSide })); stormMesh.position.y = 45; scene.add(stormMesh);
+  // jump pads
+  const jp = [[40, -60], [-110, 40], [150, -50], [-30, 150], [90, 120], [-180, -90], [220, 30], [0, -200]];
+  for (const [x, z] of jp) { const m = new THREE.Mesh(new THREE.BoxGeometry(13, 1.4, 13), new THREE.MeshStandardMaterial({ color: 0x36e2ff, emissive: 0x0a3a55 })); m.position.set(x, terrainH(x, z) + 0.8, z); scene.add(m); jumpPads.push({ mesh: m, x, z }); }
+  const pg = new THREE.SphereGeometry(0.6, 6, 6);
+  for (let i = 0; i < 180; i++) { const m = new THREE.Mesh(pg, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true })); m.visible = false; scene.add(m); particles.push({ mesh: m, life: 0, vx: 0, vy: 0, vz: 0 }); }
+}
+function emit(x, y, z, color, n, spread, up) { let made = 0; for (const p of particles) { if (p.life > 0) continue; const a = Math.random() * 6.28, s = Math.random() * spread; p.vx = Math.cos(a) * s; p.vz = Math.sin(a) * s; p.vy = (up || 0) + Math.random() * spread * 0.6; p.life = 1; p.mesh.material.color.setHex(color); p.mesh.position.set(x, y, z); p.mesh.visible = true; if (++made >= n) break; } }
+function updateParticles(dt) { for (const p of particles) { if (p.life <= 0) continue; p.life -= dt * 1.6; if (p.life <= 0) { p.mesh.visible = false; continue; } p.vy -= 40 * dt; p.mesh.position.x += p.vx * dt; p.mesh.position.y += p.vy * dt; p.mesh.position.z += p.vz * dt; p.mesh.material.opacity = p.life; const s = 0.4 + p.life * 0.8; p.mesh.scale.set(s, s, s); } }
+
+// ---- cars + upgrades ------------------------------------------
+function makeCar(color) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.5, 5.2), new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 })); body.position.y = 1.0; g.add(body);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 2.2), new THREE.MeshStandardMaterial({ color: 0x0b1024 })); cab.position.set(0, 2.0, -0.2); g.add(cab);
+  const wheels = []; for (const [sx, sz] of [[1.7, 1.8], [-1.7, 1.8], [1.7, -1.8], [-1.7, -1.8]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.6, 10), new THREE.MeshStandardMaterial({ color: 0x111111 })); w.rotation.z = Math.PI / 2; w.position.set(sx, 0.6, sz); g.add(w); wheels.push(w); }
+  const sh = new THREE.Mesh(new THREE.SphereGeometry(3.7, 12, 10), new THREE.MeshBasicMaterial({ color: 0x62f3a8, transparent: true, opacity: 0.22 })); sh.position.y = 1.4; sh.visible = false; g.add(sh);
+  const chute = new THREE.Mesh(new THREE.ConeGeometry(3.6, 3.4, 12), new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.85 })); chute.position.y = 6.5; chute.visible = false; g.add(chute);
+  const parts = new THREE.Group(); g.add(parts);
+  g.userData = { shield: sh, chute, parts, wheels };
+  scene.add(g); return g;
+}
+function recalc(c) { c.maxHull = BASE.hull + c.up.armor * 30; c.maxSpd = BASE.maxSpeed + c.up.turbo * 8; c.accel = BASE.accel + c.up.turbo * 6; c.steerR = BASE.steer + c.up.grip * 0.35; c.ramMult = 1 + c.up.spikes * 0.6; }
+function addUpgradeVisual(c, type) {
+  const parts = c.mesh.userData.parts, n = c.up[type];
+  if (type === "armor") { const m = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.45, 5.4), new THREE.MeshStandardMaterial({ color: 0x8aa0c8, metalness: 0.4, roughness: 0.5 })); m.position.set(0, 1.8 + n * 0.32, 0); parts.add(m); }
+  else if (type === "spikes") { const m = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.7, 8), new THREE.MeshStandardMaterial({ color: 0xff6b6b })); m.rotation.x = Math.PI / 2; m.position.set((n % 3 - 1) * 0.95, 1.0, 3.0); parts.add(m); }
+  else if (type === "turbo") { const m = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.3, 0.9), new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0x4a3a00 })); m.position.set(0, 1.7 + n * 0.18, -2.9); parts.add(m); const ex = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffaa33 })); ex.position.set((n % 2 ? 0.7 : -0.7), 0.7, -3.0); parts.add(ex); }
+  else if (type === "grip") { for (const w of c.mesh.userData.wheels) w.scale.multiplyScalar(1.13); }
+}
+function applyUpgrade(c, type) {
+  if ((c.up[type] || 0) >= 4) { c.boost = 1; return; } // capped -> small bonus
+  c.up[type]++; recalc(c); if (type === "armor") c.hp = Math.min(c.maxHull, c.hp + 30); addUpgradeVisual(c, type);
+  emit(c.x, c.y + 1, c.z, UPS[type], 14, 10, 5);
+}
+function spawnCars() {
+  for (const c of cars) scene.remove(c.mesh);
+  cars = []; over = false; placement = 0; alive = NCARS;
+  for (let i = 0; i < NCARS; i++) {
+    const a = (i / NCARS) * Math.PI * 2, rr = R * 0.55;
+    const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+    const tx = Math.cos(a) * R * 0.32 + (Math.random() - 0.5) * 120, tz = Math.sin(a) * R * 0.32 + (Math.random() - 0.5) * 120;
+    const c = { id: i, mesh: makeCar(COLORS[i]), x, z, y: C.dropY + Math.random() * 30, yaw: Math.atan2(-x, -z), speed: 0, vy: 0, grounded: false, dropped: false, hp: BASE.hull, alive: true, boost: 0.5, boosting: false, ai: i !== 0, think: 0, tx, tz, hit: 0, shield: 0, trail: 0, up: { armor: 0, spikes: 0, turbo: 0, grip: 0 } };
+    recalc(c); c.hp = c.maxHull; cars.push(c);
+  }
+  player = cars[0]; RACER.cars = cars;
+}
+function spawnPickups() {
+  for (const p of pickups) scene.remove(p.mesh); pickups = [];
+  const cons = [["boost", 0xffd166, 0x6a5410], ["repair", 0x62f3a8, 0x14401f], ["shield", 0x36e2ff, 0x0a3550], ["shock", 0xb388ff, 0x2a1450]];
+  const upg = [["armor", 0x8aa0c8], ["spikes", 0xff6b6b], ["turbo", 0xffd166], ["grip", 0x62f3a8]];
+  const spots = []; for (let k = 0; k < 22; k++) { const a = Math.random() * 6.28, r = 40 + Math.random() * R * 0.7; spots.push([Math.cos(a) * r, Math.sin(a) * r]); }
+  for (let i = 0; i < spots.length; i++) {
+    const [x, z] = spots[i], isUp = i % 2 === 0;
+    let mesh, type, kind;
+    if (isUp) { const u = upg[(i / 2 | 0) % upg.length]; type = u[0]; kind = "upgrade"; mesh = new THREE.Mesh(new THREE.BoxGeometry(3, 3, 3), new THREE.MeshStandardMaterial({ color: u[1], emissive: 0x222222 })); }
+    else { const u = cons[(i % cons.length)]; type = u[0]; kind = "cons"; mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(2.4, 0), new THREE.MeshStandardMaterial({ color: u[1], emissive: u[2] })); }
+    mesh.position.set(x, terrainH(x, z) + 3.2, z); scene.add(mesh);
+    pickups.push({ mesh, x, z, type, kind, active: true, respawn: 0 });
+  }
+  RACER.pickups = pickups;
+}
+
+// ---- drop phase -----------------------------------------------
+function dropCar(c, dt) {
+  let steer = 0;
+  if (c.id === 0) { if (keys["ArrowLeft"] || keys["a"] || touch.left) steer -= 1; if (keys["ArrowRight"] || keys["d"] || touch.right) steer += 1; }
+  else { const des = Math.atan2(c.tx - c.x, c.tz - c.z); let dy = des - c.yaw; while (dy > Math.PI) dy -= 6.283; while (dy < -Math.PI) dy += 6.283; steer = Math.max(-1, Math.min(1, dy * 2)); }
+  c.yaw += steer * 1.7 * dt;
+  c.x += Math.sin(c.yaw) * C.glideSpeed * dt; c.z += Math.cos(c.yaw) * C.glideSpeed * dt;
+  c.y -= C.fallSpeed * dt;
+  const g = terrainH(c.x, c.z) + C.ride;
+  c.mesh.userData.chute.visible = true;
+  if (c.y <= g) { c.y = g; c.dropped = true; c.grounded = true; c.mesh.userData.chute.visible = false; emit(c.x, c.y, c.z, COLORS[c.id], 14, 12, 4); }
+  c.mesh.position.set(c.x, c.y - C.ride, c.z); c.mesh.rotation.y = c.yaw;
+}
+
+// ---- drive update ---------------------------------------------
+function updateCar(c, dt) {
+  let steerIn = 0, brakeIn = false, boostIn = false, jumpIn = false;
+  if (c.ai) {
+    c.think -= dt; const r = Math.hypot(c.x, c.z), inSea = terrainH(c.x, c.z) < C.waterLevel + 0.5, outStorm = r > stormR;
+    if (c.think <= 0 || outStorm || inSea) {
+      c.think = 0.5 + Math.random() * 0.7;
+      if (outStorm || inSea) { c.tx = 0; c.tz = 0; }
+      else { let best = null, bd = 1e9; for (const o of cars) { if (o === c || !o.alive) continue; const d = (o.x - c.x) ** 2 + (o.z - c.z) ** 2; if (d < bd) { bd = d; best = o; } } let pk = null, pd = 1e9; for (const p of pickups) { if (!p.active) continue; const d = (p.x - c.x) ** 2 + (p.z - c.z) ** 2; if (d < pd) { pd = d; pk = p; } } if (pk && (pd < bd || Math.random() < 0.5)) { c.tx = pk.x; c.tz = pk.z; } else if (best && bd < 12000) { c.tx = best.x; c.tz = best.z; } else { c.tx = c.x * 0.3; c.tz = c.z * 0.3; } }
+    }
+    const des = Math.atan2(c.tx - c.x, c.tz - c.z); let dy = des - c.yaw; while (dy > Math.PI) dy -= 6.283; while (dy < -Math.PI) dy += 6.283; steerIn = Math.max(-1, Math.min(1, dy * 2.2)); boostIn = c.boost > 0.3 && Math.abs(dy) < 0.4;
+  } else {
+    if (keys["ArrowLeft"] || keys["a"] || touch.left) steerIn -= 1; if (keys["ArrowRight"] || keys["d"] || touch.right) steerIn += 1;
+    brakeIn = keys["ArrowDown"] || keys["s"]; boostIn = keys[" "] || touch.boost; jumpIn = keys["Shift"] || touch.jump;
+  }
+  const inSea = terrainH(c.x, c.z) < C.waterLevel + 0.3, outStorm = Math.hypot(c.x, c.z) > stormR;
+  if (boostIn && c.boost > 0) { c.boost = Math.max(0, c.boost - C.boostUse * dt); c.boosting = true; } else { c.boost = Math.min(1, c.boost + C.boostRegen * dt); c.boosting = false; }
+  const maxS = inSea ? 18 : (c.boosting ? C.boostSpeed + (c.maxSpd - BASE.maxSpeed) : c.maxSpd);
+  if (brakeIn) c.speed -= C.brake * dt; else c.speed += c.accel * dt * (c.boosting ? 1.6 : 1);
+  c.speed -= (inSea ? 40 : C.drag) * dt * (c.speed > 0 ? 1 : 0); c.speed = Math.max(0, Math.min(c.speed, maxS));
+  const auth = (0.4 + 0.6 * Math.min(1, c.speed / c.maxSpd)) * (c.grounded ? 1 : 0.5); c.yaw += steerIn * c.steerR * auth * dt;
+  c.x += Math.sin(c.yaw) * c.speed * dt; c.z += Math.cos(c.yaw) * c.speed * dt;
+  const groundY = terrainH(c.x, c.z) + C.ride;
+  if (jumpIn && c.grounded) { c.vy = C.jumpV; c.grounded = false; }
+  for (const jp of jumpPads) { if (c.grounded && (jp.x - c.x) ** 2 + (jp.z - c.z) ** 2 < 46) { c.vy = C.padV; c.grounded = false; if (!c.ai || Math.random() < 0.3) emit(c.x, c.y, c.z, 0x36e2ff, 6, 9, 8); break; } }
+  if (!c.grounded) { c.vy -= C.grav * dt; c.y += c.vy * dt; if (c.y <= groundY) { c.y = groundY; c.vy = 0; c.grounded = true; } } else { if (c.y < groundY - 0.2) c.y = groundY; else if (c.y > groundY + 0.6) c.grounded = false; else c.y = groundY; }
+  if (c.shield > 0) c.shield -= dt;
+  if (c.shield <= 0) { if (outStorm) c.hp -= C.stormDmg * dt; if (inSea) c.hp -= C.seaDmg * dt; }
+  if (c.hit > 0) c.hit -= dt;
+  if (c.boosting) { c.trail -= dt; if (c.trail <= 0) { c.trail = 0.05; emit(c.x - Math.sin(c.yaw) * 3, c.y + 0.4, c.z - Math.cos(c.yaw) * 3, 0xffd166, 2, 5, 2); } }
+  for (const p of pickups) {
+    if (!p.active) continue;
+    if ((p.x - c.x) ** 2 + (p.z - c.z) ** 2 < 40) {
+      if (p.kind === "upgrade") applyUpgrade(c, p.type);
+      else if (p.type === "repair") c.hp = Math.min(c.maxHull, c.hp + 45);
+      else if (p.type === "boost") c.boost = 1;
+      else if (p.type === "shield") c.shield = C.shieldTime;
+      else if (p.type === "shock") doShock(c);
+      p.active = false; p.respawn = p.kind === "upgrade" ? 16 : 9; p.mesh.visible = false;
+    }
+  }
+  c.mesh.position.set(c.x, c.y - C.ride, c.z); c.mesh.rotation.y = c.yaw; c.mesh.children[0].rotation.z = -steerIn * 0.05;
+  if (c.mesh.userData.shield) c.mesh.userData.shield.visible = c.shield > 0;
+}
+function doShock(c) { emit(c.x, c.y + 1, c.z, 0xb388ff, 26, 22, 7); for (const o of cars) { if (o === c || !o.alive) continue; const dx = o.x - c.x, dz = o.z - c.z, d = Math.hypot(dx, dz) || 1; if (d < C.shockRadius) { const nx = dx / d, nz = dz / d, f = 1 - d / C.shockRadius; o.x += nx * 12 * f; o.z += nz * 12 * f; o.vy = Math.max(o.vy, 14 * f); o.grounded = false; if (o.shield <= 0) { o.hp -= C.shockDmg * f; o.hit = 0.45; } } } }
+function collisions(dt) {
+  for (let i = 0; i < cars.length; i++) { const a = cars[i]; if (!a.alive || !a.dropped) continue;
+    for (let j = i + 1; j < cars.length; j++) { const b = cars[j]; if (!b.alive || !b.dropped) continue;
+      const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1, minD = 5.2;
+      if (d < minD) {
+        const nx = dx / d, nz = dz / d;
+        const aInto = Math.max(0, a.speed * (Math.sin(a.yaw) * nx + Math.cos(a.yaw) * nz)) * (a.boosting ? 1.5 : 1) * a.ramMult;
+        const bInto = Math.max(0, b.speed * (-(Math.sin(b.yaw) * nx + Math.cos(b.yaw) * nz))) * (b.boosting ? 1.5 : 1) * b.ramMult;
+        if (aInto > 2 && b.hit <= 0 && b.shield <= 0) { b.hp -= aInto * BASE.ramK; b.hit = 0.45; }
+        if (bInto > 2 && a.hit <= 0 && a.shield <= 0) { a.hp -= bInto * BASE.ramK; a.hit = 0.45; }
+        if (aInto > 8 || bInto > 8) emit((a.x + b.x) / 2, a.y + 1, (a.z + b.z) / 2, 0xffffff, 8, 12);
+        const ov = minD - d; a.x -= nx * ov / 2; a.z -= nz * ov / 2; b.x += nx * ov / 2; b.z += nz * ov / 2;
+        a.speed *= 0.8; b.speed *= 0.8;
+        a.x -= nx * aInto * C.knock * dt; a.z -= nz * aInto * C.knock * dt; b.x += nx * aInto * C.knock * dt; b.z += nz * aInto * C.knock * dt;
+      }
+    }
+  }
+}
+
+// ---- step ------------------------------------------------------
+function step(dt) {
+  if (phase === "drop") {
+    for (const c of cars) if (c.alive && !c.dropped) dropCar(c, dt);
+    dropTimer -= dt;
+    if (cars.every(c => !c.alive || c.dropped) || dropTimer <= 0) { for (const c of cars) { if (!c.dropped) { c.dropped = true; c.grounded = true; c.y = terrainH(c.x, c.z) + C.ride; c.mesh.userData.chute.visible = false; } } phase = "play"; stormT = 0; $("drophint").style.display = "none"; }
+    chaseCam(dt); updateParticles(dt); drawMinimap(); return;
+  }
+  stormT += dt; const frac = Math.min(1, stormT / C.stormSec); stormR = R + (C.stormMin - R) * frac;
+  for (const c of cars) if (c.alive) updateCar(c, dt);
+  collisions(dt);
+  for (const p of pickups) { if (!p.active) { p.respawn -= dt; if (p.respawn <= 0) { p.active = true; p.mesh.visible = true; } } else p.mesh.rotation.y += dt * 1.5; }
+  for (const c of cars) if (c.alive && c.hp <= 0) { c.alive = false; c.mesh.visible = false; emit(c.x, c.y + 1, c.z, COLORS[c.id], 30, 28, 12); if (c.id === 0) placement = alive; alive--; }
+  alive = cars.filter(c => c.alive).length;
+  if (stormMesh) stormMesh.scale.set(stormR, 1, stormR);
+  updateParticles(dt); drawMinimap(); chaseCam(dt);
+  if (!over) { if (!player.alive) endGame(false); else if (alive <= 1) { placement = 1; endGame(true); } }
+  RACER.state = { phase, alive, stormR: Math.round(stormR), hp: Math.round(player.hp), maxHull: player.maxHull, up: { ...player.up }, dropped: player.dropped, speed: Math.round(player.speed) };
+}
+function chaseCam(dt) { if (!player) return; const fx = Math.sin(player.yaw), fz = Math.cos(player.yaw); const want = new THREE.Vector3(player.x - fx * C.camDist, player.y + C.camHeight, player.z - fz * C.camDist); const grd = terrainH(want.x, want.z) + 3; if (want.y < grd) want.y = grd; cam.position.lerp(want, Math.min(1, dt * 4)); cam.lookAt(player.x + fx * 6, player.y + 1.5, player.z + fz * 6); }
+
+// ---- HUD / minimap --------------------------------------------
+const $ = id => document.getElementById(id);
+function syncHud() {
+  $("alive").textContent = alive; $("storm").textContent = phase === "drop" ? "drop" : (stormT >= C.stormSec ? "final" : Math.max(0, Math.ceil(C.stormSec - stormT)) + "s");
+  $("spd").textContent = Math.round(player.speed); $("hpfill").style.width = Math.max(0, 100 * player.hp / player.maxHull) + "%"; $("boostfill").style.width = (100 * player.boost) + "%";
+  let h = ""; for (const k of ["armor", "spikes", "turbo", "grip"]) h += '<div class="up"><span class="d" style="background:#' + UPS[k].toString(16).padStart(6, "0") + '"></span>' + k + ' ' + player.up[k] + '</div>';
+  $("ups").innerHTML = h;
+}
+function drawMinimap() {
+  if (!mapCtx) return; const W = 150, H = 150, cx = W / 2, cy = H / 2, sc = (W * 0.46) / R; mapCtx.clearRect(0, 0, W, H);
+  mapCtx.fillStyle = "rgba(40,80,55,0.5)"; mapCtx.beginPath(); mapCtx.arc(cx, cy, R * 0.8 * sc, 0, 6.28); mapCtx.fill();
+  mapCtx.strokeStyle = "#b388ff"; mapCtx.lineWidth = 1.5; mapCtx.beginPath(); mapCtx.arc(cx, cy, Math.max(2, stormR * sc), 0, 6.28); mapCtx.stroke();
+  for (const p of pickups) { if (!p.active) continue; mapCtx.fillStyle = p.kind === "upgrade" ? "#fff" : "#ffd166"; mapCtx.fillRect(cx + p.x * sc - 1, cy + p.z * sc - 1, 2, 2); }
+  for (const c of cars) { if (!c.alive) continue; mapCtx.fillStyle = "#" + COLORS[c.id].toString(16).padStart(6, "0"); mapCtx.beginPath(); mapCtx.arc(cx + c.x * sc, cy + c.z * sc, c.id === 0 ? 3 : 2, 0, 6.28); mapCtx.fill(); }
+}
+function endGame(won) { if (over) return; over = true; phase = "over"; const place = won ? 1 : (placement || alive + 1); $("resultTitle").textContent = won ? "#1 — last truck standing!" : "Wrecked — #" + place; $("resultBody").innerHTML = won ? "You took Crumb Island. The Capybara nods, almost." : "You placed <b>#" + place + "</b> of " + NCARS + ". The Capybara remains unmoved."; $("resultOverlay").classList.add("show"); }
+function startGame() { spawnCars(); spawnPickups(); stormR = R; stormT = 0; over = false; phase = "drop"; dropTimer = C.dropMax; $("drophint").style.display = "block"; clock.getDelta(); }
+
+// ---- boot -----------------------------------------------------
+function resize() { renderer.setSize(innerWidth, innerHeight); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); }
+function boot() {
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas: $("cv"), antialias: true }); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
+    scene = new THREE.Scene(); scene.background = new THREE.Color(0x141a33); scene.fog = new THREE.Fog(0x141a33, 300, 900);
+    cam = new THREE.PerspectiveCamera(64, innerWidth / innerHeight, 0.1, 3000); cam.position.set(0, 60, -90);
+    scene.add(new THREE.AmbientLight(0x90a0d0, 0.7)); const sun = new THREE.DirectionalLight(0xfff2e0, 1.15); sun.position.set(160, 280, 100); scene.add(sun);
+    clock = new THREE.Clock(); mapCtx = $("map").getContext("2d");
+    buildTerrain(); spawnCars(); spawnPickups();
+    addEventListener("resize", resize);
+    addEventListener("keydown", e => { keys[e.key] = true; if (e.key === " " || e.key === "Shift") e.preventDefault(); });
+    addEventListener("keyup", e => { keys[e.key] = false; });
+    if ("ontouchstart" in window || navigator.maxTouchPoints) document.body.classList.add("touch");
+    const bind = (el, k) => { const d = ev => { ev.preventDefault(); touch[k] = true; }, u = ev => { ev.preventDefault(); touch[k] = false; }; el.addEventListener("pointerdown", d); el.addEventListener("pointerup", u); el.addEventListener("pointerleave", u); };
+    bind($("tl"), "left"); bind($("tr"), "right"); bind($("tboost"), "boost"); bind($("tjump"), "jump");
+    $("startBtn").onclick = () => { $("menu").classList.remove("show"); startGame(); };
+    $("resultBtn").onclick = () => { $("resultOverlay").classList.remove("show"); startGame(); };
+    RACER.step = step; RACER.ready = true; renderer.setAnimationLoop(loop);
+  } catch (e) { $("err").textContent = "3D init error: " + e.message; RACER.error = e.message; }
+}
+function loop() { const dt = Math.min(0.05, clock ? clock.getDelta() : 0.016); if (phase === "drop" || (phase === "play" && !over)) { step(dt); syncHud(); } renderer.render(scene, cam); }
+boot();
+</script>
+</body>
+</html>
