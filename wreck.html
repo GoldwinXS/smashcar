@@ -81,7 +81,7 @@
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">Physics sumo-brawl &middot; real rigid bodies &middot; P2P</p>
+    <p class="tag">Physics sumo-brawl &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v3</span></p>
     <h1>WRECK COURT</h1>
     <p>Heavy trucks, one floating court, no guns. <b>Ram everyone else into the void.</b> The court crumbles from the rim inward — last truck standing takes the round. <b>First to 3 rounds wins.</b></p>
     <ul>
@@ -99,6 +99,7 @@
     <div class="row">
       <button id="hostBtn">Host online</button>
       <button id="joinBtn">Join a friend</button>
+      <button id="touchTog">&#128241; Touch pad</button>
       <span class="lab" style="font-size:11px">online = copy-paste invite codes, no server</span>
     </div>
   </div>
@@ -181,8 +182,21 @@ const V3 = (x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const tmpV = V3(), tmpV2 = V3(), tmpQ = new THREE.Quaternion();
 
 // ---------------- renderer / scene ----------------
-const IS_TOUCH = matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
+// mobile detection: multiple signals, any one wins
+const IS_TOUCH = matchMedia("(pointer: coarse)").matches
+  || "ontouchstart" in window
+  || navigator.maxTouchPoints > 0
+  || !!(navigator.userAgentData && navigator.userAgentData.mobile)
+  || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
 if (IS_TOUCH) document.body.classList.add("touch");
+// guaranteed fallback: the first REAL touch anywhere enables the touch UI,
+// even if every detection signal above lied
+addEventListener("touchstart", () => {
+  if (!document.body.classList.contains("touch")){
+    document.body.classList.add("touch");
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  }
+}, { once: true, passive: true });
 const cv = document.getElementById("cv");
 const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, IS_TOUCH ? 1.5 : 2));
@@ -1057,6 +1071,10 @@ $("soloBtn").onclick = () => {
   const roster = [{ name: "YOU", human: true, guestIdx: -1 }];
   for (let i = 1; i < total; i++) roster.push({ name: BOTNAMES[i-1], human: false, guestIdx: -1 });
   startMatch((Math.random()*1e9)|0, roster);
+};
+$("touchTog").onclick = () => {
+  const on = document.body.classList.toggle("touch");
+  $("touchTog").style.borderColor = on ? "var(--you)" : "var(--line)";
 };
 $("hostBtn").onclick = () => { $("menu").classList.remove("show"); $("hostCard").classList.add("show"); refreshSlots(); };
 $("joinBtn").onclick = () => { $("menu").classList.remove("show"); $("joinCard").classList.add("show"); };
