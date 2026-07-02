@@ -19,8 +19,9 @@
   .sc.dead{opacity:.38;}
   .sc b{min-width:12px;text-align:right;}
   #boostwrap{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);width:min(260px,60vw);text-align:center;}
-  #boostbar{height:12px;background:#10182f;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-top:4px;}
+  #boostbar,#hullbar{height:12px;background:#10182f;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-top:4px;margin-bottom:4px;}
   #boostfill{height:100%;width:0;background:linear-gradient(90deg,#caa233,#ffd166);}
+  #hullfill{height:100%;width:100%;background:linear-gradient(90deg,#1577a8,#36e2ff);transition:width .15s;}
   .lab{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
   #banner{position:fixed;top:30%;left:0;right:0;text-align:center;font-size:52px;font-weight:900;letter-spacing:2px;text-shadow:0 4px 24px #000;pointer-events:none;opacity:0;transition:opacity .2s;}
   #toast{position:fixed;top:44%;left:0;right:0;text-align:center;font-size:22px;font-weight:800;color:var(--boost);text-shadow:0 2px 12px #000;pointer-events:none;opacity:0;transition:opacity .18s;}
@@ -74,7 +75,7 @@
 <div id="score"></div>
 <div id="banner"></div>
 <div id="feed"></div>
-<div id="boostwrap"><span class="lab">Boost</span><div id="boostbar"><div id="boostfill"></div></div></div>
+<div id="boostwrap"><span class="lab">Hull</span><div id="hullbar"><div id="hullfill"></div></div><span class="lab">Boost</span><div id="boostbar"><div id="boostfill"></div></div></div>
 <div id="err"></div>
 <div id="stickBase"><div id="stickNub"></div></div>
 <div id="stickZone"></div>
@@ -84,7 +85,7 @@
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">Physics sumo-brawl &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v4</span></p>
+    <p class="tag">Physics sumo-brawl &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v5</span></p>
     <h1>WRECK COURT</h1>
     <p>Heavy trucks, one floating court, no guns. <b>Ram everyone else into the void.</b> The court crumbles from the rim inward — last truck standing takes the round. <b>First to 3 rounds wins.</b></p>
     <ul>
@@ -283,6 +284,7 @@ const sfx = {
   boom(){ noiseHit(0.7, 600, 0.5); blip(55, 0.7, "sine", 0.6, -25); this.rumble(0.7); },
   rumble(v = 0.35){ noiseHit(v, 110, 0.8); },
   beep(){ blip(330, 0.09, "square", 0.18); },
+  crunch(){ noiseHit(0.45, 1600, 0.28); blip(140, 0.18, "square", 0.3, -60); },
   go(){ blip(520, 0.2, "square", 0.3); },
   win(){ blip(392, 0.12, "triangle", 0.3); setTimeout(() => blip(523, 0.12, "triangle", 0.3), 120); setTimeout(() => blip(659, 0.3, "triangle", 0.35), 240); }
 };
@@ -301,21 +303,21 @@ pGeo.setAttribute("color", new THREE.BufferAttribute(pCol, 3));
 const pMat = new THREE.PointsMaterial({ size: .42, vertexColors: true, transparent: true, opacity: .95, depthWrite: false });
 const pMesh = new THREE.Points(pGeo, pMat); pMesh.frustumCulled = false; scene.add(pMesh);
 const parts = [];
-function emit(x, y, z, color, n, speed, life){
+function emit(x, y, z, color, n, speed, life, grav = 14){
   const c = new THREE.Color(color);
   for (let i = 0; i < n; i++){
     if (parts.length >= PMAX) parts.shift();
     const a = rnd(0, Math.PI*2), e = rnd(-0.4, 1);
     const s = rnd(speed*0.3, speed);
     parts.push({ x, y, z, vx: Math.cos(a)*s*Math.cos(e), vy: Math.sin(e)*s + speed*0.25, vz: Math.sin(a)*s*Math.cos(e),
-      life: rnd(life*0.5, life), t: 0, r: c.r, g: c.g, b: c.b });
+      life: rnd(life*0.5, life), t: 0, r: c.r, g: c.g, b: c.b, grav });
   }
 }
 function stepParts(dt){
   for (let i = parts.length-1; i >= 0; i--){
     const p = parts[i]; p.t += dt;
     if (p.t > p.life){ parts.splice(i,1); continue; }
-    p.vy -= 14*dt; p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt;
+    p.vy -= p.grav*dt; p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt;
   }
   for (let i = 0; i < PMAX; i++){
     if (i < parts.length){ const p = parts[i];
@@ -404,7 +406,10 @@ function truckMesh(color){
   const g = new THREE.Group();
   const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: .35, metalness: .75 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x10141f, roughness: .6, metalness: .4 });
-  const hull = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.75, 4.0), bodyMat);
+  // segmented hull so impacts can crush real dents into it
+  const hullGeo = new THREE.BoxGeometry(2.2, 0.75, 4.0, 3, 2, 5);
+  hullGeo.userData.orig = hullGeo.attributes.position.array.slice();
+  const hull = new THREE.Mesh(hullGeo, bodyMat);
   hull.castShadow = true; g.add(hull);
   const cab = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.65, 1.6), bodyMat);
   cab.position.set(0, 0.68, -0.25); cab.castShadow = true; g.add(cab);
@@ -422,7 +427,7 @@ function truckMesh(color){
     new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: .9 }));
   flame.rotation.x = -Math.PI/2; flame.position.set(0, -0.05, -2.6); flame.visible = false; g.add(flame);
   g.userData.flame = flame;
-  return { group: g, wheels };
+  return { group: g, wheels, bodyMat, hullMesh: hull, cabMesh: cab, bullMesh: bull };
 }
 
 function spawnPose(idx, count){
@@ -432,7 +437,7 @@ function spawnPose(idx, count){
 }
 
 function makePlayer(id, name, color, human, guestIdx){
-  const { group, wheels } = truckMesh(color);
+  const { group, wheels, bodyMat, hullMesh, cabMesh, bullMesh } = truckMesh(color);
   scene.add(group);
   let body = null;
   if (world){
@@ -444,8 +449,10 @@ function makePlayer(id, name, color, human, guestIdx){
     world.createCollider(RAPIER.ColliderDesc.cuboid(0.7, 0.16, 1.2)
       .setTranslation(0, -0.34, 0).setDensity(3.2).setFriction(0.35), body);
   }
-  return { id, name, color, human, guestIdx, body, group, wheels,
+  return { id, name, color, human, guestIdx, body, group, wheels, bodyMat, hullMesh, cabMesh, bullMesh,
     boost: 60, alive: true, wins: 0, grounded: false, groundN: V3(0,1,0),
+    hull: 100, dmg: { f: 0, b: 0, l: 0, r: 0 },
+    lostMask: 0, lost: { bull: false, cab: false, wheels: [false, false, false, false] },
     input: { th: 0, st: 0, jump: false, boost: false }, jumpHeld: false, canFlip: false,
     botT: rnd(0, 2), botSkill: rnd(0.75, 1.15) };
 }
@@ -454,6 +461,7 @@ function resetTruck(p, idx, count){
   p.alive = true; p.boost = 60; p.canFlip = false;
   p.input = { th: 0, st: 0, jump: false, boost: false, reset: false }; // no stale throttle into countdown
   p.lastHitBy = null; p.lastHitT = -99;
+  repairTruck(p); // full repair between rounds: hull, dents, tint, lost pieces
   p.group.visible = true;
   if (p.body){
     p.body.setTranslation({ x: s.x, y: 1.6, z: s.z }, true);
@@ -480,8 +488,11 @@ function stepTruck(p, dt){
   const mass = body.mass();
 
   // --- suspension: 4 raycasts straight down from wheel anchors ---
+  // a torn-off wheel = no suspension at that corner: the truck sags and drags
   let groundHits = 0; const gN = V3();
-  for (const [wx, wy, wz] of WHEEL_POS){
+  for (let wi = 0; wi < WHEEL_POS.length; wi++){
+    if (p.lost.wheels[wi]) continue;
+    const [wx, wy, wz] = WHEEL_POS[wi];
     const anchor = V3(wx, wy, wz).applyQuaternion(tmpQ).add(V3(pos.x, pos.y, pos.z));
     const ray = new RAPIER.Ray({ x: anchor.x, y: anchor.y, z: anchor.z }, rayDir);
     const hit = world.castRay(ray, REST_LEN, true, undefined, undefined, undefined, body);
@@ -504,24 +515,33 @@ function stepTruck(p, dt){
   if (p.grounded){
     // flatten forward onto ground plane
     const f = fwd.clone(); f.y = 0; f.normalize();
+    // damage wear: a beat-up truck is slower, looser, and pulls to one side
+    const health = p.hull / 100;                    // 1 fresh → 0 wrecked
+    const lostW = p.lost.wheels[0] + p.lost.wheels[1] + p.lost.wheels[2] + p.lost.wheels[3];
+    const wear = (0.62 + 0.38 * health) * (1 - 0.08 * lostW);      // engine power
+    const steerWear = (0.68 + 0.32 * health) * (1 - 0.12 * lostW); // steering authority
     // drive
-    const accel = inp.th > 0 ? 12.5 : 11;   // firmer brakes (saves overshoots — bots and you)
-    const boosting = inp.boost && p.boost > 0.5 && inp.th >= 0;
-    const mult = boosting ? 2.15 : 1;
+    const accel = (inp.th > 0 ? 12.5 : 11) * wear;
+    const boosting = inp.boost && p.boost > 0.5;    // boost is ITS OWN thrust — no throttle needed
     if (inp.th !== 0)
-      body.applyImpulse({ x: f.x*inp.th*accel*mult*mass*dt, y: 0, z: f.z*inp.th*accel*mult*mass*dt }, true);
-    if (boosting){ p.boost = Math.max(0, p.boost - 34*dt); }
+      body.applyImpulse({ x: f.x*inp.th*accel*mass*dt, y: 0, z: f.z*inp.th*accel*mass*dt }, true);
+    if (boosting){
+      p.boost = Math.max(0, p.boost - 34*dt);
+      body.applyImpulse({ x: f.x*15*wear*mass*dt, y: 0, z: f.z*15*wear*mass*dt }, true);
+    }
     else p.boost = Math.min(100, p.boost + 11*dt);
     p.boosting = boosting;
-    // lateral grip (cancel part of sideways velocity)
+    // lateral grip (cancel part of sideways velocity); damaged = sloppier slides
     const latSpeed = vel.x*right.x + vel.z*right.z;
-    const grip = 0.14;
+    const grip = 0.14 * (0.62 + 0.38 * health);
     body.applyImpulse({ x: -right.x*latSpeed*mass*grip, y: 0, z: -right.z*latSpeed*mass*grip }, true);
     // steering: lerp yaw angvel toward target (arcade-reliable, still shoved by hits)
     const spd = Math.hypot(vel.x, vel.z);
     const dir = (vel.x*f.x + vel.z*f.z) >= -0.5 ? 1 : -1;
     // +angvel.y turns nose toward +X; st=+1 (D / stick-right) must turn right
-    const target = inp.st * 2.5 * dir * Math.min(1, 0.35 + spd/10);
+    let target = inp.st * 2.5 * steerWear * dir * Math.min(1, 0.35 + spd/10);
+    // asymmetric side damage drags the truck toward the crushed side
+    target += (p.dmg.r - p.dmg.l) * 0.007 * Math.min(1, spd/8);
     const av = body.angvel();
     // flatten: damp pitch/roll wobble while upright (big hits still flip you past the gate)
     const flat = up.y > 0.7 ? 0.82 : 1;
@@ -606,6 +626,9 @@ function stepRams(dt, authoritative){
         atk.boost = Math.min(100, atk.boost + 22);
         if (atk === me()) toast("BIG HIT — +22 BOOST");
       }
+      // locational damage: front is armored, rear is the weak spot
+      applyDamage(def, closing, sgn*nx, sgn*nz);
+      applyDamage(atk, closing * 0.35, -sgn*nx, -sgn*nz); // attacker chips too (usually front-armored)
     } else if (!authoritative){
       // guest: estimate closing speed from interpolated velocities
       const va = A.netVel || {x:0,y:0,z:0}, vb = B.netVel || {x:0,y:0,z:0};
@@ -619,6 +642,115 @@ function stepRams(dt, authoritative){
     sfx.thud(closing / 14);
     if (closing > 11) G.slowT = Math.max(G.slowT, 0.09);   // hit-stop on heavy contact
     if (A === me() || B === me()) shake(Math.min(1, closing/16));
+  }
+}
+
+// ---------------- damage ----------------
+/* hits hurt where they land: front (bull bar) x0.6, sides x1.1, REAR x1.6.
+   damage never kills (ring-out only) — it cripples: power, steering, grip,
+   and a pull toward the crushed side. It also SHOWS: real dents crushed into
+   the hull at the impact point, and pieces that tear off — bull bar, cab,
+   even wheels (a lost wheel loses its suspension corner). repaired each round. */
+function deformHull(p, lx, lz, dmg){
+  const geo = p.hullMesh.geometry, pos = geo.attributes.position;
+  if (!geo.userData.disp) geo.userData.disp = new Float32Array(pos.count);
+  const disp = geo.userData.disp;
+  const dir = V3(lx, 0, lz); if (dir.lengthSq() < 0.01) return; dir.normalize();
+  const px = dir.x * 1.1, pz = dir.z * 2.0;           // impact point on hull surface
+  const amt = Math.min(0.5, dmg * 0.017);
+  for (let i = 0; i < pos.count; i++){
+    const vx = pos.getX(i), vz = pos.getZ(i);
+    const d = Math.hypot(vx - px, vz - pz);
+    if (d > 1.4) continue;
+    let k = Math.min((1 - d/1.4) * amt, 0.38 - disp[i]); // per-vertex crush cap
+    if (k <= 0) continue;
+    disp[i] += k;
+    pos.setX(i, vx - dir.x * k);
+    pos.setZ(i, vz - dir.z * k);
+    pos.setY(i, pos.getY(i) - k * 0.3 * Math.random()); // crumple sag
+  }
+  pos.needsUpdate = true; geo.computeVertexNormals();
+}
+const PIECE_BITS = { bull: 1, cab: 2, w0: 4, w1: 8, w2: 16, w3: 32 };
+const debris = [];
+function checkPieces(p){
+  if (!p.lost.bull && p.dmg.f > 26) loseP(p, "bull");
+  if (!p.lost.cab && 100 - p.hull > 62) loseP(p, "cab");
+  if (!p.lost.wheels[0] && p.dmg.l > 26) loseP(p, "w0"); // left crush pops left wheels
+  if (!p.lost.wheels[2] && p.dmg.l > 52) loseP(p, "w2");
+  if (!p.lost.wheels[1] && p.dmg.r > 26) loseP(p, "w1");
+  if (!p.lost.wheels[3] && p.dmg.r > 52) loseP(p, "w3");
+}
+function loseP(p, kind){
+  let mesh = null;
+  if (kind === "bull"){ p.lost.bull = true; mesh = p.bullMesh; }
+  else if (kind === "cab"){ p.lost.cab = true; mesh = p.cabMesh; }
+  else { const i = +kind[1]; p.lost.wheels[i] = true; mesh = p.wheels[i]; }
+  p.lostMask |= PIECE_BITS[kind];
+  if (!mesh || !mesh.visible) return;
+  mesh.visible = false;
+  // the piece flies off as tumbling debris
+  const d = mesh.clone(); d.visible = true;
+  mesh.getWorldPosition(tmpV); mesh.getWorldQuaternion(tmpQ);
+  d.position.copy(tmpV); d.quaternion.copy(tmpQ);
+  scene.add(d);
+  let vx = rnd(-3, 3), vz = rnd(-3, 3);
+  if (p.body){ const lv = p.body.linvel(); vx += lv.x * 0.7; vz += lv.z * 0.7; }
+  debris.push({ mesh: d, vx, vy: rnd(5, 8), vz, rx: rnd(-7, 7), rz: rnd(-7, 7), t: 0 });
+  emit(tmpV.x, tmpV.y, tmpV.z, 0xffe58a, 8, 6, .4);
+  sfx.crunch();
+  if (p === me()){
+    toast(kind === "cab" ? "CAB TORN OFF" : kind === "bull" ? "BULL BAR RIPPED OFF" : "WHEEL GONE — she pulls now", 1100);
+    shake(0.6);
+  }
+}
+function stepDebris(dt){
+  for (let i = debris.length - 1; i >= 0; i--){
+    const d = debris[i]; d.t += dt;
+    d.vy -= 16 * dt;
+    d.mesh.position.x += d.vx * dt; d.mesh.position.y += d.vy * dt; d.mesh.position.z += d.vz * dt;
+    d.mesh.rotation.x += d.rx * dt; d.mesh.rotation.z += d.rz * dt;
+    if (d.t > 4 || d.mesh.position.y < -35){ scene.remove(d.mesh); debris.splice(i, 1); }
+  }
+}
+function repairTruck(p){
+  p.hull = 100; p.dmg = { f: 0, b: 0, l: 0, r: 0 };
+  p.lostMask = 0; p.lost = { bull: false, cab: false, wheels: [false, false, false, false] };
+  if (p.bodyMat) p.bodyMat.color.setHex(p.color);
+  if (p.bullMesh) p.bullMesh.visible = true;
+  if (p.cabMesh) p.cabMesh.visible = true;
+  p.wheels.forEach(w => w.visible = true);
+  const geo = p.hullMesh.geometry, orig = geo.userData.orig;
+  if (orig){ geo.attributes.position.array.set(orig);
+    geo.attributes.position.needsUpdate = true; geo.computeVertexNormals(); }
+  if (geo.userData.disp) geo.userData.disp.fill(0);
+}
+function applyDamage(p, closing, inX, inZ){
+  const raw = Math.max(0, closing - 4);
+  if (raw <= 0) return;
+  // attacker bearing in my local frame (inX/inZ = world dir the hit pushed me → attacker is opposite)
+  tmpQ.copy(p.group.quaternion).invert();
+  const local = V3(-inX, 0, -inZ).applyQuaternion(tmpQ);
+  let zone, mult;
+  if (local.z > 0.5){ zone = "f"; mult = 0.6; }
+  else if (local.z < -0.5){ zone = "b"; mult = 1.6; }
+  else if (local.x > 0){ zone = "r"; mult = 1.1; }
+  else { zone = "l"; mult = 1.1; }
+  const dmg = Math.min(30, raw * 2.2 * mult);
+  p.dmg[zone] += dmg;
+  p.hull = Math.max(0, 100 - (p.dmg.f + p.dmg.b + p.dmg.l + p.dmg.r));
+  // scorch tint scales with total damage
+  if (p.bodyMat){
+    const c = new THREE.Color(p.color);
+    p.bodyMat.color.copy(c.lerp(new THREE.Color(0x1a1a1f), (1 - p.hull/100) * 0.7));
+  }
+  // crush a visible dent where the hit landed, maybe tear pieces off
+  deformHull(p, local.x, local.z, dmg);
+  checkPieces(p);
+  netEvent({ t: "dent", id: p.id, x: +local.x.toFixed(2), z: +local.z.toFixed(2), a: +dmg.toFixed(1) });
+  if (p === me() && dmg > 8){
+    const names = { f: "FRONT", b: "REAR", l: "LEFT SIDE", r: "RIGHT SIDE" };
+    toast(`${names[zone]} ${p.hull < 35 ? "CRUSHED" : "DENTED"} — hull ${Math.round(p.hull)}%`, 900);
   }
 }
 
@@ -659,10 +791,11 @@ function stepBot(p, dt){
     inp.th = dot > 0.3 ? 0.6 : (outSpeed > 6 ? -1 : 0.2);
     return;
   }
-  // nearest living opponent STILL ON THE COURT (never chase a faller into the void)
-  let tgt = null, bd = 1e9;
+  // nearest living opponent still on the court — but wounded trucks smell like prey
+  let tgt = null, best = 1e9;
   for (const o of players){ if (o === p || !o.alive || o.group.position.y < -1.5) continue;
-    const d = pos.distanceToSquared(o.group.position); if (d < bd){ bd = d; tgt = o; } }
+    const score = pos.distanceTo(o.group.position) - (100 - o.hull) * 0.16; // blood scent
+    if (score < best){ best = score; tgt = o; } }
   inp.th = 1;
   if (!tgt){ // nobody targetable: hold near center
     const inward = V3(-pos.x, 0, -pos.z);
@@ -673,7 +806,7 @@ function stepBot(p, dt){
   }
   // intercept lead (v14 lesson: lead the target), aim clamped inside the court
   const tv = tgt.body ? tgt.body.linvel() : (tgt.netVel || {x:0,z:0});
-  const dist = Math.sqrt(bd);
+  const dist = pos.distanceTo(tgt.group.position); // REAL distance (best is a score, can be negative)
   const lead = Math.min(0.9, dist / 22) * p.botSkill;
   const aim = V3(tgt.group.position.x + tv.x*lead, 0, tgt.group.position.z + tv.z*lead);
   const aimR = Math.hypot(aim.x, aim.z), maxAimR = Math.max(4, liveR - 5);
@@ -960,7 +1093,13 @@ function stepCamera(dt){
   camera.fov += (wantFov - camera.fov)*0.08; camera.updateProjectionMatrix();
   document.getElementById("spd").textContent = Math.round(spd*3.6);
   const m = me();
-  if (m) document.getElementById("boostfill").style.width = m.boost.toFixed(0) + "%";
+  if (m){
+    document.getElementById("boostfill").style.width = m.boost.toFixed(0) + "%";
+    const hf = document.getElementById("hullfill");
+    hf.style.width = m.hull.toFixed(0) + "%";
+    hf.style.background = m.hull < 35 ? "linear-gradient(90deg,#a82222,#ff5b5b)"
+      : m.hull < 70 ? "linear-gradient(90deg,#a87a15,#ffd166)" : "linear-gradient(90deg,#1577a8,#36e2ff)";
+  }
   // engine + boost audio follow MY truck
   if (AC && m){
     let mySpd = 0;
@@ -988,6 +1127,14 @@ function stepVisuals(dt){
     if (p.boosting && p.alive && Math.random() < 0.5){
       const pos = p.group.position;
       emit(pos.x, pos.y, pos.z, 0xffd166, 1, 3, .3);
+    }
+    // damage smoke: starts light below 70% hull, billows when crushed
+    if (p.alive && p.hull < 70 && Math.random() < (70 - p.hull) / 70){
+      const pos = p.group.position;
+      emit(pos.x + rnd(-.5,.5), pos.y + 0.8, pos.z + rnd(-.5,.5),
+        p.hull < 35 ? 0x181818 : 0x3a3a40, 1, 1.2, 1.1, -2.5); // rises
+      if (p.hull < 25 && Math.random() < 0.25)
+        emit(pos.x, pos.y + 0.5, pos.z, 0xff9b50, 1, 2.5, .35); // sparks when nearly dead
     }
   }
 }
@@ -1068,7 +1215,8 @@ function hostSnapshot(){
     if (p.body) { const lv = p.body.linvel(); v = { x: +lv.x.toFixed(2), y: +lv.y.toFixed(2), z: +lv.z.toFixed(2) }; }
     return { p: [+t.x.toFixed(2), +t.y.toFixed(2), +t.z.toFixed(2)],
              q: [+q.x.toFixed(3), +q.y.toFixed(3), +q.z.toFixed(3), +q.w.toFixed(3)],
-             v, a: p.alive ? 1 : 0, b: Math.round(p.boost), f: p.boosting ? 1 : 0, w: p.wins };
+             v, a: p.alive ? 1 : 0, b: Math.round(p.boost), f: p.boosting ? 1 : 0, w: p.wins,
+             h: Math.round(p.hull), L: p.lostMask };
   });
   broadcast({ t: "snap", k: snapTick++, ph: G.phase, rd: G.round, tr: trucks });
 }
@@ -1111,6 +1259,7 @@ function guestOnMsg(m){
     case "round": G.round = m.n; guestResetRound(); banner("ROUND " + m.n, 1400); break;
     case "fight": G.phase = "fight"; banner("WRECK!", 800); sfx.go(); break;
     case "ring": crumbleRing(m.r); break;
+    case "dent": { const p = players[m.id]; if (p) deformHull(p, m.x, m.z, m.a); break; }
     case "tilefall": { const t = tiles[m.i]; if (t && t.state < 2){ t.state = 2; t.vy = 0; } break; }
     case "ko": { const p = players[m.id]; if (p && p.alive){ p.alive = false;
       const pos = p.group.position; emit(pos.x, Math.max(pos.y,-10), pos.z, p.color, 30, 14, .9);
@@ -1132,7 +1281,7 @@ function startMatchGuest(seed, roster){
 }
 function guestResetRound(){
   buildArena(G.seed + G.round * 977);
-  for (const p of players){ p.alive = true; p.group.visible = true; }
+  for (const p of players){ p.alive = true; p.group.visible = true; repairTruck(p); }
   G.phase = "countdown"; buildScoreHud();
 }
 function guestStep(dt){
@@ -1151,6 +1300,16 @@ function guestStep(dt){
     const qb = new THREE.Quaternion(cur.q[0],cur.q[1],cur.q[2],cur.q[3]);
     qa.slerp(qb, alpha); p.group.quaternion.copy(qa);
     p.netVel = cur.v; p.boost = cur.b; p.boosting = !!cur.f;
+    if (cur.h != null && cur.h !== p.hull){
+      p.hull = cur.h;   // drives smoke + hull bar; tint follows
+      if (p.bodyMat){ const c = new THREE.Color(p.color);
+        p.bodyMat.color.copy(c.lerp(new THREE.Color(0x1a1a1f), (1 - p.hull/100) * 0.7)); }
+    }
+    if (cur.L != null && cur.L !== p.lostMask){
+      for (const k in PIECE_BITS)
+        if ((cur.L & PIECE_BITS[k]) && !(p.lostMask & PIECE_BITS[k])) loseP(p, k);
+      p.lostMask = cur.L;
+    }
     if (p.wins !== cur.w){ p.wins = cur.w; buildScoreHud(); }
     if (p.alive && !cur.a){ p.alive = false; p.group.visible = false; buildScoreHud(); }
     if (!p.alive && cur.a){ p.alive = true; p.group.visible = true; buildScoreHud(); }
@@ -1268,6 +1427,7 @@ function tick(now, headless){
   }
   if (headless) return;   // hidden tab: sim only, no rendering
   stepParts(dt);
+  stepDebris(dt);
   stepVisuals(dt);
   stepCamera(dt);
   renderer.render(scene, camera);
