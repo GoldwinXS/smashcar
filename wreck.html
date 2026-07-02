@@ -87,7 +87,7 @@
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">Car-ball carnage &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v9</span></p>
+    <p class="tag">Car-ball carnage &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v10</span></p>
     <h1>WRECKBALL</h1>
     <p>Rocket-powered trucks, one giant ball, two goals — <b>and full-contact demolition.</b> Smash the ball into the enemy goal. Smash the enemy while you're at it. <b>First to 5 goals wins.</b> Nobody falls off, nobody's eliminated.</p>
     <ul>
@@ -221,7 +221,21 @@ try {
 } catch (e) { /* offline CDN: matte fallback is fine */ }
 scene.fog = new THREE.Fog(0x05060f, 70, 190);
 const camera = new THREE.PerspectiveCamera(66, 1, 0.1, 500);
-function onResize(){ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); }
+// bloom pipeline — the neon actually glows (graceful fallback to plain render)
+let composer = null;
+try {
+  const base = "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/";
+  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+    import(base + "EffectComposer.js"), import(base + "RenderPass.js"),
+    import(base + "UnrealBloomPass.js"), import(base + "OutputPass.js")]);
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight),
+    IS_TOUCH ? 0.45 : 0.65, 0.5, 0.82)); // strength, radius, threshold
+  composer.addPass(new OutputPass());
+} catch (e) { composer = null; }
+function onResize(){ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer?.setSize(innerWidth, innerHeight); }
 addEventListener("resize", onResize); onResize();
 
 scene.add(new THREE.HemisphereLight(0x8fb4ff, 0x140a20, 0.85));
@@ -455,6 +469,95 @@ function rampBox(w, h, d, x, y, z, axis, angle, mat, physH){
   }
   return mesh;
 }
+// ---------------- stadium (static dressing, built once) ----------------
+let sbCtx = null, sbTex = null;
+function buildStadium(){
+  const g = new THREE.Group(); scene.add(g);
+  const HW = FIELD_W/2, HL = FIELD_L/2;
+  // holographic scoreboard over center field
+  const sc = document.createElement("canvas"); sc.width = 512; sc.height = 192;
+  sbCtx = sc.getContext("2d");
+  sbTex = new THREE.CanvasTexture(sc);
+  const sbMat = new THREE.MeshBasicMaterial({ map: sbTex, transparent: true, side: THREE.DoubleSide });
+  const sb = new THREE.Mesh(new THREE.PlaneGeometry(22, 8.2), sbMat);
+  sb.position.set(0, 15, 0); g.add(sb);
+  const sb2 = sb.clone(); sb2.rotation.y = Math.PI/2; g.add(sb2);
+  updateScoreboard();
+  // floodlight towers with fake-volumetric cones
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x22335f, roughness: .6, metalness: .5 });
+  const headMat = new THREE.MeshBasicMaterial({ color: 0xdfeaff });
+  const coneMat = new THREE.MeshBasicMaterial({ color: 0x9db8ff, transparent: true, opacity: 0.06,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]){
+    const x = sx * (HW + 7), z = sz * (HL + 7);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 17, 8), poleMat);
+    pole.position.set(x, 8.5, z); g.add(pole);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 1.2), headMat);
+    head.position.set(x, 17.2, z); head.lookAt(0, 0, 0); g.add(head);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(9, 24, 20, 1, true), coneMat);
+    cone.position.set(x * 0.72, 8.5, z * 0.72);
+    cone.lookAt(x, 17.2, z); cone.rotateX(-Math.PI/2); g.add(cone);
+  }
+  // two real spotlights (no shadows) from opposite towers for punchy highlights
+  for (const s of [-1, 1]){
+    const sp = new THREE.SpotLight(0xcfe0ff, 900, 140, 0.5, 0.55, 1.6);
+    sp.position.set(s * (HW + 7), 17, s * (HL + 7));
+    sp.target.position.set(0, 0, 0); g.add(sp); g.add(sp.target);
+  }
+  // glowing ad boards along the side walls
+  const ads = ["WRECKBALL", "CRUMB COLA", "RAPIER PHYSICS", "TOAST INSURANCE", "VOID AIRLINES", "SALVAGE & SONS"];
+  ads.forEach((txt, i) => {
+    const c = document.createElement("canvas"); c.width = 512; c.height = 96;
+    const cx = c.getContext("2d");
+    cx.fillStyle = "#0a1128"; cx.fillRect(0, 0, 512, 96);
+    cx.font = "bold 52px 'Segoe UI',sans-serif"; cx.textAlign = "center"; cx.textBaseline = "middle";
+    cx.fillStyle = ["#36e2ff", "#ff9b50", "#62f3a8", "#ff7ad9", "#ffd166", "#b388ff"][i % 6];
+    cx.fillText(txt, 256, 50);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.1),
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }));
+    const side = i % 2 ? 1 : -1, slot = (Math.floor(i / 2) - 1) * 24;
+    m.position.set(side * (HW + 1.1), 4.6, slot);
+    m.rotation.y = side > 0 ? -Math.PI/2 : Math.PI/2;
+    g.add(m);
+  });
+  // crowd lights: grandstand strips of random bright pixels beyond the walls
+  const cc = document.createElement("canvas"); cc.width = 1024; cc.height = 96;
+  const ccx = cc.getContext("2d");
+  ccx.fillStyle = "#060a18"; ccx.fillRect(0, 0, 1024, 96);
+  for (let i = 0; i < 1400; i++){
+    ccx.fillStyle = `hsl(${Math.random()*360|0},70%,${55 + Math.random()*30|0}%)`;
+    ccx.globalAlpha = 0.35 + Math.random() * 0.6;
+    ccx.fillRect(Math.random()*1024|0, Math.random()*96|0, 2, 2);
+  }
+  ccx.globalAlpha = 1;
+  const crowdTex = new THREE.CanvasTexture(cc);
+  for (const s of [-1, 1]){
+    const stand = new THREE.Mesh(new THREE.PlaneGeometry(FIELD_L + 26, 9),
+      new THREE.MeshBasicMaterial({ map: crowdTex, transparent: true, opacity: 0.9 }));
+    stand.position.set(s * (HW + 13), 7.5, 0);
+    stand.rotation.y = s > 0 ? -Math.PI/2 : Math.PI/2;
+    stand.rotation.x = -0.18 * s * (s > 0 ? 1 : -1) * 0; stand.rotation.z = 0;
+    g.add(stand);
+  }
+}
+function updateScoreboard(){
+  if (!sbCtx) return;
+  const c = sbCtx;
+  c.clearRect(0, 0, 512, 192);
+  c.fillStyle = "rgba(8,13,32,0.72)"; c.fillRect(0, 0, 512, 192);
+  c.strokeStyle = "#36e2ff"; c.lineWidth = 3; c.strokeRect(4, 4, 504, 184);
+  c.textAlign = "center"; c.textBaseline = "middle";
+  c.font = "bold 22px 'Segoe UI',sans-serif"; c.fillStyle = "#8aa0c8";
+  c.fillText("W R E C K B A L L", 256, 30);
+  c.font = "900 96px 'Segoe UI',sans-serif";
+  c.fillStyle = "#36e2ff"; c.fillText(String(G.score[0]), 140, 105);
+  c.fillStyle = "#e8f0ff"; c.fillText("–", 256, 100);
+  c.fillStyle = "#ff9b50"; c.fillText(String(G.score[1]), 372, 105);
+  c.font = "bold 24px 'Segoe UI',sans-serif";
+  c.fillStyle = "#36e2ff"; c.fillText("CYAN", 140, 165);
+  c.fillStyle = "#ff9b50"; c.fillText("ORANGE", 372, 165);
+  sbTex.needsUpdate = true;
+}
 // legacy alias so old call sites keep working; tiles are gone
 function buildArena(_seed){ buildField(); }
 const tiles = [];                                  // legacy: always empty
@@ -565,6 +668,12 @@ function truckMesh(color){
     new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: .9 }));
   flame.rotation.x = -Math.PI/2; flame.position.set(0, -0.05, -2.6); flame.visible = false; g.add(flame);
   g.userData.flame = flame;
+  // team-color underglow (blooms nicely)
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 4.9),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.34,
+      blending: THREE.AdditiveBlending, depthWrite: false }));
+  glow.rotation.x = -Math.PI/2; glow.position.y = -0.62; g.add(glow);
+  g.userData.underglow = glow;
   return { group: g, wheels, bodyMat, hullMesh: hull, cabMesh: cab, bullMesh: bull };
 }
 
@@ -1019,6 +1128,7 @@ function demolish(p){
   emit(pos.x, pos.y + 1, pos.z, 0xffaa33, 40, 16, .8);
   emit(pos.x, pos.y + 1, pos.z, 0xffffff, 14, 22, .4);
   emit(pos.x, pos.y + 1, pos.z, 0x333333, 20, 6, 1.2, -2);
+  spawnRing(pos.x, pos.y, pos.z, 0xff7733);
   for (let i = 0; i < 3; i++) spawnSalvage(pos.x + rnd(-2.5, 2.5), pos.z + rnd(-2.5, 2.5));
   G.slowT = Math.max(G.slowT, 0.4);
   sfx.crunch();
@@ -1214,7 +1324,7 @@ function startMatch(seed, roster){
   // roster: [{name, human, guestIdx, team, slot}]
   G.seed = seed; G.round = 0; G.score = [0, 0];
   newWorld();
-  for (const p of players) scene.remove(p.group);
+  for (const p of players){ scene.remove(p.group); if (p.trail) scene.remove(p.trail.line); }
   players = roster.map((r, i) =>
     makePlayer(i, r.name, TEAM_COLORS[r.team][r.slot % 3], r.human, r.guestIdx, r.team, r.slot));
   buildField();
@@ -1261,6 +1371,7 @@ function scoreGoal(team){
   const b = BALL.mesh.position;
   emit(b.x, b.y, b.z, team === 0 ? 0x36e2ff : 0xff9b50, 46, 16, .9);
   emit(b.x, b.y, b.z, 0xffffff, 16, 22, .4);
+  spawnRing(b.x, b.y, b.z, team === 0 ? 0x36e2ff : 0xff9b50);
   banner("GOAL! " + G.score[0] + "–" + G.score[1], 2000);
   goalFeed(team, by, own);
   sfx.win(); sfx.boom(); G.slowT = Math.max(G.slowT, 0.5);
@@ -1391,6 +1502,7 @@ function buildScoreHud(){
   }
   document.getElementById("round").textContent = G.score[0] + "–" + G.score[1];
   document.getElementById("alive").textContent = WIN_GOALS;
+  updateScoreboard();
 }
 
 // ---------------- input ----------------
@@ -1502,9 +1614,31 @@ function stepCamera(dt){
   }
 }
 
+// goal/demolition shockwave rings
+const rings = [];
+function spawnRing(x, y, z, color){
+  const m = new THREE.Mesh(new THREE.TorusGeometry(1, 0.28, 8, 40),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false }));
+  m.position.set(x, Math.max(y, 0.6), z); m.rotation.x = Math.PI/2;
+  scene.add(m); rings.push({ m, t: 0 });
+}
+// boost ribbon trails
+function makeTrail(){
+  const N = 22, geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0 }));
+  line.frustumCulled = false; scene.add(line);
+  return { line, N, init: false };
+}
 // visual extras per frame
 const ballPrev = new THREE.Vector3();
 function stepVisuals(dt){
+  for (let i = rings.length - 1; i >= 0; i--){
+    const r = rings[i]; r.t += dt;
+    const s = 1 + r.t * 26; r.m.scale.set(s, s, 1);
+    r.m.material.opacity = Math.max(0, 0.9 * (1 - r.t / 0.8));
+    if (r.t > 0.8){ scene.remove(r.m); r.m.material.dispose(); rings.splice(i, 1); }
+  }
   // ball streak when it's really moving (works for guests too — mesh-delta based)
   if (BALL.mesh && G.mode === "playing"){
     const bp = BALL.mesh.position;
@@ -1517,6 +1651,18 @@ function stepVisuals(dt){
     const flame = p.group.userData.flame;
     if (flame){ flame.visible = !!p.boosting && p.alive;
       if (flame.visible){ flame.scale.setScalar(rnd(0.8,1.25)); } }
+    const ug = p.group.userData.underglow;
+    if (ug) ug.material.opacity = p.boosting ? 0.6 : 0.32;
+    // boost ribbon
+    if (!p.trail) p.trail = makeTrail();
+    { const a = p.trail.line.geometry.attributes.position;
+      tmpV.set(0, -0.1, -2.2).applyQuaternion(p.group.quaternion).add(p.group.position);
+      if (!p.trail.init){ for (let i = 0; i < p.trail.N; i++) a.setXYZ(i, tmpV.x, tmpV.y, tmpV.z); p.trail.init = true; }
+      for (let i = p.trail.N - 1; i > 0; i--) a.setXYZ(i, a.getX(i-1), a.getY(i-1), a.getZ(i-1));
+      a.setXYZ(0, tmpV.x, tmpV.y, tmpV.z); a.needsUpdate = true;
+      const mat = p.trail.line.material;
+      mat.opacity = (p.boosting && p.alive) ? Math.min(0.85, mat.opacity + dt * 6) : mat.opacity * Math.pow(0.02, dt);
+    }
     // wheel spin
     let spd = 6;
     if (p.body){ const v = p.body.linvel(); spd = Math.hypot(v.x, v.z); }
@@ -1680,6 +1826,7 @@ function guestOnMsg(m){
     case "goal": { G.score = [m.sc[0], m.sc[1]]; G.phase = "goal";
       const b = BALL.mesh ? BALL.mesh.position : { x: 0, y: 1, z: 0 };
       emit(b.x, b.y, b.z, m.team === 0 ? 0x36e2ff : 0xff9b50, 46, 16, .9);
+      spawnRing(b.x, b.y, b.z, m.team === 0 ? 0x36e2ff : 0xff9b50);
       banner("GOAL! " + G.score[0] + "–" + G.score[1], 2000);
       goalFeed(m.team, m.by ?? -1, !!m.own);
       sfx.win(); sfx.boom(); G.slowT = Math.max(G.slowT, 0.5);
@@ -1698,7 +1845,7 @@ function guestOnMsg(m){
 }
 function startMatchGuest(seed, roster){
   G.seed = seed; G.round = 0; G.score = [0, 0];
-  for (const p of players) scene.remove(p.group);
+  for (const p of players){ scene.remove(p.group); if (p.trail) scene.remove(p.trail.line); }
   players = roster.map((r, i) =>
     makePlayer(i, r.name, TEAM_COLORS[r.team][r.slot % 3], r.human, r.guestIdx, r.team, r.slot));
   buildField();
@@ -1889,10 +2036,10 @@ function tick(now, headless){
   stepDebris(dt);
   stepVisuals(dt);
   stepCamera(dt);
-  renderer.render(scene, camera);
+  if (composer) composer.render(); else renderer.render(scene, camera);
 }
 // build an empty court for the menu backdrop
-newWorld(); buildArena(42);
+newWorld(); buildArena(42); buildStadium();
 requestAnimationFrame(frame);
 // debug hook (headless verification)
 window.__W = { get G(){ return G; }, get players(){ return players; }, get tiles(){ return tiles; }, tick };
