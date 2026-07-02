@@ -1,0 +1,1657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>WRECK COURT — physics sumo-brawl</title>
+<style>
+  :root{--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--boost:#ffd166;--line:#233056;--panel:rgba(12,18,40,0.9);}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;overflow:hidden;background:#05060f;color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;user-select:none;touch-action:none;}
+  #cv{position:fixed;inset:0;width:100%;height:100%;display:block;}
+  #hud{position:fixed;top:10px;left:0;right:0;display:flex;gap:9px;justify-content:center;flex-wrap:wrap;pointer-events:none;}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;display:flex;align-items:center;gap:7px;font-variant-numeric:tabular-nums;}
+  .pill .label{color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;}
+  .pill b{color:var(--you);}
+  #score{position:fixed;top:52px;left:0;right:0;display:flex;gap:6px;justify-content:center;pointer-events:none;flex-wrap:wrap;}
+  .sc{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:13px;display:flex;gap:7px;align-items:center;font-variant-numeric:tabular-nums;}
+  .sc .d{width:10px;height:10px;border-radius:3px;}
+  .sc.dead{opacity:.38;}
+  .sc b{min-width:12px;text-align:right;}
+  #boostwrap{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);width:min(260px,60vw);text-align:center;}
+  #boostbar,#hullbar{height:12px;background:#10182f;border:1px solid var(--line);border-radius:7px;overflow:hidden;margin-top:4px;margin-bottom:4px;}
+  #boostfill{height:100%;width:0;background:linear-gradient(90deg,#caa233,#ffd166);}
+  #hullfill{height:100%;width:100%;background:linear-gradient(90deg,#1577a8,#36e2ff);transition:width .15s;}
+  .lab{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+  #banner{position:fixed;top:30%;left:0;right:0;text-align:center;font-size:52px;font-weight:900;letter-spacing:2px;text-shadow:0 4px 24px #000;pointer-events:none;opacity:0;transition:opacity .2s;}
+  #toast{position:fixed;top:44%;left:0;right:0;text-align:center;font-size:22px;font-weight:800;color:var(--boost);text-shadow:0 2px 12px #000;pointer-events:none;opacity:0;transition:opacity .18s;}
+  #danger{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 120px 40px rgba(255,40,40,.55);opacity:0;transition:opacity .15s;z-index:3;}
+  #feed{position:fixed;left:12px;bottom:14px;display:flex;flex-direction:column-reverse;gap:3px;pointer-events:none;font-size:13px;text-shadow:0 1px 6px #000;}
+  #feed div{opacity:.95;}
+  .overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,14,.8);backdrop-filter:blur(3px);z-index:9;padding:16px;}
+  .overlay.show{display:grid;}
+  .card{width:min(620px,94vw);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.6);}
+  .card h1{margin:0 0 4px;font-size:30px;letter-spacing:-.5px;}
+  .card .tag{color:var(--you);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 12px;}
+  .card p{color:var(--muted);line-height:1.5;margin:0 0 10px;font-size:14px;}
+  .card ul{color:var(--muted);line-height:1.5;margin:0 0 12px;padding-left:18px;font-size:13px;}
+  .card b{color:var(--ink);}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;}
+  button{font:inherit;cursor:pointer;border-radius:11px;border:1px solid var(--line);background:#131c3c;color:var(--ink);padding:10px 18px;font-size:14px;}
+  button:hover{border-color:var(--you);}
+  .btn-primary{background:linear-gradient(180deg,#1ea7c4,#1577a8);border-color:#36e2ff;font-weight:700;}
+  select{font:inherit;background:#131c3c;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:7px 10px;}
+  textarea{width:100%;height:64px;background:#0c1330;color:var(--muted);border:1px solid var(--line);border-radius:9px;font-size:11px;padding:8px;resize:vertical;font-family:monospace;}
+  .slot{display:flex;gap:8px;align-items:center;background:#0e1735;border:1px solid var(--line);border-radius:9px;padding:6px 10px;font-size:13px;margin-bottom:6px;}
+  .slot .d{width:10px;height:10px;border-radius:3px;}
+  .slot .st{margin-left:auto;color:var(--muted);font-size:12px;}
+  #err{position:fixed;left:10px;top:10px;color:#ff8a8a;font-size:12px;max-width:90vw;z-index:99;white-space:pre-wrap;}
+  /* ---- touch controls (shown only on coarse-pointer devices) ---- */
+  #stickZone{position:fixed;left:0;bottom:0;width:46vw;height:52vh;display:none;z-index:5;touch-action:none;}
+  #stickBase{position:fixed;left:24px;bottom:34px;width:118px;height:118px;border-radius:50%;background:rgba(12,18,40,.55);border:1px solid var(--line);display:none;z-index:4;pointer-events:none;}
+  #stickNub{position:absolute;left:50%;top:50%;width:52px;height:52px;border-radius:50%;background:rgba(54,226,255,.35);border:1px solid var(--you);transform:translate(-50%,-50%);}
+  .tbtn{position:fixed;width:76px;height:76px;border-radius:50%;background:var(--panel);border:1px solid var(--line);display:none;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--you);z-index:5;touch-action:none;}
+  #bBoost{right:16px;bottom:40px;border-color:var(--boost);color:var(--boost);}
+  #bJump{right:104px;bottom:96px;}
+  #bFlip{right:30px;bottom:132px;width:54px;height:54px;font-size:10px;color:var(--muted);}
+  body.touch #stickZone{display:block;}
+  body.touch #stickBase{display:block;}
+  body.touch .tbtn{display:flex;}
+  body.touch #feed{bottom:168px;}
+  body.touch #boostwrap{bottom:6px;width:min(190px,38vw);}
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="hud">
+  <div class="pill"><span class="label">Round</span> <b id="round">—</b></div>
+  <div class="pill"><span class="label">In court</span> <b id="alive">—</b></div>
+  <div class="pill"><span class="label">Speed</span> <b id="spd">0</b></div>
+  <div class="pill" id="mutePill" style="pointer-events:auto;cursor:pointer">&#128266;</div>
+</div>
+<div id="toast"></div>
+<div id="danger"></div>
+<div id="score"></div>
+<div id="banner"></div>
+<div id="feed"></div>
+<div id="boostwrap"><span class="lab">Hull</span><div id="hullbar"><div id="hullfill"></div></div><span class="lab">Boost</span><div id="boostbar"><div id="boostfill"></div></div></div>
+<div id="err"></div>
+<div id="stickBase"><div id="stickNub"></div></div>
+<div id="stickZone"></div>
+<div class="tbtn" id="bJump">JUMP</div>
+<div class="tbtn" id="bBoost">BOOST</div>
+<div class="tbtn" id="bFlip">FLIP</div>
+
+<div class="overlay show" id="menu">
+  <div class="card">
+    <p class="tag">Physics sumo-brawl &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v7</span></p>
+    <h1>WRECK COURT</h1>
+    <p>Heavy trucks, one floating court, no guns. <b>Ram everyone else into the void.</b> The court crumbles from the rim inward — last truck standing takes the round. <b>First to 3 rounds wins.</b></p>
+    <ul>
+      <li><b>W/S</b> drive &middot; <b>A/D</b> steer &middot; <b>Shift</b> boost &middot; <b>Space</b> jump (again in air = flip-dodge) &middot; <b>R</b> flip upright</li>
+      <li><b>Phone:</b> hold the left pad to drive, slide to steer, pull down to reverse &middot; right-side <b>BOOST / JUMP / FLIP</b></li>
+      <li>Hits are real physics — momentum wins. Boost into someone's side and they <i>fly</i>.</li>
+      <li>Watch the red-shaking tiles: they're about to drop. You can ride a falling tile… briefly.</li>
+      <li><b>Carnage pays:</b> beat a truck to <b>0% hull</b> and it's &#128165; <b>DEMOLISHED</b> on the spot. Wrecks drop glowing <b style="color:#62f3a8">salvage</b> — drive over it to patch +12 hull. Dents and lost wheels are forever (this round) — and the wreckage on the court is <i>solid</i>: plow through it.</li>
+      <li><b>One REBOUND per round:</b> your first fall auto-rockets you back onto the court. The second one is final — or save yourself with air-steer + boost.</li>
+    </ul>
+    <div class="row">
+      <label class="lab" style="font-size:12px">Court size
+        <select id="botSel"><option value="2">1v1 (vs 1 bot)</option><option value="4" selected>4 trucks</option><option value="6">6 trucks</option></select>
+      </label>
+      <button class="btn-primary" id="soloBtn">PLAY (bots fill seats)</button>
+    </div>
+    <div class="row">
+      <button id="hostBtn">Host online</button>
+      <button id="joinBtn">Join a friend</button>
+      <button id="touchTog">&#128241; Touch pad</button>
+      <span class="lab" style="font-size:11px">online = copy-paste invite codes, no server</span>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="hostCard">
+  <div class="card">
+    <p class="tag">Hosting &middot; you are cyan</p>
+    <h1>Court lobby</h1>
+    <div id="slots"></div>
+    <div class="row"><button id="inviteBtn">Generate invite code</button><span class="lab" id="invState" style="font-size:11px"></span></div>
+    <p class="lab" style="margin:4px 0 2px">1 &middot; Send this code to your friend</p>
+    <textarea id="offerOut" readonly placeholder="click Generate invite code…"></textarea>
+    <p class="lab" style="margin:8px 0 2px">2 &middot; Paste their reply code here</p>
+    <textarea id="answerIn" placeholder="paste reply code…"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button id="acceptBtn">Connect player</button>
+      <button class="btn-primary" id="startBtn">START (bots fill empty seats)</button>
+      <button id="hostBack">Back</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="joinCard">
+  <div class="card">
+    <p class="tag">Joining a friend's court</p>
+    <h1>Join</h1>
+    <p class="lab" style="margin:4px 0 2px">1 &middot; Paste your friend's invite code</p>
+    <textarea id="offerIn" placeholder="paste invite code…"></textarea>
+    <div class="row" style="margin-top:8px"><button id="replyBtn">Generate reply code</button><span class="lab" id="joinState" style="font-size:11px"></span></div>
+    <p class="lab" style="margin:4px 0 2px">2 &middot; Send this reply back to them</p>
+    <textarea id="answerOut" readonly placeholder="reply code appears here…"></textarea>
+    <div class="row" style="margin-top:8px"><button id="joinBack">Back</button></div>
+    <p class="lab" id="joinWait" style="font-size:12px"></p>
+  </div>
+</div>
+
+<div class="overlay" id="resultOverlay">
+  <div class="card">
+    <h1 id="resultTitle">Match over</h1>
+    <p id="resultBody"></p>
+    <div class="row"><button class="btn-primary" id="resultBtn">Rematch</button><button id="resultMenu">Menu</button></div>
+  </div>
+</div>
+
+<script type="module">
+"use strict";
+/* ============================================================
+   WRECK COURT — physics sumo-brawl.
+   Real rigid-body physics (Rapier WASM): raycast-suspension
+   trucks on a floating tile court that crumbles rim-inward.
+   Ring-out only, no HP. Host-authoritative netcode over WebRTC
+   DataChannels with manual copy-paste signaling (zero infra).
+   Bots fill empty seats; solo play = host with 0 guests.
+   ============================================================ */
+import * as THREE from "three";
+const errEl = document.getElementById("err");
+const fatal = (m) => { errEl.textContent += m + "\n"; };
+window.addEventListener("error", e => fatal("ERR: " + e.message));
+
+let RAPIER;
+try {
+  RAPIER = (await import("https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.12.0/+esm")).default;
+  await RAPIER.init();
+} catch (e) { fatal("Rapier failed to load: " + e.message); throw e; }
+
+// ---------------- constants ----------------
+const DT = 1 / 60, GRAV = 20;   // heavier = less floaty; fastfall adds more when airborne
+const ARENA_R = 26, TILE = 3.3;
+const CRUMBLE_START = 8, CRUMBLE_EVERY = 6;   // seconds
+const KO_Y = -16, WIN_ROUNDS = 3;
+const CRUISE = 14, BOOST_CAP = 26;   // court is 26m radius — speeds must fit it
+const COLORS = [0x36e2ff, 0xff9b50, 0x62f3a8, 0xff7ad9, 0xffd166, 0xb388ff];
+const BOTNAMES = ["TOAST", "BISCUIT", "CRUMB", "SCONE", "MUFFIN", "BAGEL"];
+
+// ---------------- tiny utils ----------------
+const rnd = (a, b) => a + Math.random() * (b - a);
+function mulberry32(a){return function(){let t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296;}}
+const V3 = (x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
+const tmpV = V3(), tmpV2 = V3(), tmpQ = new THREE.Quaternion();
+
+// ---------------- renderer / scene ----------------
+// mobile detection: multiple signals, any one wins
+const IS_TOUCH = matchMedia("(pointer: coarse)").matches
+  || "ontouchstart" in window
+  || navigator.maxTouchPoints > 0
+  || !!(navigator.userAgentData && navigator.userAgentData.mobile)
+  || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+if (IS_TOUCH) document.body.classList.add("touch");
+// guaranteed fallback: the first REAL touch anywhere enables the touch UI,
+// even if every detection signal above lied
+addEventListener("touchstart", () => {
+  if (!document.body.classList.contains("touch")){
+    document.body.classList.add("touch");
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  }
+}, { once: true, passive: true });
+const cv = document.getElementById("cv");
+const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, IS_TOUCH ? 1.5 : 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x05060f, 70, 190);
+const camera = new THREE.PerspectiveCamera(66, 1, 0.1, 500);
+function onResize(){ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); }
+addEventListener("resize", onResize); onResize();
+
+scene.add(new THREE.HemisphereLight(0x8fb4ff, 0x140a20, 0.85));
+const sun = new THREE.DirectionalLight(0xfff2dd, 1.6);
+sun.position.set(38, 55, 22); sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.left = -40; sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 40; sun.shadow.camera.bottom = -40; sun.shadow.camera.far = 140;
+scene.add(sun);
+
+// starfield + void glow
+{
+  const g = new THREE.BufferGeometry(), pts = [];
+  for (let i = 0; i < 700; i++){ const a=rnd(0,Math.PI*2), b=Math.acos(rnd(-1,1)), r=rnd(180,260);
+    pts.push(r*Math.sin(b)*Math.cos(a), Math.abs(r*Math.cos(b))-40, r*Math.sin(b)*Math.sin(a)); }
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0x9db8ff, size: 0.7, sizeAttenuation: true })));
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(220, 48),
+    new THREE.MeshBasicMaterial({ color: 0x160b33, fog: false }));
+  disc.rotation.x = -Math.PI/2; disc.position.y = -46; scene.add(disc);
+  const glow = new THREE.Mesh(new THREE.RingGeometry(2, 60, 48),
+    new THREE.MeshBasicMaterial({ color: 0x3d1a7a, transparent: true, opacity: .55, fog: false, side: THREE.DoubleSide }));
+  glow.rotation.x = -Math.PI/2; glow.position.y = -45.5; scene.add(glow);
+}
+
+// ---------------- audio (all synthesized, unlocked on first input) ----------------
+let AC = null, master = null, engOsc = null, engO2 = null, engGain = null, boostGain = null, noiseB = null;
+let muted = localStorage.getItem("wreckMute") === "1";
+function audioInit(){
+  if (AC) return;
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = muted ? 0 : 0.5; master.connect(AC.destination);
+    noiseB = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+    { const d = noiseB.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2-1; }
+    // engine: detuned saw+square through a lowpass, pitch follows speed
+    engGain = AC.createGain(); engGain.gain.value = 0;
+    const lp = AC.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 480;
+    engOsc = AC.createOscillator(); engOsc.type = "sawtooth"; engOsc.frequency.value = 50;
+    engO2 = AC.createOscillator(); engO2.type = "square"; engO2.frequency.value = 25.3;
+    engOsc.connect(lp); engO2.connect(lp); lp.connect(engGain); engGain.connect(master);
+    engOsc.start(); engO2.start();
+    // boost: looping noise through a bandpass
+    boostGain = AC.createGain(); boostGain.gain.value = 0;
+    const src = AC.createBufferSource(); src.buffer = noiseB; src.loop = true;
+    const bp = AC.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 900; bp.Q.value = 0.7;
+    src.connect(bp); bp.connect(boostGain); boostGain.connect(master); src.start();
+  } catch (e) { AC = null; }
+}
+function audioUnlock(){ audioInit(); if (AC && AC.state === "suspended") AC.resume(); }
+addEventListener("pointerdown", audioUnlock, { once: false });
+addEventListener("keydown", audioUnlock, { once: false });
+function blip(freq, dur, type = "sine", vol = 0.25, slide = 0){
+  if (!AC) return;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, AC.currentTime);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), AC.currentTime + dur);
+  g.gain.setValueAtTime(vol, AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
+  o.connect(g); g.connect(master); o.start(); o.stop(AC.currentTime + dur + 0.02);
+}
+function noiseHit(vol, freq, dur){
+  if (!AC) return;
+  const src = AC.createBufferSource(); src.buffer = noiseB;
+  const bp = AC.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = freq; bp.Q.value = 1.1;
+  const g = AC.createGain(); g.gain.setValueAtTime(vol, AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
+  src.connect(bp); bp.connect(g); g.connect(master); src.start(); src.stop(AC.currentTime + dur + 0.05);
+}
+const sfx = {
+  thud(i){ i = Math.min(1, i); noiseHit(0.12 + 0.5*i, 250 + 500*i, 0.25); blip(90, 0.22, "sine", 0.15 + 0.5*i, -55); },
+  boom(){ noiseHit(0.7, 600, 0.5); blip(55, 0.7, "sine", 0.6, -25); this.rumble(0.7); },
+  rumble(v = 0.35){ noiseHit(v, 110, 0.8); },
+  beep(){ blip(330, 0.09, "square", 0.18); },
+  crunch(){ noiseHit(0.45, 1600, 0.28); blip(140, 0.18, "square", 0.3, -60); },
+  salv(){ blip(660, 0.09, "triangle", 0.25); setTimeout(() => blip(880, 0.12, "triangle", 0.25), 70); },
+  go(){ blip(520, 0.2, "square", 0.3); },
+  win(){ blip(392, 0.12, "triangle", 0.3); setTimeout(() => blip(523, 0.12, "triangle", 0.3), 120); setTimeout(() => blip(659, 0.3, "triangle", 0.35), 240); }
+};
+function setMuted(m){ muted = m; localStorage.setItem("wreckMute", m ? "1" : "0");
+  if (master) master.gain.value = m ? 0 : 0.5;
+  const el = document.getElementById("mutePill"); if (el) el.textContent = m ? "\u{1F507}" : "\u{1F50A}"; }
+addEventListener("keydown", e => { if (e.code === "KeyM") setMuted(!muted); });
+if (muted){ const el = document.getElementById("mutePill"); if (el) el.textContent = "\u{1F507}"; }
+
+// ---------------- particles ----------------
+const PMAX = 1600;
+const pGeo = new THREE.BufferGeometry();
+const pPos = new Float32Array(PMAX*3), pCol = new Float32Array(PMAX*3);
+pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
+pGeo.setAttribute("color", new THREE.BufferAttribute(pCol, 3));
+const pMat = new THREE.PointsMaterial({ size: .42, vertexColors: true, transparent: true, opacity: .95, depthWrite: false });
+const pMesh = new THREE.Points(pGeo, pMat); pMesh.frustumCulled = false; scene.add(pMesh);
+const parts = [];
+function emit(x, y, z, color, n, speed, life, grav = 14){
+  const c = new THREE.Color(color);
+  for (let i = 0; i < n; i++){
+    if (parts.length >= PMAX) parts.shift();
+    const a = rnd(0, Math.PI*2), e = rnd(-0.4, 1);
+    const s = rnd(speed*0.3, speed);
+    parts.push({ x, y, z, vx: Math.cos(a)*s*Math.cos(e), vy: Math.sin(e)*s + speed*0.25, vz: Math.sin(a)*s*Math.cos(e),
+      life: rnd(life*0.5, life), t: 0, r: c.r, g: c.g, b: c.b, grav });
+  }
+}
+function stepParts(dt){
+  for (let i = parts.length-1; i >= 0; i--){
+    const p = parts[i]; p.t += dt;
+    if (p.t > p.life){ parts.splice(i,1); continue; }
+    p.vy -= p.grav*dt; p.x += p.vx*dt; p.y += p.vy*dt; p.z += p.vz*dt;
+  }
+  for (let i = 0; i < PMAX; i++){
+    if (i < parts.length){ const p = parts[i];
+      pPos[i*3]=p.x; pPos[i*3+1]=p.y; pPos[i*3+2]=p.z;
+      const f = 1 - p.t/p.life; pCol[i*3]=p.r*f; pCol[i*3+1]=p.g*f; pCol[i*3+2]=p.b*f;
+    } else { pPos[i*3+1] = -999; }
+  }
+  pGeo.attributes.position.needsUpdate = true; pGeo.attributes.color.needsUpdate = true;
+}
+
+// ---------------- physics world ----------------
+let world = null;
+function newWorld(){ if (world) world.free(); world = new RAPIER.World({ x: 0, y: -GRAV, z: 0 }); }
+
+// ---------------- arena (tiles) ----------------
+/* tile: {i, x, z, ring, body, mesh, state:0 solid |1 shaking |2 falling |3 gone, timer, vy, spin} */
+let tiles = [], maxRing = 0, tileGroup = null;
+const tileGeo = new THREE.BoxGeometry(TILE-0.12, 1, TILE-0.12);
+function buildArena(seed){
+  if (tileGroup) { scene.remove(tileGroup); tileGroup.traverse(o=>{ if(o.material) o.material.dispose?.(); }); }
+  tileGroup = new THREE.Group(); scene.add(tileGroup);
+  tiles = []; maxRing = 0;
+  const rng = mulberry32(seed);
+  let i = 0;
+  const n = Math.ceil(ARENA_R / TILE);
+  for (let gx = -n; gx <= n; gx++) for (let gz = -n; gz <= n; gz++){
+    const x = gx*TILE, z = gz*TILE;
+    const d = Math.hypot(x, z);
+    if (d > ARENA_R) continue;
+    const ring = Math.floor(d / TILE);
+    maxRing = Math.max(maxRing, ring);
+    const shade = 0.72 + rng()*0.28;
+    const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x1a2547).multiplyScalar(shade),
+      roughness: .82, metalness: .25, emissive: 0x0a1128, emissiveIntensity: .5 });
+    const mesh = new THREE.Mesh(tileGeo, mat);
+    mesh.position.set(x, -0.5, z); mesh.receiveShadow = true; mesh.castShadow = false;
+    tileGroup.add(mesh);
+    let body = null;
+    if (world){
+      body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, -0.5, z));
+      world.createCollider(RAPIER.ColliderDesc.cuboid((TILE-0.12)/2, 0.5, (TILE-0.12)/2).setFriction(1.0), body);
+    }
+    tiles.push({ i, x, z, ring, body, mesh, state: 0, timer: 0, vy: 0, spin: rng()*2-1 });
+    i++;
+  }
+  // rim glow ring
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(ARENA_R+0.6, .18, 8, 80),
+    new THREE.MeshBasicMaterial({ color: 0x36e2ff, transparent:true, opacity:.5 }));
+  rim.rotation.x = Math.PI/2; rim.position.y = 0.02; tileGroup.add(rim);
+}
+function crumbleRing(r){
+  let any = false;
+  for (const t of tiles) if (t.state === 0 && t.ring >= r){ t.state = 1; t.timer = 1.6; any = true; }
+  if (any) sfx.rumble(0.4);
+  return any;
+}
+function stepTiles(dt, authoritative){
+  for (const t of tiles){
+    if (t.state === 1){
+      t.timer -= dt;
+      t.mesh.position.x = t.x + rnd(-.06,.06); t.mesh.position.z = t.z + rnd(-.06,.06);
+      t.mesh.material.emissive.setHex(0x8a1d1d);
+      t.mesh.material.emissiveIntensity = 1.2 + Math.sin(performance.now()*0.03)*0.8;
+      if (t.timer <= 0){
+        t.state = 2; t.vy = 0;
+        if (authoritative && t.body){ world.removeRigidBody(t.body); t.body = null; }
+        netTileEvent(t.i);
+      }
+    } else if (t.state === 2){
+      t.vy -= GRAV*dt;
+      t.mesh.position.y += t.vy*dt;
+      t.mesh.rotation.x += t.spin*dt*.8; t.mesh.rotation.z += t.spin*dt*.5;
+      if (t.mesh.position.y < -44){ t.state = 3; t.mesh.visible = false; }
+    }
+  }
+}
+
+// ---------------- trucks ----------------
+/* player: {id, name, color, human, guestIdx|-1, body, group, wheels[], boost, alive, wins,
+            input:{th,st,jump,boost}, jumpHeld, canFlip, grounded, groundN, botT, botSkill} */
+let players = [];
+const WHEEL_POS = [[-1.05,-0.42,1.5],[1.05,-0.42,1.5],[-1.05,-0.42,-1.5],[1.05,-0.42,-1.5]];
+const REST_LEN = 0.66, RIDE = 0.5;  // shorter travel = planted, less pogo
+
+function truckMesh(color){
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: .35, metalness: .75 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x10141f, roughness: .6, metalness: .4 });
+  // segmented hull so impacts can crush real dents into it;
+  // vertex colors let scuffs darken exactly where the metal folded
+  const hullGeo = new THREE.BoxGeometry(2.2, 0.75, 4.0, 3, 2, 5);
+  hullGeo.userData.orig = hullGeo.attributes.position.array.slice();
+  hullGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(hullGeo.attributes.position.count * 3).fill(1), 3));
+  bodyMat.vertexColors = true;
+  const hull = new THREE.Mesh(hullGeo, bodyMat);
+  hull.castShadow = true; g.add(hull);
+  const cabGeo = new THREE.BoxGeometry(1.9, 0.65, 1.6);
+  cabGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(cabGeo.attributes.position.count * 3).fill(1), 3));
+  const cab = new THREE.Mesh(cabGeo, bodyMat);
+  cab.position.set(0, 0.68, -0.25); cab.castShadow = true; g.add(cab);
+  const bull = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.5, 0.35), dark);
+  bull.position.set(0, -0.1, 2.05); g.add(bull);
+  const wheels = [];
+  const wGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.42, 14);
+  wGeo.rotateZ(Math.PI/2);
+  for (const [x,,z] of WHEEL_POS){
+    const w = new THREE.Mesh(wGeo, dark);
+    w.position.set(x*1.06, -0.42, z); w.castShadow = true; g.add(w); wheels.push(w);
+  }
+  // boost flame (hidden by default)
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.5, 10),
+    new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: .9 }));
+  flame.rotation.x = -Math.PI/2; flame.position.set(0, -0.05, -2.6); flame.visible = false; g.add(flame);
+  g.userData.flame = flame;
+  return { group: g, wheels, bodyMat, hullMesh: hull, cabMesh: cab, bullMesh: bull };
+}
+
+function spawnPose(idx, count){
+  const a = (idx / count) * Math.PI * 2;
+  const r = ARENA_R * 0.55;
+  return { x: Math.cos(a)*r, z: Math.sin(a)*r, yaw: a + Math.PI }; // face center
+}
+
+function makePlayer(id, name, color, human, guestIdx){
+  const { group, wheels, bodyMat, hullMesh, cabMesh, bullMesh } = truckMesh(color);
+  scene.add(group);
+  let body = null, chassisCol = null;
+  if (world){
+    body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(0, 3, 0).setLinearDamping(0.12).setAngularDamping(1.4).setCcdEnabled(true));
+    chassisCol = world.createCollider(RAPIER.ColliderDesc.cuboid(1.1, 0.38, 2.0)
+      .setFriction(0.35).setRestitution(0.22), body); // low bounce: shoving matches, not pinball
+    // low keel = stable, hard to flip accidentally, flips still possible from big hits
+    world.createCollider(RAPIER.ColliderDesc.cuboid(0.7, 0.16, 1.2)
+      .setTranslation(0, -0.34, 0).setDensity(3.2).setFriction(0.35), body);
+  }
+  return { id, name, color, human, guestIdx, body, chassisCol, group, wheels, bodyMat, hullMesh, cabMesh, bullMesh,
+    boost: 60, alive: true, wins: 0, grounded: false, groundN: V3(0,1,0),
+    hull: 100, dmg: { f: 0, b: 0, l: 0, r: 0 },
+    lostMask: 0, lost: { bull: false, cab: false, wheels: [false, false, false, false] },
+    input: { th: 0, st: 0, jump: false, boost: false }, jumpHeld: false, canFlip: false,
+    botT: rnd(0, 2), botSkill: rnd(0.75, 1.15) };
+}
+function resetTruck(p, idx, count){
+  const s = spawnPose(idx, count);
+  p.alive = true; p.boost = 60; p.canFlip = false;
+  p.input = { th: 0, st: 0, jump: false, boost: false, reset: false }; // no stale throttle into countdown
+  p.lastHitBy = null; p.lastHitT = -99;
+  p.rebound = true;       // one edge-save per round
+  repairTruck(p); // full repair between rounds: hull, dents, tint, lost pieces
+  p.group.visible = true;
+  if (p.body){
+    p.body.setTranslation({ x: s.x, y: 1.6, z: s.z }, true);
+    const q = new THREE.Quaternion().setFromAxisAngle(V3(0,1,0), -s.yaw + Math.PI/2);
+    p.body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+    p.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    p.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  } else {
+    p.group.position.set(s.x, 1.6, s.z);
+  }
+}
+
+// per-truck physics (host/solo only)
+const rayDir = { x: 0, y: -1, z: 0 };
+function stepTruck(p, dt){
+  const body = p.body;
+  const pos = body.translation();
+  const rot = body.rotation();
+  tmpQ.set(rot.x, rot.y, rot.z, rot.w);
+  const fwd = V3(0,0,1).applyQuaternion(tmpQ);
+  const up = V3(0,1,0).applyQuaternion(tmpQ);
+  const right = V3(1,0,0).applyQuaternion(tmpQ);
+  const vel = body.linvel();
+  const mass = body.mass();
+
+  // --- suspension: 4 raycasts straight down from wheel anchors ---
+  // a torn-off wheel = no suspension at that corner: the truck sags and drags
+  let groundHits = 0; const gN = V3();
+  for (let wi = 0; wi < WHEEL_POS.length; wi++){
+    if (p.lost.wheels[wi]) continue;
+    const [wx, wy, wz] = WHEEL_POS[wi];
+    const anchor = V3(wx, wy, wz).applyQuaternion(tmpQ).add(V3(pos.x, pos.y, pos.z));
+    const ray = new RAPIER.Ray({ x: anchor.x, y: anchor.y, z: anchor.z }, rayDir);
+    const hit = world.castRay(ray, REST_LEN, true, undefined, undefined, undefined, body);
+    if (hit){
+      groundHits++;
+      const comp = (REST_LEN - hit.toi) / REST_LEN;         // 0..1
+      // spring + damper along world up
+      const ptVel = body.velocityAtPoint?.({x:anchor.x,y:anchor.y,z:anchor.z}) ?? vel;
+      const relVy = ptVel.y;
+      // stiffer spring + much stronger damping = planted, no pogo-wobble
+      let F = mass * GRAV * 0.62 * comp * 2.6 - relVy * mass * 1.6;
+      F = Math.max(0, Math.min(F, mass * GRAV * 2.0));
+      body.applyImpulseAtPoint({ x: 0, y: F*dt, z: 0 }, { x: anchor.x, y: anchor.y, z: anchor.z }, true);
+      gN.y += 1;
+    }
+  }
+  p.grounded = groundHits >= 2;
+  if (p.grounded){ p.safeX = pos.x; p.safeZ = pos.z; } // last solid footing (salvage drop point)
+  const inp = p.input;
+
+  if (p.grounded){
+    // flatten forward onto ground plane
+    const f = fwd.clone(); f.y = 0; f.normalize();
+    // damage wear: a beat-up truck is slower, looser, and pulls to one side
+    const health = p.hull / 100;                    // 1 fresh → 0 wrecked
+    const lostW = p.lost.wheels[0] + p.lost.wheels[1] + p.lost.wheels[2] + p.lost.wheels[3];
+    const wear = (0.62 + 0.38 * health) * (1 - 0.08 * lostW);      // engine power
+    const steerWear = (0.68 + 0.32 * health) * (1 - 0.12 * lostW); // steering authority
+    // drive
+    const accel = (inp.th > 0 ? 12.5 : 11) * wear;
+    const boosting = inp.boost && p.boost > 0.5;    // boost is ITS OWN thrust — no throttle needed
+    if (inp.th !== 0)
+      body.applyImpulse({ x: f.x*inp.th*accel*mass*dt, y: 0, z: f.z*inp.th*accel*mass*dt }, true);
+    if (boosting){
+      p.boost = Math.max(0, p.boost - 34*dt);
+      body.applyImpulse({ x: f.x*15*wear*mass*dt, y: 0, z: f.z*15*wear*mass*dt }, true);
+    }
+    else p.boost = Math.min(100, p.boost + 11*dt);
+    p.boosting = boosting;
+    // lateral grip (cancel part of sideways velocity); damaged = sloppier slides
+    const latSpeed = vel.x*right.x + vel.z*right.z;
+    const grip = 0.14 * (0.62 + 0.38 * health);
+    body.applyImpulse({ x: -right.x*latSpeed*mass*grip, y: 0, z: -right.z*latSpeed*mass*grip }, true);
+    // steering: lerp yaw angvel toward target (arcade-reliable, still shoved by hits)
+    const spd = Math.hypot(vel.x, vel.z);
+    const dir = (vel.x*f.x + vel.z*f.z) >= -0.5 ? 1 : -1;
+    // chirality (verified on-screen, not just math): +angvel.y = turn LEFT.
+    // st=+1 (D / stick-right) must turn screen-right => NEGATIVE yaw.
+    let target = -inp.st * 2.5 * steerWear * dir * Math.min(1, 0.35 + spd/10);
+    // asymmetric side damage drags the truck toward the crushed side
+    target += (p.dmg.l - p.dmg.r) * 0.007 * Math.min(1, spd/8);
+    const av = body.angvel();
+    // flatten: damp pitch/roll wobble while upright (big hits still flip you past the gate)
+    const flat = up.y > 0.7 ? 0.82 : 1;
+    body.setAngvel({ x: av.x*flat, y: av.y + (target - av.y)*0.22, z: av.z*flat }, true);
+    // speed cap (soft)
+    const cap = boosting ? BOOST_CAP : CRUISE;
+    if (spd > cap){
+      const k = 1 - Math.min(1, (spd-cap)/cap) * 0.10;
+      body.setLinvel({ x: vel.x*k, y: vel.y, z: vel.z*k }, true);
+    }
+    // jump
+    if (inp.jump && !p.jumpHeld){
+      body.applyImpulse({ x: 0, y: mass*8.2, z: 0 }, true);
+      p.canFlip = true;
+    }
+  } else {
+    // fastfall: extra gravity on the way down = snappy, not floaty
+    if (vel.y < 0) body.applyImpulse({ x: 0, y: -mass*GRAV*0.45*dt, z: 0 }, true);
+    p.boosting = inp.boost && p.boost > 0.5;
+    if (p.boosting){
+      p.boost = Math.max(0, p.boost - 34*dt);
+      // strong air boost = launches are recoverable with skill (the save is the drama)
+      body.applyImpulse({ x: fwd.x*14*mass*dt, y: fwd.y*11*mass*dt + mass*5*dt, z: fwd.z*14*mass*dt }, true);
+    }
+    // flat responsive air control (v14 lesson): yaw follows steer, pitch from throttle
+    const av = body.angvel();
+    body.setAngvel({ x: av.x + (inp.th*2.1 - av.x)*0.10,     // W = nose-down dive
+                     y: av.y + (-inp.st*2.4 - av.y)*0.10, z: av.z*0.97 }, true);
+    // flip-dodge: second jump press in air
+    if (inp.jump && !p.jumpHeld && p.canFlip){
+      p.canFlip = false;
+      const dodge = V3(fwd.x, 0, fwd.z).normalize().multiplyScalar(inp.th >= 0 ? 1 : -1);
+      // local +X is the truck's LEFT; stick-right (st=+1) dodges right = -X
+      if (Math.abs(inp.st) > 0.3){ dodge.copy(right).multiplyScalar(-Math.sign(inp.st)); dodge.y = 0; dodge.normalize(); }
+      body.applyImpulse({ x: dodge.x*mass*7.5, y: mass*1.6, z: dodge.z*mass*7.5 }, true);
+      const flipAxis = V3().crossVectors(V3(0,1,0), dodge);
+      body.applyTorqueImpulse({ x: flipAxis.x*mass*3.4, y: 0, z: flipAxis.z*mass*3.4 }, true);
+      emit(pos.x, pos.y, pos.z, p.color, 10, 8, .5);
+    }
+  }
+  p.jumpHeld = inp.jump;
+
+  // upright assist / R-reset handled via input flag
+  if (inp.reset && up.y < 0.35){
+    const yaw = Math.atan2(fwd.x, fwd.z);
+    const q = new THREE.Quaternion().setFromAxisAngle(V3(0,1,0), yaw);
+    body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+    body.setTranslation({ x: pos.x, y: pos.y + 1.4, z: pos.z }, true);
+    body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  }
+}
+
+// ---------------- ram detection (FX + pop) ----------------
+const ramCd = new Map();
+function stepRams(dt, authoritative){
+  for (const [k,v] of ramCd) { if (v <= dt) ramCd.delete(k); else ramCd.set(k, v-dt); }
+  for (let i = 0; i < players.length; i++) for (let j = i+1; j < players.length; j++){
+    const A = players[i], B = players[j];
+    if (!A.alive || !B.alive) continue;
+    const pa = A.group.position, pb = B.group.position;
+    const dx = pb.x-pa.x, dy = pb.y-pa.y, dz = pb.z-pa.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d > 4.4) continue;
+    const key = i*100+j;
+    if (ramCd.has(key)) continue;
+    let closing = 4; // guest fallback: assume decent hit for FX
+    if (authoritative && A.body && B.body){
+      const va = A.body.linvel(), vb = B.body.linvel();
+      const nx = dx/d, ny = dy/d, nz = dz/d;
+      closing = (va.x-vb.x)*nx + (va.y-vb.y)*ny + (va.z-vb.z)*nz;
+      if (closing < 5) continue;
+      // pop: defender flies, attacker recoils less, both pop up (comedy).
+      // impulse capped so big hits stay recoverable (air control + boost home)
+      const eff = Math.min(closing, 13);
+      const aTowards = va.x*nx + va.z*nz, bTowards = -(vb.x*nx + vb.z*nz);
+      const [atk, def, sgn] = aTowards >= bTowards ? [A, B, 1] : [B, A, -1];
+      const am = atk.body.mass(), dm = def.body.mass();
+      def.body.applyImpulse({ x: sgn*nx*dm*eff*0.34, y: dm*eff*0.11, z: sgn*nz*dm*eff*0.34 }, true);
+      atk.body.applyImpulse({ x: -sgn*nx*am*eff*0.08, y: am*eff*0.08, z: -sgn*nz*am*eff*0.08 }, true);
+      // any contact earns the kill credit; only BIG hits refill boost
+      def.lastHitBy = atk.id; def.lastHitT = G.t;
+      if (closing > 8){
+        atk.boost = Math.min(100, atk.boost + 22);
+        if (atk === me()) toast("BIG HIT — +22 BOOST");
+      }
+      // locational damage: front is armored, rear is the weak spot
+      applyDamage(def, closing, sgn*nx, sgn*nz);
+      applyDamage(atk, closing * 0.35, -sgn*nx, -sgn*nz); // attacker chips too (usually front-armored)
+    } else if (!authoritative){
+      // guest: estimate closing speed from interpolated velocities
+      const va = A.netVel || {x:0,y:0,z:0}, vb = B.netVel || {x:0,y:0,z:0};
+      closing = (va.x-vb.x)*(dx/d) + (va.z-vb.z)*(dz/d);
+      if (closing < 5) continue;
+    }
+    ramCd.set(key, 0.45);
+    const mx = (pa.x+pb.x)/2, my = (pa.y+pb.y)/2 + .4, mz = (pa.z+pb.z)/2;
+    emit(mx, my, mz, 0xffe58a, Math.min(26, 6 + closing*1.6), 6 + closing*0.7, .55);
+    emit(mx, my, mz, 0xffffff, 6, 10, .3);
+    sfx.thud(closing / 14);
+    if (closing > 11) G.slowT = Math.max(G.slowT, 0.09);   // hit-stop on heavy contact
+    if (A === me() || B === me()) shake(Math.min(1, closing/16));
+  }
+}
+
+// ---------------- damage ----------------
+/* hits hurt where they land: front (bull bar) x0.6, sides x1.1, REAR x1.6.
+   damage never kills (ring-out only) — it cripples: power, steering, grip,
+   and a pull toward the crushed side. It also SHOWS: real dents crushed into
+   the hull at the impact point, and pieces that tear off — bull bar, cab,
+   even wheels (a lost wheel loses its suspension corner). repaired each round. */
+function deformHull(p, lx, lz, dmg){
+  const geo = p.hullMesh.geometry, pos = geo.attributes.position;
+  if (!geo.userData.disp) geo.userData.disp = new Float32Array(pos.count);
+  const disp = geo.userData.disp;
+  const dir = V3(lx, 0, lz); if (dir.lengthSq() < 0.01) return; dir.normalize();
+  const px = dir.x * 1.1, pz = dir.z * 2.0;           // impact point on hull surface
+  const amt = Math.min(0.5, dmg * 0.017);
+  const colAttr = geo.attributes.color;
+  for (let i = 0; i < pos.count; i++){
+    const vx = pos.getX(i), vz = pos.getZ(i);
+    const d = Math.hypot(vx - px, vz - pz);
+    if (d > 1.4) continue;
+    let k = Math.min((1 - d/1.4) * amt, 0.38 - disp[i]); // per-vertex crush cap
+    if (k <= 0) continue;
+    disp[i] += k;
+    pos.setX(i, vx - dir.x * k);
+    pos.setZ(i, vz - dir.z * k);
+    pos.setY(i, pos.getY(i) - k * 0.3 * Math.random()); // crumple sag
+    // scuff the paint exactly where the metal folded
+    if (colAttr){ const shade = Math.max(0.35, 1 - disp[i] * 2.4); colAttr.setXYZ(i, shade, shade, shade); }
+  }
+  pos.needsUpdate = true; geo.computeVertexNormals();
+  if (colAttr) colAttr.needsUpdate = true;
+}
+// the collision shape follows the crush: rebuild the chassis collider from the
+// deformed hull vertices (mesh local space == collider space, so it maps 1:1)
+function rebuildChassis(p){
+  if (G.role === "guest" || !p.body || !world || !RAPIER.ColliderDesc.convexHull) return;
+  const desc = RAPIER.ColliderDesc.convexHull(new Float32Array(p.hullMesh.geometry.attributes.position.array));
+  if (!desc) return;
+  desc.setFriction(0.35).setRestitution(0.22);
+  if (p.chassisCol){ try { world.removeCollider(p.chassisCol, true); } catch (_) {} }
+  p.chassisCol = world.createCollider(desc, p.body);
+}
+const PIECE_BITS = { bull: 1, cab: 2, w0: 4, w1: 8, w2: 16, w3: 32 };
+const debris = [];
+function checkPieces(p){
+  if (!p.lost.bull && p.dmg.f > 26) loseP(p, "bull");
+  if (!p.lost.cab && 100 - p.hull > 62) loseP(p, "cab");
+  // left crush pops LEFT wheels (local +X = indices 1,3), right crush pops right (0,2)
+  if (!p.lost.wheels[1] && p.dmg.l > 26) loseP(p, "w1");
+  if (!p.lost.wheels[3] && p.dmg.l > 52) loseP(p, "w3");
+  if (!p.lost.wheels[0] && p.dmg.r > 26) loseP(p, "w0");
+  if (!p.lost.wheels[2] && p.dmg.r > 52) loseP(p, "w2");
+}
+function loseP(p, kind){
+  let mesh = null;
+  if (kind === "bull"){ p.lost.bull = true; mesh = p.bullMesh; }
+  else if (kind === "cab"){ p.lost.cab = true; mesh = p.cabMesh; }
+  else { const i = +kind[1]; p.lost.wheels[i] = true; mesh = p.wheels[i]; }
+  p.lostMask |= PIECE_BITS[kind];
+  if (!mesh || !mesh.visible) return;
+  mesh.visible = false;
+  // the piece flies off as tumbling debris
+  const d = mesh.clone(); d.visible = true;
+  mesh.getWorldPosition(tmpV); mesh.getWorldQuaternion(tmpQ);
+  d.position.copy(tmpV); d.quaternion.copy(tmpQ);
+  scene.add(d);
+  let vx = rnd(-3, 3), vz = rnd(-3, 3);
+  if (p.body){ const lv = p.body.linvel(); vx += lv.x * 0.7; vz += lv.z * 0.7; }
+  const entry = { mesh: d, vx, vy: rnd(5, 8), vz, rx: rnd(-7, 7), rz: rnd(-7, 7), t: 0, body: null };
+  // PHYSICAL debris (host/solo): the piece is a real rigid body — trucks send it
+  // flying, and it rides crumbling tiles into the void on its own
+  if (G.role !== "guest" && world){
+    const dims = kind === "bull" ? [1.15, 0.25, 0.18] : kind === "cab" ? [0.95, 0.33, 0.8] : [0.21, 0.48, 0.48];
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(tmpV.x, tmpV.y, tmpV.z)
+      .setLinvel(vx, entry.vy, vz)
+      .setAngvel({ x: rnd(-5, 5), y: rnd(-5, 5), z: rnd(-5, 5) })
+      .setLinearDamping(0.2).setAngularDamping(0.8));
+    body.setRotation({ x: tmpQ.x, y: tmpQ.y, z: tmpQ.z, w: tmpQ.w }, true);
+    world.createCollider(RAPIER.ColliderDesc.cuboid(...dims)
+      .setDensity(0.25).setFriction(0.6).setRestitution(0.4), body);
+    entry.body = body;
+    // cap live debris bodies for perf; oldest goes inert (mesh stays as dressing)
+    let live = 0;
+    for (const e of debris) if (e.body) live++;
+    if (live >= 14){
+      for (const e of debris) if (e.body){ world.removeRigidBody(e.body); e.body = null; e.landed = true; break; }
+    }
+  }
+  debris.push(entry);
+  emit(tmpV.x, tmpV.y, tmpV.z, 0xffe58a, 8, 6, .4);
+  sfx.crunch();
+  if (p === me()){
+    toast(kind === "cab" ? "CAB TORN OFF" : kind === "bull" ? "BULL BAR RIPPED OFF" : "WHEEL GONE — she pulls now", 1100);
+    shake(0.6);
+  }
+}
+function stepDebris(dt){
+  const safeR = currentSafeRadius();
+  for (let i = debris.length - 1; i >= 0; i--){
+    const d = debris[i]; d.t += dt;
+    const m = d.mesh;
+    if (d.body){ // real physics piece: mesh follows the body
+      const t = d.body.translation(), r = d.body.rotation();
+      m.position.set(t.x, t.y, t.z); m.quaternion.set(r.x, r.y, r.z, r.w);
+      if (t.y < -40){ world.removeRigidBody(d.body); scene.remove(m); debris.splice(i, 1); }
+      continue;
+    }
+    if (d.landed){
+      // wreckage litters the court until its tile crumbles away beneath it
+      if (Math.hypot(m.position.x, m.position.z) > safeR){ d.landed = false; d.vy = 0; }
+      else { d.vx *= 0.9; d.vz *= 0.9;
+        m.position.x += d.vx * dt; m.position.z += d.vz * dt; continue; }
+    }
+    d.vy -= 16 * dt;
+    m.position.x += d.vx * dt; m.position.y += d.vy * dt; m.position.z += d.vz * dt;
+    m.rotation.x += d.rx * dt; m.rotation.z += d.rz * dt;
+    if (d.vy < 0 && m.position.y < 0.35 && Math.hypot(m.position.x, m.position.z) < safeR){
+      d.landed = true; d.vy = 0; d.vx *= 0.4; d.vz *= 0.4;
+      m.position.y = 0.32; m.rotation.x = Math.round(m.rotation.x / Math.PI) * Math.PI;
+    }
+    if (m.position.y < -35){ scene.remove(m); debris.splice(i, 1); }
+  }
+  while (debris.length > 30){ scene.remove(debris[0].mesh); debris.shift(); } // cap the junkyard
+}
+// ---------------- salvage (carnage economy) ----------------
+/* demolitions & KOs drop glowing chips; drive over one to patch +12 hull.
+   dents and lost wheels stay — you're patched, not pretty. */
+let salvageId = 0;
+const salvage = [];
+const salvGeo = new THREE.OctahedronGeometry(0.5);
+function spawnSalvage(x, z){
+  if (Math.hypot(x, z) > currentSafeRadius() - 1) return;   // don't drop chips over the void
+  const mesh = new THREE.Mesh(salvGeo,
+    new THREE.MeshBasicMaterial({ color: 0x62f3a8, transparent: true, opacity: 0.9 }));
+  mesh.position.set(x, 0.8, z);
+  scene.add(mesh);
+  salvage.push({ id: salvageId++, x, z, mesh });
+}
+function removeSalvage(i){ scene.remove(salvage[i].mesh); salvage[i].mesh.material.dispose(); salvage.splice(i, 1); }
+function healHull(p, amt){
+  const tot = p.dmg.f + p.dmg.b + p.dmg.l + p.dmg.r;
+  if (tot <= 0) return;
+  const k = Math.max(0, tot - amt) / tot;
+  p.dmg.f *= k; p.dmg.b *= k; p.dmg.l *= k; p.dmg.r *= k;
+  p.hull = Math.max(0, 100 - (p.dmg.f + p.dmg.b + p.dmg.l + p.dmg.r));
+  if (p.bodyMat){ const c = new THREE.Color(p.color);
+    p.bodyMat.color.copy(c.lerp(new THREE.Color(0x1a1a1f), (1 - p.hull/100) * 0.7)); }
+}
+function stepSalvage(dt){
+  // spin + pulse everywhere; pickup is host-authoritative
+  for (const s of salvage){ s.mesh.rotation.y += 2.2 * dt;
+    s.mesh.position.y = 0.8 + Math.sin(performance.now() * 0.004 + s.id) * 0.15; }
+  if (G.role === "guest" || G.phase !== "fight") return;
+  for (const p of players){
+    if (!p.alive || !p.body || p.hull >= 100) continue;
+    const pos = p.group.position;
+    for (let i = salvage.length - 1; i >= 0; i--){
+      const s = salvage[i];
+      if (Math.hypot(s.x - pos.x, s.z - pos.z) < 2.3){
+        healHull(p, 12);
+        emit(s.x, 1, s.z, 0x62f3a8, 10, 5, .5);
+        sfx.salv();
+        if (p === me()) toast("SALVAGED — hull " + Math.round(p.hull) + "%", 900);
+        netEvent({ t: "salv", id: p.id, sx: s.x, sz: s.z });
+        removeSalvage(i);
+      }
+    }
+  }
+}
+function clearCarnage(){
+  for (const d of debris){ if (d.body && world){ try { world.removeRigidBody(d.body); } catch (_) {} } scene.remove(d.mesh); }
+  debris.length = 0;
+  while (salvage.length) removeSalvage(0);
+}
+function repairTruck(p){
+  p.hull = 100; p.dmg = { f: 0, b: 0, l: 0, r: 0 };
+  p.lostMask = 0; p.lost = { bull: false, cab: false, wheels: [false, false, false, false] };
+  if (p.bodyMat) p.bodyMat.color.setHex(p.color);
+  if (p.bullMesh) p.bullMesh.visible = true;
+  if (p.cabMesh) p.cabMesh.visible = true;
+  p.wheels.forEach(w => w.visible = true);
+  const geo = p.hullMesh.geometry, orig = geo.userData.orig;
+  if (orig){ geo.attributes.position.array.set(orig);
+    geo.attributes.position.needsUpdate = true; geo.computeVertexNormals(); }
+  if (geo.userData.disp) geo.userData.disp.fill(0);
+  if (geo.attributes.color){ geo.attributes.color.array.fill(1); geo.attributes.color.needsUpdate = true; }
+  p.dentAccum = 0;
+}
+function applyDamage(p, closing, inX, inZ){
+  const raw = Math.max(0, closing - 4);
+  if (raw <= 0) return;
+  // attacker bearing in my local frame (inX/inZ = world dir the hit pushed me → attacker is opposite)
+  tmpQ.copy(p.group.quaternion).invert();
+  const local = V3(-inX, 0, -inZ).applyQuaternion(tmpQ);
+  let zone, mult;
+  if (local.z > 0.5){ zone = "f"; mult = 0.6; }
+  else if (local.z < -0.5){ zone = "b"; mult = 1.6; }
+  else if (local.x > 0){ zone = "l"; mult = 1.1; } // local +X = truck's LEFT side
+  else { zone = "r"; mult = 1.1; }
+  const dmg = Math.min(30, raw * 2.2 * mult);
+  p.dmg[zone] += dmg;
+  p.hull = Math.max(0, 100 - (p.dmg.f + p.dmg.b + p.dmg.l + p.dmg.r));
+  // scorch tint scales with total damage
+  if (p.bodyMat){
+    const c = new THREE.Color(p.color);
+    p.bodyMat.color.copy(c.lerp(new THREE.Color(0x1a1a1f), (1 - p.hull/100) * 0.7));
+  }
+  // crush a visible dent where the hit landed, maybe tear pieces off
+  deformHull(p, local.x, local.z, dmg);
+  checkPieces(p);
+  // enough new crush accumulated → the physics shape catches up with the metal
+  p.dentAccum = (p.dentAccum || 0) + dmg;
+  if (p.dentAccum > 14){ p.dentAccum = 0; rebuildChassis(p); }
+  netEvent({ t: "dent", id: p.id, x: +local.x.toFixed(2), z: +local.z.toFixed(2), a: +dmg.toFixed(1) });
+  if (p === me() && dmg > 8){
+    const names = { f: "FRONT", b: "REAR", l: "LEFT SIDE", r: "RIGHT SIDE" };
+    toast(`${names[zone]} ${p.hull < 35 ? "CRUSHED" : "DENTED"} — hull ${Math.round(p.hull)}%`, 900);
+  }
+  if (p.hull <= 0 && p.alive) demolish(p);   // beaten to death: DEMOLITION
+}
+function demolish(p){
+  ["bull", "cab", "w0", "w1", "w2", "w3"].forEach(k => loseP(p, k)); // everything left tears off
+  const pos = p.group.position;
+  emit(pos.x, pos.y + 1, pos.z, 0xffaa33, 40, 16, .8);
+  emit(pos.x, pos.y + 1, pos.z, 0xffffff, 14, 22, .4);
+  emit(pos.x, pos.y + 1, pos.z, 0x333333, 20, 6, 1.2, -2);
+  for (let i = 0; i < 3; i++) spawnSalvage(pos.x + rnd(-2.5, 2.5), pos.z + rnd(-2.5, 2.5));
+  G.slowT = Math.max(G.slowT, 0.4);
+  sfx.crunch();
+  koPlayer(p, true);
+}
+
+// ---------------- bots ----------------
+function stepBot(p, dt){
+  p.botT -= dt;
+  const pos = p.group.position;
+  const rot = p.body.rotation(); tmpQ.set(rot.x,rot.y,rot.z,rot.w);
+  const fwd = V3(0,0,1).applyQuaternion(tmpQ); fwd.y = 0; fwd.normalize();
+  const vel = p.body.linvel();
+  const liveR = currentSafeRadius();
+  const selfR = Math.hypot(pos.x, pos.z);
+  const inp = p.input;
+  inp.boost = false; inp.jump = false;
+  // where does my momentum put me in 0.85s? (speed-aware edge safety)
+  const futR = Math.hypot(pos.x + vel.x*0.85, pos.z + vel.z*0.85);
+  // AIRBORNE (rammed/launched): steer nose back toward the court and boost home
+  if (!p.grounded && pos.y > -2){
+    const inward = V3(-(pos.x + vel.x*0.4), 0, -(pos.z + vel.z*0.4));
+    if (inward.lengthSq() > 0.1){
+      inward.normalize();
+      const cross = fwd.x*inward.z - fwd.z*inward.x;
+      const dot = fwd.x*inward.x + fwd.z*inward.z;
+      inp.st = THREE.MathUtils.clamp(cross*3, -1, 1);
+      inp.th = 0;
+      inp.boost = dot > 0.55 && p.boost > 10 && futR > liveR - 4;
+    }
+    return;
+  }
+  if (futR > liveR - 3.5 || selfR > liveR - 2){
+    // EMERGENCY: about to fly off — brake if sliding outward, steer hard inward
+    const inward = V3(-pos.x, 0, -pos.z).normalize();
+    const cross = fwd.x*inward.z - fwd.z*inward.x;
+    const dot = fwd.x*inward.x + fwd.z*inward.z;
+    inp.st = THREE.MathUtils.clamp(cross*4, -1, 1) * (dot < -0.2 ? -1 : 1);
+    const outSpeed = (vel.x*pos.x + vel.z*pos.z) / (selfR || 1);
+    // carve at speed when already facing inward-ish; hard-brake when facing out
+    inp.th = dot > 0.3 ? 0.6 : (outSpeed > 6 ? -1 : 0.2);
+    return;
+  }
+  // badly hurt? limp to the nearest salvage chip instead of brawling
+  if (p.hull < 45 && salvage.length){
+    let chip = null, cd = 400; // within 20m
+    for (const s of salvage){ const dx = s.x - pos.x, dz = s.z - pos.z, d2 = dx*dx + dz*dz;
+      if (d2 < cd){ cd = d2; chip = s; } }
+    if (chip){
+      const cdir = V3(chip.x - pos.x, 0, chip.z - pos.z).normalize();
+      const ccross = fwd.x*cdir.z - fwd.z*cdir.x, cdot = fwd.x*cdir.x + fwd.z*cdir.z;
+      inp.st = THREE.MathUtils.clamp(ccross*3.2, -1, 1) * (cdot < -0.3 ? -1 : 1);
+      inp.th = cdot < -0.5 ? -1 : 1;
+      return;
+    }
+  }
+  // nearest living opponent still on the court — but wounded trucks smell like prey
+  let tgt = null, best = 1e9;
+  for (const o of players){ if (o === p || !o.alive || o.group.position.y < -1.5) continue;
+    const score = pos.distanceTo(o.group.position) - (100 - o.hull) * 0.16; // blood scent
+    if (score < best){ best = score; tgt = o; } }
+  inp.th = 1;
+  if (!tgt){ // nobody targetable: hold near center
+    const inward = V3(-pos.x, 0, -pos.z);
+    if (inward.length() < 5){ inp.th = 0; inp.st = 0; return; }
+    inward.normalize();
+    const cross = fwd.x*inward.z - fwd.z*inward.x;
+    inp.st = THREE.MathUtils.clamp(cross*3, -1, 1); inp.th = 0.6; return;
+  }
+  // intercept lead (v14 lesson: lead the target), aim clamped inside the court
+  const tv = tgt.body ? tgt.body.linvel() : (tgt.netVel || {x:0,z:0});
+  const dist = pos.distanceTo(tgt.group.position); // REAL distance (best is a score, can be negative)
+  const lead = Math.min(0.9, dist / 22) * p.botSkill;
+  const aim = V3(tgt.group.position.x + tv.x*lead, 0, tgt.group.position.z + tv.z*lead);
+  const aimR = Math.hypot(aim.x, aim.z), maxAimR = Math.max(4, liveR - 5);
+  if (aimR > maxAimR){ aim.x *= maxAimR/aimR; aim.z *= maxAimR/aimR; }
+  const dir = V3(aim.x - pos.x, 0, aim.z - pos.z).normalize();
+  const cross = fwd.x*dir.z - fwd.z*dir.x;
+  const dot = fwd.x*dir.x + fwd.z*dir.z;
+  inp.st = THREE.MathUtils.clamp(cross*3.2, -1, 1) * (dot < -0.3 ? -1 : 1);
+  if (dot < -0.5) inp.th = -1; // hard reverse turn
+  // speed discipline: if momentum at 1.2s would cross the safe rim, stop pushing NOW
+  // (stopping distance at boost speed exceeds the whole margin — prevention only)
+  const futR12 = Math.hypot(pos.x + vel.x*1.2, pos.z + vel.z*1.2);
+  if (futR12 > liveR - 4) inp.th = Math.min(inp.th, 0);
+  // boost only for SHORT kill runs (the hit itself is the payload; long runs = overshoot suicide)
+  inp.boost = dot > 0.93 && dist < 14 && dist > 6 && p.boost > 30 && futR12 < liveR - 10 && aimR < liveR - 8;
+  // occasional jump when close head-on (chaos)
+  if (dist < 6 && dot > 0.8 && p.botT <= 0){ inp.jump = true; p.botT = rnd(1.5, 4); }
+}
+function currentSafeRadius(){
+  let r = 0;
+  for (const t of tiles) if (t.state === 0) r = Math.max(r, Math.hypot(t.x, t.z));
+  return Math.max(4, r);
+}
+
+// ---------------- game state ----------------
+const G = { mode: "menu", // menu | playing
+  role: "solo",           // solo | host | guest
+  phase: "idle",          // countdown | fight | roundend | matchend
+  round: 0, t: 0, phaseT: 0, nextRing: 0, seed: 1, shake: 0,
+  slowT: 0 };             // hit-stop: brief slow-mo timer (seconds, real time)
+function me(){ return players.find(p => p.human && p.guestIdx === (G.role === "guest" ? myGuestIdx : -1)) || players[0]; }
+function shake(a){ G.shake = Math.min(1.6, G.shake + a); }
+
+const bannerEl = document.getElementById("banner"), feedEl = document.getElementById("feed");
+function banner(txt, ms=1100){ bannerEl.textContent = txt; bannerEl.style.opacity = 1;
+  clearTimeout(banner._t); banner._t = setTimeout(()=>bannerEl.style.opacity=0, ms); }
+const toastEl = document.getElementById("toast");
+function toast(txt, ms = 1000){ toastEl.textContent = txt; toastEl.style.opacity = 1;
+  clearTimeout(toast._t); toast._t = setTimeout(() => toastEl.style.opacity = 0, ms); }
+document.getElementById("mutePill").addEventListener("pointerdown", e => { e.stopPropagation(); audioUnlock(); setMuted(!muted); });
+function feed(txt){ const d = document.createElement("div"); d.innerHTML = txt; feedEl.prepend(d);
+  while (feedEl.children.length > 5) feedEl.lastChild.remove();
+  setTimeout(()=>{ d.style.transition = "opacity 1s"; d.style.opacity = 0; setTimeout(()=>d.remove(), 1000); }, 4200); }
+
+function startMatch(seed, roster){
+  // roster: [{name, color, human, guestIdx}]
+  G.seed = seed; G.round = 0;
+  newWorld();
+  for (const p of players) scene.remove(p.group);
+  players = roster.map((r, i) => makePlayer(i, r.name, COLORS[i % COLORS.length], r.human, r.guestIdx));
+  buildArena(seed);
+  document.getElementById("menu").classList.remove("show");
+  document.getElementById("hostCard").classList.remove("show");
+  document.getElementById("joinCard").classList.remove("show");
+  document.getElementById("resultOverlay").classList.remove("show");
+  G.mode = "playing";
+  startRound();
+  buildScoreHud();
+}
+function startRound(){
+  G.round++;
+  // rebuild tiles fresh each round; sweep last round's wreckage
+  clearCarnage();
+  newWorldKeepPlayers();
+  buildArena(G.seed + G.round * 977);
+  players.forEach((p, i) => resetTruck(p, i, players.length));
+  G.phase = "countdown"; G.phaseT = 3.2; G.t = 0; G.nextRing = maxRing;
+  banner("ROUND " + G.round, 1400);
+  netEvent({ t: "round", n: G.round });
+}
+function newWorldKeepPlayers(){
+  // recreate world + re-add truck bodies (cleanest tile reset)
+  if (G.role === "guest") return;
+  newWorld();
+  for (const p of players){
+    const wasWins = p.wins;
+    const { body } = recreateBody(p);
+    p.body = body; p.wins = wasWins;
+  }
+}
+function recreateBody(p){
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+    .setTranslation(0, 3, 0).setLinearDamping(0.12).setAngularDamping(1.4).setCcdEnabled(true));
+  p.chassisCol = world.createCollider(RAPIER.ColliderDesc.cuboid(1.1, 0.38, 2.0).setFriction(0.35).setRestitution(0.22), body);
+  world.createCollider(RAPIER.ColliderDesc.cuboid(0.7, 0.16, 1.2).setTranslation(0,-0.34,0).setDensity(3.2).setFriction(0.35), body);
+  return { body };
+}
+
+function stepGame(dt){
+  if (G.mode !== "playing") return;
+  G.phaseT -= dt;
+  if (G.phase === "countdown"){
+    if (G.phaseT <= 0){ G.phase = "fight"; banner("WRECK!", 800); sfx.go(); netEvent({ t: "fight" }); }
+    else { const n = Math.ceil(G.phaseT); if (n !== G._cd){ G._cd = n; if (n <= 3){ banner(String(n), 500); sfx.beep(); } } }
+  }
+  const authoritative = G.role !== "guest";
+  if (authoritative){
+    if (G.phase === "fight"){
+      G.t += dt;
+      // crumble schedule
+      if (G.t > CRUMBLE_START && G.nextRing >= 0){
+        const due = Math.floor((G.t - CRUMBLE_START) / CRUMBLE_EVERY);
+        const targetRing = maxRing - due;
+        while (G.nextRing > targetRing && G.nextRing >= 0){ // ring 0 too: sudden death, no stalemates
+          crumbleRing(G.nextRing); netEvent({ t: "ring", r: G.nextRing }); G.nextRing--;
+        }
+      }
+      for (const p of players) if (p.alive && !p.human) stepBot(p, dt);
+    }
+    // physics (also during countdown/roundend so trucks settle / corpses fly)
+    if (G.phase === "fight" || G.phase === "roundend"){
+      for (const p of players) if (p.alive && p.body) stepTruck(p, dt);
+      world.timestep = dt; world.step();
+      // sync meshes + KO check
+      for (const p of players){
+        if (!p.body) continue;
+        const t = p.body.translation(), r = p.body.rotation();
+        p.group.position.set(t.x, t.y, t.z);
+        p.group.quaternion.set(r.x, r.y, r.z, r.w);
+        if (p.alive && t.y < -6 && t.y > KO_Y && p.rebound) doRebound(p);
+        if (p.alive && t.y < KO_Y) koPlayer(p);
+      }
+    } else if (G.phase === "countdown"){
+      for (const p of players) if (p.body) stepTruck(p, dt); // suspension settles, no drive
+      // zero drive during countdown: fake by clearing inputs' effects — simplest: cancel horizontal vel
+      for (const p of players) if (p.body){ const v = p.body.linvel(); p.body.setLinvel({x: v.x*0.8, y: v.y, z: v.z*0.8}, true); }
+      world.timestep = dt; world.step();
+      for (const p of players){ if (!p.body) continue;
+        const t = p.body.translation(), r = p.body.rotation();
+        p.group.position.set(t.x, t.y, t.z); p.group.quaternion.set(r.x, r.y, r.z, r.w); }
+    }
+    // round end?
+    if (G.phase === "fight"){
+      const alive = players.filter(p => p.alive);
+      if (alive.length <= 1){
+        G.phase = "roundend"; G.phaseT = 2.4;
+        const w = alive[0];
+        if (w){ w.wins++; banner(w.name + " TAKES THE ROUND", 1800); sfx.win();
+          netEvent({ t: "roundwin", id: w.id }); }
+        else banner("DOUBLE WRECK", 1600);
+        buildScoreHud();
+      }
+    } else if (G.phase === "roundend" && G.phaseT <= 0){
+      const champ = players.find(p => p.wins >= WIN_ROUNDS);
+      if (champ) endMatch(champ); else startRound();
+    }
+  } else {
+    guestStep(dt);
+  }
+  stepTiles(dt, authoritative);
+  stepRams(dt, authoritative);
+  stepSalvage(dt); // pickup is host-gated inside; spin/pulse runs everywhere
+}
+// REBOUND: one automatic save per round — the truck rockets back toward center.
+// Generous once; the second fall is final.
+function doRebound(p){
+  p.rebound = false;
+  const t = p.body.translation();
+  const T = 1.5; // ballistic time to land near center
+  const vy = (2 - t.y + 0.5 * GRAV * T * T) / T;
+  const vx = THREE.MathUtils.clamp(-t.x / T, -24, 24);
+  const vz = THREE.MathUtils.clamp(-t.z / T, -24, 24);
+  p.body.setLinvel({ x: vx, y: vy, z: vz }, true);
+  p.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  const rot = p.body.rotation(); tmpQ.set(rot.x, rot.y, rot.z, rot.w);
+  const f = V3(0, 0, 1).applyQuaternion(tmpQ);
+  const q = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), Math.atan2(f.x, f.z));
+  p.body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+  emit(t.x, t.y, t.z, 0xffd166, 24, 12, .7);
+  emit(t.x, t.y, t.z, 0xff7733, 12, 8, .5);
+  sfx.go(); shake(p === me() ? 0.8 : 0);
+  if (p === me()) toast("REBOUND! — that was your one save this round", 1600);
+  netEvent({ t: "reb", id: p.id, x: +t.x.toFixed(1), y: +t.y.toFixed(1), z: +t.z.toFixed(1) });
+}
+function koPlayer(p, demolished = false){
+  p.alive = false;
+  if (p.body){ world.removeRigidBody(p.body); p.body = null; } // stop simulating corpses
+  const pos = p.group.position;
+  emit(pos.x, Math.max(pos.y, -10), pos.z, p.color, 30, 14, .9);
+  emit(pos.x, Math.max(pos.y, -10), pos.z, 0xffffff, 12, 20, .4);
+  // credit the wreck if someone tagged them recently
+  const killer = (p.lastHitBy != null && G.t - p.lastHitT < 4) ? players[p.lastHitBy] : null;
+  koFeed(p, killer ? killer.id : -1, demolished);
+  if (killer && killer.alive){
+    killer.boost = 100; // a confirmed wreck = full tank
+    if (killer === me()) toast(demolished ? "DEMOLISHED THEM — FULL BOOST" : "WRECKED THEM — FULL BOOST");
+  }
+  // ring-outs leave one salvage chip where they last stood (demolitions drop their own)
+  if (!demolished && p.safeX != null) spawnSalvage(p.safeX, p.safeZ);
+  sfx.boom(); G.slowT = Math.max(G.slowT, 0.25);
+  if (p === me()) shake(1.2);
+  p.group.visible = false;
+  netEvent({ t: "ko", id: p.id, k: killer ? killer.id : -1, d: demolished ? 1 : 0 });
+  buildScoreHud();
+}
+function koFeed(p, killerId, demolished){
+  const col = pl => `<b style="color:#${pl.color.toString(16).padStart(6,"0")}">${pl.name}</b>`;
+  const k = killerId >= 0 ? players[killerId] : null;
+  feed(demolished ? (k ? `${col(k)} \u{1F4A5} DEMOLISHED ${col(p)}` : `${col(p)} was \u{1F4A5} DEMOLISHED`)
+    : (k ? `${col(k)} WRECKED ${col(p)}` : `${col(p)} fell into the void`));
+}
+function endMatch(champ){
+  G.phase = "matchend";
+  netEvent({ t: "matchend", id: champ.id });
+  showResult(champ);
+}
+function showResult(champ){
+  const youWon = champ === me();
+  document.getElementById("resultTitle").textContent = youWon ? "YOU RULE THE COURT" : champ.name + " RULES THE COURT";
+  document.getElementById("resultBody").innerHTML =
+    players.map(p => `<b style="color:#${p.color.toString(16).padStart(6,"0")}">${p.name}</b> ${p.wins}`).join(" &middot; ");
+  document.getElementById("resultOverlay").classList.add("show");
+}
+
+// ---------------- HUD ----------------
+const scoreEl = document.getElementById("score");
+function buildScoreHud(){
+  scoreEl.innerHTML = "";
+  for (const p of players){
+    const d = document.createElement("div");
+    d.className = "sc" + (p.alive ? "" : " dead");
+    d.innerHTML = `<span class="d" style="background:#${p.color.toString(16).padStart(6,"0")}"></span>${p.name}<b>${p.wins}</b>`;
+    scoreEl.appendChild(d);
+  }
+  document.getElementById("alive").textContent = players.filter(p=>p.alive).length + "/" + players.length;
+  document.getElementById("round").textContent = G.round || "—";
+}
+
+// ---------------- input ----------------
+const keys = {};
+addEventListener("keydown", e => { keys[e.code] = true; if (["Space","ArrowUp","ArrowDown"].includes(e.code)) e.preventDefault(); });
+addEventListener("keyup", e => { keys[e.code] = false; });
+
+// touch: left-thumb stick (hold = drive, slide = steer, pull down = reverse) + buttons
+const touch = { active: false, st: 0, th: 0, boost: false, jump: false, reset: false };
+{
+  const zone = document.getElementById("stickZone");
+  const base = document.getElementById("stickBase"), nub = document.getElementById("stickNub");
+  let pid = null, cx = 0, cy = 0;
+  const cl = v => Math.max(-1, Math.min(1, v));
+  function upd(e){
+    const dx = (e.clientX - cx) / 52, dy = (e.clientY - cy) / 52;
+    touch.active = true;
+    touch.st = cl(dx * 1.4);
+    touch.th = dy > 0.45 ? -1 : 1;              // touching = drive forward; pull down = reverse
+    nub.style.transform = `translate(calc(-50% + ${cl(dx)*33}px), calc(-50% + ${cl(dy)*33}px))`;
+  }
+  zone.addEventListener("pointerdown", e => {
+    pid = e.pointerId;
+    try { zone.setPointerCapture(pid); } catch (_) {} // synthetic/stale pointers can't be captured
+    const r = base.getBoundingClientRect(); cx = r.left + r.width/2; cy = r.top + r.height/2;
+    upd(e); e.preventDefault();
+  });
+  zone.addEventListener("pointermove", e => { if (e.pointerId === pid) upd(e); });
+  const end = e => { if (e.pointerId === pid){ pid = null; touch.active = false; touch.st = 0; touch.th = 0;
+    nub.style.transform = "translate(-50%,-50%)"; } };
+  zone.addEventListener("pointerup", end); zone.addEventListener("pointercancel", end);
+  const bindBtn = (id, key) => { const el = document.getElementById(id);
+    el.addEventListener("pointerdown", e => { touch[key] = true; e.preventDefault(); });
+    for (const ev of ["pointerup","pointercancel","pointerleave"]) el.addEventListener(ev, () => { touch[key] = false; });
+  };
+  bindBtn("bBoost", "boost"); bindBtn("bJump", "jump"); bindBtn("bFlip", "reset");
+}
+function readLocalInput(){
+  const th = (keys.KeyW || keys.ArrowUp ? 1 : 0) + (keys.KeyS || keys.ArrowDown ? -1 : 0);
+  const st = (keys.KeyA || keys.ArrowLeft ? -1 : 0) + (keys.KeyD || keys.ArrowRight ? 1 : 0);
+  return {
+    th: touch.active ? touch.th : th,
+    st: touch.active ? touch.st : st,
+    jump: !!keys.Space || touch.jump,
+    boost: !!(keys.ShiftLeft || keys.ShiftRight) || touch.boost,
+    reset: !!keys.KeyR || touch.reset
+  };
+}
+
+// ---------------- camera ----------------
+const camPos = V3(0, 30, 40);
+function stepCamera(dt){
+  let target = me();
+  if (target && !target.alive){
+    target = players.find(p => p.alive) || target;
+  }
+  if (G.mode !== "playing" || !target){
+    // menu orbit
+    const t = performance.now()*0.0001;
+    camPos.lerp(V3(Math.cos(t)*46, 26, Math.sin(t)*46), 0.02);
+    camera.position.copy(camPos); camera.lookAt(0, -2, 0);
+    return;
+  }
+  const p = target.group.position;
+  const q = target.group.quaternion;
+  const back = V3(0, 0, -1).applyQuaternion(q); back.y = 0;
+  if (back.lengthSq() < 0.01) back.set(0,0,-1); back.normalize();
+  const want = V3(p.x + back.x*9.5, p.y + 5.2, p.z + back.z*9.5); // BEHIND the truck
+  // keep camera above the court even during falls
+  want.y = Math.max(want.y, -6);
+  camPos.lerp(want, 1 - Math.pow(0.0012, dt));
+  camera.position.copy(camPos);
+  if (G.shake > 0.01){
+    camera.position.x += rnd(-1,1)*G.shake*0.5;
+    camera.position.y += rnd(-1,1)*G.shake*0.4;
+    camera.position.z += rnd(-1,1)*G.shake*0.5;
+  }
+  G.shake *= Math.pow(0.05, dt);
+  camera.lookAt(p.x, p.y + 1.2, p.z);
+  // FOV rush with speed
+  let spd = 0;
+  if (target.body){ const v = target.body.linvel(); spd = Math.hypot(v.x, v.z); }
+  else if (target.netVel) spd = Math.hypot(target.netVel.x, target.netVel.z);
+  const wantFov = 66 + Math.min(18, spd*0.55);
+  camera.fov += (wantFov - camera.fov)*0.08; camera.updateProjectionMatrix();
+  document.getElementById("spd").textContent = Math.round(spd*3.6);
+  const m = me();
+  if (m){
+    document.getElementById("boostfill").style.width = m.boost.toFixed(0) + "%";
+    const hf = document.getElementById("hullfill");
+    hf.style.width = m.hull.toFixed(0) + "%";
+    hf.style.background = m.hull < 35 ? "linear-gradient(90deg,#a82222,#ff5b5b)"
+      : m.hull < 70 ? "linear-gradient(90deg,#a87a15,#ffd166)" : "linear-gradient(90deg,#1577a8,#36e2ff)";
+  }
+  // danger vignette: over the void, falling — you still have REBOUND or air-boost
+  if (m){
+    const y = m.group.position.y;
+    const off = Math.hypot(m.group.position.x, m.group.position.z) > currentSafeRadius() + 1;
+    document.getElementById("danger").style.opacity =
+      (m.alive && (y < -1.5 || (off && y < 1)) && y > KO_Y) ? Math.min(1, (-y) / 10 + 0.35) : 0;
+  }
+  // engine + boost audio follow MY truck
+  if (AC && m){
+    let mySpd = 0;
+    if (m.body){ const v = m.body.linvel(); mySpd = Math.hypot(v.x, v.z); }
+    else if (m.netVel) mySpd = Math.hypot(m.netVel.x, m.netVel.z);
+    const th = Math.abs(m.input?.th ?? 0);
+    engOsc.frequency.value = 45 + mySpd*3.2;
+    engO2.frequency.value = (45 + mySpd*3.2)/2 + 0.4;
+    engGain.gain.value = (m.alive && G.mode === "playing" && G.phase !== "matchend") ? 0.035 + th*0.05 : 0;
+    boostGain.gain.value = (m.alive && m.boosting) ? 0.2 : 0;
+  }
+}
+
+// visual extras per frame
+function stepVisuals(dt){
+  for (const p of players){
+    const flame = p.group.userData.flame;
+    if (flame){ flame.visible = !!p.boosting && p.alive;
+      if (flame.visible){ flame.scale.setScalar(rnd(0.8,1.25)); } }
+    // wheel spin
+    let spd = 6;
+    if (p.body){ const v = p.body.linvel(); spd = Math.hypot(v.x, v.z); }
+    for (const w of p.wheels) w.rotation.x += spd*dt*1.8;
+    // boost trail
+    if (p.boosting && p.alive && Math.random() < 0.5){
+      const pos = p.group.position;
+      emit(pos.x, pos.y, pos.z, 0xffd166, 1, 3, .3);
+    }
+    // damage smoke: starts light below 70% hull, billows when crushed
+    if (p.alive && p.hull < 70 && Math.random() < (70 - p.hull) / 70){
+      const pos = p.group.position;
+      emit(pos.x + rnd(-.5,.5), pos.y + 0.8, pos.z + rnd(-.5,.5),
+        p.hull < 35 ? 0x181818 : 0x3a3a40, 1, 1.2, 1.1, -2.5); // rises
+      if (p.hull < 25){
+        if (Math.random() < 0.25) emit(pos.x, pos.y + 0.5, pos.z, 0xff9b50, 1, 2.5, .35); // sparks
+        if (Math.random() < 0.5) emit(pos.x + rnd(-.4,.4), pos.y + 0.6, pos.z + rnd(-.4,.4),
+          0xff7733, 1, 1.8, .4, -4); // BURNING
+      }
+    }
+    // lost-wheel corners grind — sparks stream at speed
+    if (p.alive && p.group.position.y > -2 && spd > 5){
+      for (let i = 0; i < 4; i++){
+        if (p.lost.wheels[i] && Math.random() < 0.4){
+          tmpV.set(WHEEL_POS[i][0], WHEEL_POS[i][1], WHEEL_POS[i][2])
+            .applyQuaternion(p.group.quaternion).add(p.group.position);
+          emit(tmpV.x, tmpV.y + 0.1, tmpV.z, 0xffc966, 1, 2.5, .3);
+        }
+      }
+    }
+  }
+}
+
+/* ============================================================
+   NETCODE — host-authoritative over WebRTC DataChannels.
+   Copy-paste signaling (deflate+base64url compressed SDP).
+   host: sim + sends snapshots (20 Hz) + events. guests: send
+   inputs (30 Hz), interpolate snapshots.
+   ============================================================ */
+const guests = [];          // host: [{pc, dc, idx(guest number), connected, lastInput}]
+let hostConn = null;        // guest: {pc, dc}
+let myGuestIdx = -1;        // guest: which guest slot I am (0-based); player id = 1+idx
+let snapTick = 0;
+
+async function sdpEncode(desc){
+  const raw = JSON.stringify({ t: desc.type, s: desc.sdp });
+  const cs = new CompressionStream("deflate-raw");
+  const w = cs.writable.getWriter(); w.write(new TextEncoder().encode(raw)); w.close();
+  const buf = new Uint8Array(await new Response(cs.readable).arrayBuffer());
+  let b = ""; for (const x of buf) b += String.fromCharCode(x);
+  return btoa(b).replaceAll("+","-").replaceAll("/","_");
+}
+async function sdpDecode(code){
+  const b = atob(code.trim().replaceAll("-","+").replaceAll("_","/"));
+  const buf = new Uint8Array(b.length); for (let i=0;i<b.length;i++) buf[i] = b.charCodeAt(i);
+  const ds = new DecompressionStream("deflate-raw");
+  const w = ds.writable.getWriter(); w.write(buf); w.close();
+  const raw = await new Response(ds.readable).text();
+  const o = JSON.parse(raw); return { type: o.t, sdp: o.s };
+}
+function newPC(){ return new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] }); }
+function iceDone(pc){
+  return new Promise(res => {
+    if (pc.iceGatheringState === "complete") return res();
+    const to = setTimeout(res, 3500);
+    pc.addEventListener("icegatheringstatechange", () => {
+      if (pc.iceGatheringState === "complete"){ clearTimeout(to); res(); } });
+  });
+}
+function send(dc, obj){ if (dc && dc.readyState === "open") dc.send(JSON.stringify(obj)); }
+function broadcast(obj){ for (const g of guests) if (g.connected) send(g.dc, obj); }
+function netEvent(obj){ if (G.role === "host") broadcast(obj); }
+function netTileEvent(i){ if (G.role === "host") broadcast({ t: "tilefall", i }); }
+
+// ---- host side ----
+let pendingGuest = null;
+async function hostGenerateInvite(){
+  const pc = newPC();
+  const dc = pc.createDataChannel("game");
+  const g = { pc, dc, idx: guests.length, connected: false, lastInput: { th:0,st:0,jump:false,boost:false } };
+  pendingGuest = g;
+  dc.onopen = () => {
+    g.connected = true;
+    send(dc, { t: "welcome", idx: g.idx });
+    refreshSlots();
+  };
+  dc.onmessage = ev => hostOnMsg(g, JSON.parse(ev.data));
+  dc.onclose = () => { g.connected = false; refreshSlots(); };
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await iceDone(pc);
+  return sdpEncode(pc.localDescription);
+}
+function hostOnMsg(g, m){
+  if (m.t === "in") g.lastInput = m.i;
+}
+async function hostAcceptAnswer(code){
+  if (!pendingGuest) throw new Error("generate an invite first");
+  const desc = await sdpDecode(code);
+  await pendingGuest.pc.setRemoteDescription(desc);
+  guests.push(pendingGuest); pendingGuest = null;
+}
+function hostSnapshot(){
+  const trucks = players.map(p => {
+    const t = p.group.position, q = p.group.quaternion;
+    let v = { x: 0, y: 0, z: 0 };
+    if (p.body) { const lv = p.body.linvel(); v = { x: +lv.x.toFixed(2), y: +lv.y.toFixed(2), z: +lv.z.toFixed(2) }; }
+    return { p: [+t.x.toFixed(2), +t.y.toFixed(2), +t.z.toFixed(2)],
+             q: [+q.x.toFixed(3), +q.y.toFixed(3), +q.z.toFixed(3), +q.w.toFixed(3)],
+             v, a: p.alive ? 1 : 0, b: Math.round(p.boost), f: p.boosting ? 1 : 0, w: p.wins,
+             h: Math.round(p.hull), L: p.lostMask };
+  });
+  broadcast({ t: "snap", k: snapTick++, ph: G.phase, rd: G.round, tr: trucks,
+    S: salvage.map(s => [s.id, +s.x.toFixed(1), +s.z.toFixed(1)]) });
+}
+
+// ---- guest side ----
+let snapPrev = null, snapCur = null, snapCurAt = 0, snapInterval = 55;
+async function guestFromOffer(code){
+  const pc = newPC();
+  hostConn = { pc, dc: null };
+  pc.ondatachannel = ev => {
+    hostConn.dc = ev.channel;
+    hostConn.dc.onmessage = e => guestOnMsg(JSON.parse(e.data));
+    hostConn.dc.onopen = () => { document.getElementById("joinWait").textContent = "Connected! Waiting for host to start…"; };
+    hostConn.dc.onclose = () => { fatal("Host disconnected."); };
+  };
+  const desc = await sdpDecode(code);
+  await pc.setRemoteDescription(desc);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  await iceDone(pc);
+  return sdpEncode(pc.localDescription);
+}
+function guestOnMsg(m){
+  switch (m.t){
+    case "welcome": myGuestIdx = m.idx; break;
+    case "start": {
+      G.role = "guest";
+      world = null; // guests don't simulate
+      startMatchGuest(m.seed, m.roster);
+      break;
+    }
+    case "snap": {
+      snapPrev = snapCur;
+      const now = performance.now();
+      if (snapCurAt) snapInterval = snapInterval*0.85 + (now - snapCurAt)*0.15;
+      snapCur = m; snapCurAt = now;
+      if (m.rd !== G.round){ G.round = m.rd; buildScoreHud(); }
+      break;
+    }
+    case "round": G.round = m.n; guestResetRound(); banner("ROUND " + m.n, 1400); break;
+    case "fight": G.phase = "fight"; banner("WRECK!", 800); sfx.go(); break;
+    case "ring": crumbleRing(m.r); break;
+    case "dent": { const p = players[m.id]; if (p) deformHull(p, m.x, m.z, m.a); break; }
+    case "tilefall": { const t = tiles[m.i]; if (t && t.state < 2){ t.state = 2; t.vy = 0; } break; }
+    case "ko": { const p = players[m.id]; if (p && p.alive){ p.alive = false;
+      const pos = p.group.position; emit(pos.x, Math.max(pos.y,-10), pos.z, p.color, 30, 14, .9);
+      if (m.d){ emit(pos.x, pos.y + 1, pos.z, 0xffaa33, 40, 16, .8); G.slowT = Math.max(G.slowT, 0.4); }
+      koFeed(p, m.k ?? -1, !!m.d);
+      sfx.boom(); G.slowT = Math.max(G.slowT, 0.25);
+      p.group.visible = false; if (p === me()) shake(1.2); buildScoreHud(); } break; }
+    case "salv": { emit(m.sx, 1, m.sz, 0x62f3a8, 10, 5, .5); sfx.salv();
+      if (players[m.id] === me()) toast("SALVAGED", 800); break; }
+    case "reb": { emit(m.x, m.y, m.z, 0xffd166, 24, 12, .7); sfx.go();
+      if (players[m.id] === me()){ toast("REBOUND! — that was your one save this round", 1600); shake(0.8); } break; }
+    case "roundwin": { const p = players[m.id]; if (p){ p.wins++; banner(p.name + " TAKES THE ROUND", 1800); sfx.win(); buildScoreHud(); } break; }
+    case "matchend": { const p = players[m.id]; G.phase = "matchend"; if (p) showResult(p); break; }
+  }
+}
+function startMatchGuest(seed, roster){
+  G.seed = seed; G.round = 0;
+  for (const p of players) scene.remove(p.group);
+  players = roster.map((r, i) => makePlayer(i, r.name, COLORS[i % COLORS.length], r.human, r.guestIdx));
+  buildArena(seed);
+  ["menu","hostCard","joinCard","resultOverlay"].forEach(id => document.getElementById(id).classList.remove("show"));
+  G.mode = "playing"; G.phase = "countdown";
+  buildScoreHud();
+}
+function guestResetRound(){
+  clearCarnage();
+  buildArena(G.seed + G.round * 977);
+  for (const p of players){ p.alive = true; p.group.visible = true; repairTruck(p); }
+  G.phase = "countdown"; buildScoreHud();
+}
+function guestStep(dt){
+  // interpolate trucks between the last two snapshots
+  if (!snapCur) return;
+  const now = performance.now();
+  const alpha = snapPrev ? Math.min(1.25, (now - snapCurAt) / Math.max(30, snapInterval)) : 1;
+  for (let i = 0; i < players.length; i++){
+    const p = players[i], cur = snapCur.tr[i]; if (!cur) continue;
+    const prev = snapPrev ? snapPrev.tr[i] : cur;
+    p.group.position.set(
+      THREE.MathUtils.lerp(prev.p[0], cur.p[0], alpha),
+      THREE.MathUtils.lerp(prev.p[1], cur.p[1], alpha),
+      THREE.MathUtils.lerp(prev.p[2], cur.p[2], alpha));
+    const qa = new THREE.Quaternion(prev.q[0],prev.q[1],prev.q[2],prev.q[3]);
+    const qb = new THREE.Quaternion(cur.q[0],cur.q[1],cur.q[2],cur.q[3]);
+    qa.slerp(qb, alpha); p.group.quaternion.copy(qa);
+    p.netVel = cur.v; p.boost = cur.b; p.boosting = !!cur.f;
+    if (cur.h != null && cur.h !== p.hull){
+      p.hull = cur.h;   // drives smoke + hull bar; tint follows
+      if (p.bodyMat){ const c = new THREE.Color(p.color);
+        p.bodyMat.color.copy(c.lerp(new THREE.Color(0x1a1a1f), (1 - p.hull/100) * 0.7)); }
+    }
+    if (cur.L != null && cur.L !== p.lostMask){
+      for (const k in PIECE_BITS)
+        if ((cur.L & PIECE_BITS[k]) && !(p.lostMask & PIECE_BITS[k])) loseP(p, k);
+      p.lostMask = cur.L;
+    }
+    if (p.wins !== cur.w){ p.wins = cur.w; buildScoreHud(); }
+    if (p.alive && !cur.a){ p.alive = false; p.group.visible = false; buildScoreHud(); }
+    if (!p.alive && cur.a){ p.alive = true; p.group.visible = true; buildScoreHud(); }
+  }
+  // mirror the host's salvage chips
+  if (snapCur.S){
+    const ids = new Set(snapCur.S.map(a => a[0]));
+    for (let i = salvage.length - 1; i >= 0; i--) if (!ids.has(salvage[i].id)) removeSalvage(i);
+    const have = new Set(salvage.map(s => s.id));
+    for (const [id, x, z] of snapCur.S) if (!have.has(id)){
+      const mesh = new THREE.Mesh(salvGeo,
+        new THREE.MeshBasicMaterial({ color: 0x62f3a8, transparent: true, opacity: 0.9 }));
+      mesh.position.set(x, 0.8, z); scene.add(mesh);
+      salvage.push({ id, x, z, mesh });
+    }
+  }
+  if (snapCur.ph !== G.phase && (snapCur.ph === "fight" || snapCur.ph === "countdown")) G.phase = snapCur.ph;
+  // send my input
+  guestStep._acc = (guestStep._acc || 0) + dt;
+  if (guestStep._acc > 1/30){
+    guestStep._acc = 0;
+    send(hostConn?.dc, { t: "in", i: readLocalInput() });
+  }
+}
+
+// ---------------- lobby UI ----------------
+const $ = id => document.getElementById(id);
+function refreshSlots(){
+  const el = $("slots"); el.innerHTML = "";
+  const mk = (name, colorIdx, status) => {
+    const d = document.createElement("div"); d.className = "slot";
+    d.innerHTML = `<span class="d" style="background:#${COLORS[colorIdx].toString(16).padStart(6,"0")}"></span>${name}<span class="st">${status}</span>`;
+    el.appendChild(d);
+  };
+  mk("YOU (host)", 0, "ready");
+  guests.forEach((g, i) => mk("P" + (i+2), i+1, g.connected ? "connected" : "lost"));
+  if (pendingGuest) mk("P" + (guests.length+2), guests.length+1, "invite pending…");
+}
+$("soloBtn").onclick = () => {
+  const total = parseInt($("botSel").value, 10);
+  G.role = "solo";
+  const roster = [{ name: "YOU", human: true, guestIdx: -1 }];
+  for (let i = 1; i < total; i++) roster.push({ name: BOTNAMES[i-1], human: false, guestIdx: -1 });
+  startMatch((Math.random()*1e9)|0, roster);
+};
+$("touchTog").onclick = () => {
+  const on = document.body.classList.toggle("touch");
+  $("touchTog").style.borderColor = on ? "var(--you)" : "var(--line)";
+};
+$("hostBtn").onclick = () => { $("menu").classList.remove("show"); $("hostCard").classList.add("show"); refreshSlots(); };
+$("joinBtn").onclick = () => { $("menu").classList.remove("show"); $("joinCard").classList.add("show"); };
+$("hostBack").onclick = () => { $("hostCard").classList.remove("show"); $("menu").classList.add("show"); };
+$("joinBack").onclick = () => { $("joinCard").classList.remove("show"); $("menu").classList.add("show"); };
+$("inviteBtn").onclick = async () => {
+  $("invState").textContent = "generating…";
+  try { $("offerOut").value = await hostGenerateInvite(); $("invState").textContent = "send it!"; refreshSlots(); }
+  catch (e){ $("invState").textContent = "failed: " + e.message; }
+};
+$("offerOut").onclick = e => { e.target.select(); document.execCommand?.("copy"); };
+$("answerOut").onclick = e => { e.target.select(); document.execCommand?.("copy"); };
+$("acceptBtn").onclick = async () => {
+  try { await hostAcceptAnswer($("answerIn").value); $("answerIn").value = ""; $("invState").textContent = "connecting…"; }
+  catch (e){ $("invState").textContent = "failed: " + e.message; }
+};
+$("replyBtn").onclick = async () => {
+  $("joinState").textContent = "generating…";
+  try { $("answerOut").value = await guestFromOffer($("offerIn").value); $("joinState").textContent = "send it back!"; }
+  catch (e){ $("joinState").textContent = "failed: " + e.message; }
+};
+$("startBtn").onclick = () => {
+  const total = Math.max(2, Math.min(6, 1 + guests.filter(g=>g.connected).length + 2)); // humans + 2 bots min... keep simple: humans + bots to 4
+  G.role = "host";
+  const roster = [{ name: "YOU", human: true, guestIdx: -1 }];
+  guests.forEach((g, i) => { if (g.connected) roster.push({ name: "P" + (i+2), human: true, guestIdx: g.idx }); });
+  let bi = 0;
+  while (roster.length < Math.max(4, roster.length)) { roster.push({ name: BOTNAMES[bi++], human: false, guestIdx: -1 }); if (roster.length >= 4) break; }
+  const seed = (Math.random()*1e9)|0;
+  broadcast({ t: "start", seed, roster });
+  startMatch(seed, roster);
+};
+$("resultBtn").onclick = () => {
+  $("resultOverlay").classList.remove("show");
+  if (G.role === "guest") return; // host restarts for everyone
+  for (const p of players) p.wins = 0;
+  G.round = 0;
+  netEvent({ t: "rematch" }); // guests just follow snapshots/rounds
+  startRound(); buildScoreHud();
+};
+$("resultMenu").onclick = () => location.reload();
+
+// ---------------- main loop ----------------
+let last = performance.now(), acc = 0, snapAcc = 0;
+function frame(now){
+  requestAnimationFrame(frame);
+  tick(now, false);
+}
+// host must keep simulating when the tab is hidden (rAF throttles to 0),
+// otherwise the match freezes for every connected guest
+setInterval(() => { if (document.hidden) tick(performance.now(), true); }, 50);
+function tick(now, headless){
+  let dt = (now - last) / 1000; last = now;
+  if (dt <= 0) return;
+  dt = Math.min(dt, 0.1);
+  // hit-stop: briefly slow the sim (host/solo). guests only slow FX — their
+  // interpolation clock must stay on real time.
+  if (G.slowT > 0){ G.slowT -= dt; if (G.role !== "guest") dt *= 0.25; }
+  if (G.mode === "playing"){
+    // read local input for host/solo player
+    if (G.role !== "guest"){
+      const m = players.find(p => p.human && p.guestIdx === -1);
+      if (m) m.input = readLocalInput();
+      // apply guest inputs
+      for (const g of guests){
+        const p = players.find(pp => pp.guestIdx === g.idx);
+        if (p) p.input = g.lastInput;
+      }
+      acc += dt;
+      while (acc >= DT){ stepGame(DT); acc -= DT; }
+      // snapshots at 20 Hz
+      if (guests.some(g => g.connected)){
+        snapAcc += dt;
+        if (snapAcc >= 0.05){ snapAcc = 0; hostSnapshot(); }
+      }
+    } else {
+      stepGame(dt);
+    }
+  }
+  if (headless) return;   // hidden tab: sim only, no rendering
+  stepParts(dt);
+  stepDebris(dt);
+  stepVisuals(dt);
+  stepCamera(dt);
+  renderer.render(scene, camera);
+}
+// build an empty court for the menu backdrop
+newWorld(); buildArena(42);
+requestAnimationFrame(frame);
+// debug hook (headless verification)
+window.__W = { get G(){ return G; }, get players(){ return players; }, get tiles(){ return tiles; }, tick };
+</script>
+</body>
+</html>
