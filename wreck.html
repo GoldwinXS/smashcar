@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>WRECK COURT — physics sumo-brawl</title>
+<title>WRECKBALL — car-ball carnage</title>
 <style>
   :root{--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--boost:#ffd166;--line:#233056;--panel:rgba(12,18,40,0.9);}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -67,8 +67,8 @@
 <body>
 <canvas id="cv"></canvas>
 <div id="hud">
-  <div class="pill"><span class="label">Round</span> <b id="round">—</b></div>
-  <div class="pill"><span class="label">In court</span> <b id="alive">—</b></div>
+  <div class="pill"><span class="label">Score</span> <b id="round">0–0</b></div>
+  <div class="pill"><span class="label">First to</span> <b id="alive">5</b></div>
   <div class="pill"><span class="label">Speed</span> <b id="spd">0</b></div>
   <div class="pill" id="mutePill" style="pointer-events:auto;cursor:pointer">&#128266;</div>
 </div>
@@ -87,20 +87,19 @@
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">Physics sumo-brawl &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v7</span></p>
-    <h1>WRECK COURT</h1>
-    <p>Heavy trucks, one floating court, no guns. <b>Ram everyone else into the void.</b> The court crumbles from the rim inward — last truck standing takes the round. <b>First to 3 rounds wins.</b></p>
+    <p class="tag">Car-ball carnage &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v8</span></p>
+    <h1>WRECKBALL</h1>
+    <p>Rocket-powered trucks, one giant ball, two goals — <b>and full-contact demolition.</b> Smash the ball into the enemy goal. Smash the enemy while you're at it. <b>First to 5 goals wins.</b> Nobody falls off, nobody's eliminated.</p>
     <ul>
       <li><b>W/S</b> drive &middot; <b>A/D</b> steer &middot; <b>Shift</b> boost &middot; <b>Space</b> jump (again in air = flip-dodge) &middot; <b>R</b> flip upright</li>
       <li><b>Phone:</b> hold the left pad to drive, slide to steer, pull down to reverse &middot; right-side <b>BOOST / JUMP / FLIP</b></li>
-      <li>Hits are real physics — momentum wins. Boost into someone's side and they <i>fly</i>.</li>
-      <li>Watch the red-shaking tiles: they're about to drop. You can ride a falling tile… briefly.</li>
-      <li><b>Carnage pays:</b> beat a truck to <b>0% hull</b> and it's &#128165; <b>DEMOLISHED</b> on the spot. Wrecks drop glowing <b style="color:#62f3a8">salvage</b> — drive over it to patch +12 hull. Dents and lost wheels are forever (this round) — and the wreckage on the court is <i>solid</i>: plow through it.</li>
-      <li><b>One REBOUND per round:</b> your first fall auto-rockets you back onto the court. The second one is final — or save yourself with air-steer + boost.</li>
+      <li><b>Destruction is a power play:</b> ram enemies to crush real dents in, tear off their bumpers and wheels — a battered truck is slow and pulls sideways. Beat one to <b>0% hull</b> and it's &#128165; <b>DEMOLISHED</b> — gone for 3 seconds while you attack the open net.</li>
+      <li>Wrecks drop glowing <b style="color:#62f3a8">salvage</b> — drive over it to patch your hull. Damage sticks between goals; only demolition (or a new match) gives you a fresh truck.</li>
+      <li>Boost-flip into the ball for rocket shots. The ball is heavy — momentum matters.</li>
     </ul>
     <div class="row">
-      <label class="lab" style="font-size:12px">Court size
-        <select id="botSel"><option value="2">1v1 (vs 1 bot)</option><option value="4" selected>4 trucks</option><option value="6">6 trucks</option></select>
+      <label class="lab" style="font-size:12px">Match
+        <select id="botSel"><option value="2">1v1</option><option value="4" selected>2v2</option><option value="6">3v3</option></select>
       </label>
       <button class="btn-primary" id="soloBtn">PLAY (bots fill seats)</button>
     </div>
@@ -176,11 +175,12 @@ try {
 
 // ---------------- constants ----------------
 const DT = 1 / 60, GRAV = 20;   // heavier = less floaty; fastfall adds more when airborne
-const ARENA_R = 26, TILE = 3.3;
-const CRUMBLE_START = 8, CRUMBLE_EVERY = 6;   // seconds
-const KO_Y = -16, WIN_ROUNDS = 3;
-const CRUISE = 14, BOOST_CAP = 26;   // court is 26m radius — speeds must fit it
-const COLORS = [0x36e2ff, 0xff9b50, 0x62f3a8, 0xff7ad9, 0xffd166, 0xb388ff];
+const FIELD_W = 46, FIELD_L = 72;             // walled pitch — nobody falls off, ever
+const GOAL_W = 14, GOAL_H = 4.4, GOAL_DEPTH = 4.5;
+const BALL_R = 2.2, WIN_GOALS = 5;
+const KO_Y = -16, WIN_ROUNDS = 3;             // (legacy consts, mostly unused post-pivot)
+const CRUISE = 15, BOOST_CAP = 28;
+const TEAM_COLORS = [[0x36e2ff, 0x2ea8ff, 0x62f3a8], [0xff9b50, 0xff5b5b, 0xff7ad9]];
 const BOTNAMES = ["TOAST", "BISCUIT", "CRUMB", "SCONE", "MUFFIN", "BAGEL"];
 
 // ---------------- tiny utils ----------------
@@ -337,66 +337,132 @@ function stepParts(dt){
 let world = null;
 function newWorld(){ if (world) world.free(); world = new RAPIER.World({ x: 0, y: -GRAV, z: 0 }); }
 
-// ---------------- arena (tiles) ----------------
-/* tile: {i, x, z, ring, body, mesh, state:0 solid |1 shaking |2 falling |3 gone, timer, vy, spin} */
-let tiles = [], maxRing = 0, tileGroup = null;
-const tileGeo = new THREE.BoxGeometry(TILE-0.12, 1, TILE-0.12);
-function buildArena(seed){
-  if (tileGroup) { scene.remove(tileGroup); tileGroup.traverse(o=>{ if(o.material) o.material.dispose?.(); }); }
-  tileGroup = new THREE.Group(); scene.add(tileGroup);
-  tiles = []; maxRing = 0;
-  const rng = mulberry32(seed);
-  let i = 0;
-  const n = Math.ceil(ARENA_R / TILE);
-  for (let gx = -n; gx <= n; gx++) for (let gz = -n; gz <= n; gz++){
-    const x = gx*TILE, z = gz*TILE;
-    const d = Math.hypot(x, z);
-    if (d > ARENA_R) continue;
-    const ring = Math.floor(d / TILE);
-    maxRing = Math.max(maxRing, ring);
-    const shade = 0.72 + rng()*0.28;
-    const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x1a2547).multiplyScalar(shade),
-      roughness: .82, metalness: .25, emissive: 0x0a1128, emissiveIntensity: .5 });
-    const mesh = new THREE.Mesh(tileGeo, mat);
-    mesh.position.set(x, -0.5, z); mesh.receiveShadow = true; mesh.castShadow = false;
-    tileGroup.add(mesh);
-    let body = null;
-    if (world){
-      body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, -0.5, z));
-      world.createCollider(RAPIER.ColliderDesc.cuboid((TILE-0.12)/2, 0.5, (TILE-0.12)/2).setFriction(1.0), body);
-    }
-    tiles.push({ i, x, z, ring, body, mesh, state: 0, timer: 0, vy: 0, spin: rng()*2-1 });
-    i++;
+// ---------------- field (walled pitch, two goals) ----------------
+let fieldGroup = null;
+// physH: optional physics height grown UPWARD from the visual piece's bottom.
+// (a blanket height inflation once sealed the goal mouths shut — never again)
+function wallBox(w, h, d, x, y, z, mat, physH){
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  mesh.position.set(x, y, z); fieldGroup.add(mesh);
+  if (world){
+    const ph = physH || h;
+    const py = (y - h/2) + ph/2; // same bottom, taller top
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, py, z));
+    world.createCollider(RAPIER.ColliderDesc.cuboid(w/2, ph/2, d/2)
+      .setFriction(0.2).setRestitution(0.55), body);
   }
-  // rim glow ring
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(ARENA_R+0.6, .18, 8, 80),
-    new THREE.MeshBasicMaterial({ color: 0x36e2ff, transparent:true, opacity:.5 }));
-  rim.rotation.x = Math.PI/2; rim.position.y = 0.02; tileGroup.add(rim);
+  return mesh;
 }
-function crumbleRing(r){
-  let any = false;
-  for (const t of tiles) if (t.state === 0 && t.ring >= r){ t.state = 1; t.timer = 1.6; any = true; }
-  if (any) sfx.rumble(0.4);
-  return any;
+function buildField(){
+  if (fieldGroup){ scene.remove(fieldGroup); fieldGroup.traverse(o => { o.material?.dispose?.(); o.geometry?.dispose?.(); }); }
+  fieldGroup = new THREE.Group(); scene.add(fieldGroup);
+  const W = FIELD_W, L = FIELD_L, HW = W/2, HL = L/2;
+  // floor
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x141d3a, roughness: .85, metalness: .2, emissive: 0x080f26, emissiveIntensity: .6 });
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(W + 12, 1, L + 12), floorMat);
+  floor.position.y = -0.5; floor.receiveShadow = true; fieldGroup.add(floor);
+  if (world){
+    const fb = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.5, 0));
+    world.createCollider(RAPIER.ColliderDesc.cuboid((W + 12)/2, 0.5, (L + 12)/2).setFriction(1.0), fb);
+  }
+  // field lines: center line, circle, goal boxes (thin glowing planes)
+  const lineMat = new THREE.MeshBasicMaterial({ color: 0x36e2ff, transparent: true, opacity: 0.35 });
+  const mid = new THREE.Mesh(new THREE.PlaneGeometry(W, 0.35), lineMat);
+  mid.rotation.x = -Math.PI/2; mid.position.y = 0.02; fieldGroup.add(mid);
+  const circ = new THREE.Mesh(new THREE.RingGeometry(6.6, 7, 48), lineMat);
+  circ.rotation.x = -Math.PI/2; circ.position.y = 0.02; fieldGroup.add(circ);
+  // walls (visual low, physics tall so the ball stays in)
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x1c2b55, roughness: .5, metalness: .5,
+    emissive: 0x14224a, emissiveIntensity: .7, transparent: true, opacity: 0.85 });
+  wallBox(1, 3.2, L + 2, -HW - 0.5, 1.6, 0, wallMat, 12);        // left  (tall physics)
+  wallBox(1, 3.2, L + 2,  HW + 0.5, 1.6, 0, wallMat, 12);        // right (tall physics)
+  const sideW = (W - GOAL_W) / 2;
+  for (const s of [-1, 1]){ // end walls with goal mouths
+    wallBox(sideW, 3.2, 1, -(GOAL_W + sideW)/2, 1.6, s*(HL + 0.5), wallMat, 12);
+    wallBox(sideW, 3.2, 1,  (GOAL_W + sideW)/2, 1.6, s*(HL + 0.5), wallMat, 12);
+    // crossbar: physics starts AT the bar and grows upward — the mouth below stays open
+    wallBox(GOAL_W + 2, 1.2, 1, 0, GOAL_H + 0.6, s*(HL + 0.5), wallMat, 8);
+    // goal pocket (net box) so the ball stays put after a score
+    wallBox(GOAL_W + 2, 1, GOAL_DEPTH, 0, GOAL_H + 1, s*(HL + GOAL_DEPTH/2 + 1), wallMat);
+    wallBox(1, GOAL_H + 2, GOAL_DEPTH, -(GOAL_W/2 + 1), (GOAL_H)/2, s*(HL + GOAL_DEPTH/2 + 1), wallMat, 10);
+    wallBox(1, GOAL_H + 2, GOAL_DEPTH,  (GOAL_W/2 + 1), (GOAL_H)/2, s*(HL + GOAL_DEPTH/2 + 1), wallMat, 10);
+    wallBox(GOAL_W + 2, GOAL_H + 2, 1, 0, (GOAL_H)/2, s*(HL + GOAL_DEPTH + 1.5), wallMat, 12); // back net
+    // glowing goal mouth
+    const glowMat = new THREE.MeshBasicMaterial({ color: s > 0 ? 0xff9b50 : 0x36e2ff, transparent: true, opacity: 0.55 });
+    const mouth = new THREE.Mesh(new THREE.PlaneGeometry(GOAL_W, GOAL_H), glowMat);
+    mouth.position.set(0, GOAL_H/2, s*(HL + 0.02)); if (s > 0) mouth.rotation.y = Math.PI;
+    fieldGroup.add(mouth);
+  }
 }
-function stepTiles(dt, authoritative){
-  for (const t of tiles){
-    if (t.state === 1){
-      t.timer -= dt;
-      t.mesh.position.x = t.x + rnd(-.06,.06); t.mesh.position.z = t.z + rnd(-.06,.06);
-      t.mesh.material.emissive.setHex(0x8a1d1d);
-      t.mesh.material.emissiveIntensity = 1.2 + Math.sin(performance.now()*0.03)*0.8;
-      if (t.timer <= 0){
-        t.state = 2; t.vy = 0;
-        if (authoritative && t.body){ world.removeRigidBody(t.body); t.body = null; }
-        netTileEvent(t.i);
-      }
-    } else if (t.state === 2){
-      t.vy -= GRAV*dt;
-      t.mesh.position.y += t.vy*dt;
-      t.mesh.rotation.x += t.spin*dt*.8; t.mesh.rotation.z += t.spin*dt*.5;
-      if (t.mesh.position.y < -44){ t.state = 3; t.mesh.visible = false; }
-    }
+// legacy alias so old call sites keep working; tiles are gone
+function buildArena(_seed){ buildField(); }
+const tiles = [];                                  // legacy: always empty
+function stepTiles(_dt, _auth){}
+// ---------------- ball ----------------
+const BALL = { body: null, mesh: null, lastTouch: -1 };
+const kickCd = new Map();
+function createBall(){
+  if (!BALL.mesh){
+    BALL.mesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 24, 18),
+      new THREE.MeshStandardMaterial({ color: 0xf3f6ff, roughness: .35, metalness: .3,
+        emissive: 0x5566cc, emissiveIntensity: .35 }));
+    BALL.mesh.castShadow = true;
+    scene.add(BALL.mesh);
+  }
+  if (world && G.role !== "guest"){
+    BALL.body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(0, BALL_R + 2, 0).setLinearDamping(0.3).setAngularDamping(0.7).setCcdEnabled(true));
+    world.createCollider(RAPIER.ColliderDesc.ball(BALL_R)
+      .setDensity(0.16).setFriction(0.5).setRestitution(0.72), BALL.body);
+  }
+  BALL.lastTouch = -1;
+}
+function resetBall(){
+  BALL.lastTouch = -1;
+  if (BALL.body){
+    BALL.body.setTranslation({ x: 0, y: BALL_R + 0.2, z: 0 }, true);
+    BALL.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    BALL.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  }
+  BALL.mesh?.position.set(0, BALL_R + 0.2, 0);
+}
+// satisfying strikes: extra pop when a truck slams the ball, + touch tracking
+function stepBallKicks(dt){
+  if (G.role === "guest" || !BALL.body) return;
+  for (const [k, v] of kickCd){ if (v <= dt) kickCd.delete(k); else kickCd.set(k, v - dt); }
+  const bp = BALL.body.translation(), bv = BALL.body.linvel();
+  // stalemate breaker: ball pinned against a wall by grinding trucks pops loose
+  const bspd = Math.hypot(bv.x, bv.z);
+  let pinned = bspd < 1.3 && G.phase === "fight";
+  if (pinned){ pinned = false;
+    for (const p of players) if (p.alive && p.body){
+      const t = p.body.translation();
+      if (Math.hypot(bp.x - t.x, bp.z - t.z) < 5.2){ pinned = true; break; } } }
+  BALL.stuckT = pinned ? (BALL.stuckT || 0) + dt : 0;
+  if (BALL.stuckT > 2.5){
+    BALL.stuckT = 0;
+    const m = BALL.body.mass(), d = Math.hypot(bp.x, bp.z) || 1;
+    BALL.body.applyImpulse({ x: -bp.x/d * m * 9, y: m * 7, z: -bp.z/d * m * 9 }, true);
+    emit(bp.x, bp.y, bp.z, 0xffffff, 10, 6, .4);
+    sfx.thud(0.5);
+  }
+  for (const p of players){
+    if (!p.alive || !p.body) continue;
+    const t = p.body.translation();
+    const dx = bp.x - t.x, dy = bp.y - t.y, dz = bp.z - t.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d > BALL_R + 2.7) continue;
+    const v = p.body.linvel();
+    const nx = dx/d, ny = dy/d, nz = dz/d;
+    const closing = (v.x - bv.x)*nx + (v.y - bv.y)*ny + (v.z - bv.z)*nz;
+    if (closing > 1) BALL.lastTouch = p.id;
+    if (closing < 4.5 || kickCd.has(p.id)) continue;
+    kickCd.set(p.id, 0.25);
+    const m = BALL.body.mass();
+    BALL.body.applyImpulse({ x: nx*m*closing*0.9, y: ny*m*closing*0.5 + m*2.2, z: nz*m*closing*0.9 }, true);
+    emit(bp.x, bp.y, bp.z, 0xffffff, 8, 6, .35);
+    sfx.thud(Math.min(1, closing/18));
+    if (p === me()) shake(Math.min(0.5, closing/30));
   }
 }
 
@@ -440,13 +506,14 @@ function truckMesh(color){
   return { group: g, wheels, bodyMat, hullMesh: hull, cabMesh: cab, bullMesh: bull };
 }
 
-function spawnPose(idx, count){
-  const a = (idx / count) * Math.PI * 2;
-  const r = ARENA_R * 0.55;
-  return { x: Math.cos(a)*r, z: Math.sin(a)*r, yaw: a + Math.PI }; // face center
+// kickoff spots per team (team 0 defends -z, shoots +z), mirrored for team 1
+const KICKOFF = [[[0, -11], [-9, -17], [9, -17]], [[0, 11], [9, 17], [-9, 17]]];
+function spawnPose(p){
+  const [x, z] = KICKOFF[p.team][p.slot % 3];
+  return { x, z, yaw: Math.atan2(-x, -z) }; // face the ball at center
 }
 
-function makePlayer(id, name, color, human, guestIdx){
+function makePlayer(id, name, color, human, guestIdx, team, slot){
   const { group, wheels, bodyMat, hullMesh, cabMesh, bullMesh } = truckMesh(color);
   scene.add(group);
   let body = null, chassisCol = null;
@@ -459,24 +526,24 @@ function makePlayer(id, name, color, human, guestIdx){
     world.createCollider(RAPIER.ColliderDesc.cuboid(0.7, 0.16, 1.2)
       .setTranslation(0, -0.34, 0).setDensity(3.2).setFriction(0.35), body);
   }
-  return { id, name, color, human, guestIdx, body, chassisCol, group, wheels, bodyMat, hullMesh, cabMesh, bullMesh,
-    boost: 60, alive: true, wins: 0, grounded: false, groundN: V3(0,1,0),
+  return { id, name, color, human, guestIdx, team, slot, body, chassisCol, group, wheels, bodyMat, hullMesh, cabMesh, bullMesh,
+    boost: 60, alive: true, wins: 0, respawnT: null, stuckT: 0, grounded: false, groundN: V3(0,1,0),
     hull: 100, dmg: { f: 0, b: 0, l: 0, r: 0 },
     lostMask: 0, lost: { bull: false, cab: false, wheels: [false, false, false, false] },
     input: { th: 0, st: 0, jump: false, boost: false }, jumpHeld: false, canFlip: false,
     botT: rnd(0, 2), botSkill: rnd(0.75, 1.15) };
 }
-function resetTruck(p, idx, count){
-  const s = spawnPose(idx, count);
-  p.alive = true; p.boost = 60; p.canFlip = false;
+function resetTruck(p){
+  // kickoff placement. NOTE: damage persists across kickoffs — only a
+  // demolition respawn (or match start) repairs you. Carnage carries.
+  const s = spawnPose(p);
+  p.boost = 60; p.canFlip = false;
   p.input = { th: 0, st: 0, jump: false, boost: false, reset: false }; // no stale throttle into countdown
   p.lastHitBy = null; p.lastHitT = -99;
-  p.rebound = true;       // one edge-save per round
-  repairTruck(p); // full repair between rounds: hull, dents, tint, lost pieces
   p.group.visible = true;
   if (p.body){
     p.body.setTranslation({ x: s.x, y: 1.6, z: s.z }, true);
-    const q = new THREE.Quaternion().setFromAxisAngle(V3(0,1,0), -s.yaw + Math.PI/2);
+    const q = new THREE.Quaternion().setFromAxisAngle(V3(0,1,0), s.yaw);
     p.body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
     p.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     p.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
@@ -597,13 +664,19 @@ function stepTruck(p, dt){
   }
   p.jumpHeld = inp.jump;
 
-  // upright assist / R-reset handled via input flag
-  if (inp.reset && up.y < 0.35){
+  // upright assist: R for instant, or automatic after ~2s stuck —
+  // flipped/beached trucks must never be permanently dead (no round resets here)
+  const spdNow = Math.hypot(vel.x, vel.z);
+  const distressed = (up.y < 0.3 || (!p.grounded && pos.y < 3)) && spdNow < 2;
+  p.flipT = distressed ? (p.flipT || 0) + dt : 0;
+  if ((inp.reset && up.y < 0.35) || p.flipT > 2){
+    p.flipT = 0;
     const yaw = Math.atan2(fwd.x, fwd.z);
     const q = new THREE.Quaternion().setFromAxisAngle(V3(0,1,0), yaw);
     body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
     body.setTranslation({ x: pos.x, y: pos.y + 1.4, z: pos.z }, true);
     body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    body.setLinvel({ x: vel.x * 0.3, y: 0, z: vel.z * 0.3 }, true);
   }
 }
 
@@ -755,32 +828,29 @@ function loseP(p, kind){
   }
 }
 function stepDebris(dt){
-  const safeR = currentSafeRadius();
   for (let i = debris.length - 1; i >= 0; i--){
     const d = debris[i]; d.t += dt;
     const m = d.mesh;
     if (d.body){ // real physics piece: mesh follows the body
       const t = d.body.translation(), r = d.body.rotation();
       m.position.set(t.x, t.y, t.z); m.quaternion.set(r.x, r.y, r.z, r.w);
-      if (t.y < -40){ world.removeRigidBody(d.body); scene.remove(m); debris.splice(i, 1); }
+      if (t.y < -20){ world.removeRigidBody(d.body); scene.remove(m); debris.splice(i, 1); }
       continue;
     }
-    if (d.landed){
-      // wreckage litters the court until its tile crumbles away beneath it
-      if (Math.hypot(m.position.x, m.position.z) > safeR){ d.landed = false; d.vy = 0; }
-      else { d.vx *= 0.9; d.vz *= 0.9;
-        m.position.x += d.vx * dt; m.position.z += d.vz * dt; continue; }
-    }
+    if (d.landed){ d.vx *= 0.9; d.vz *= 0.9;
+      m.position.x += d.vx * dt; m.position.z += d.vz * dt; continue; }
     d.vy -= 16 * dt;
     m.position.x += d.vx * dt; m.position.y += d.vy * dt; m.position.z += d.vz * dt;
     m.rotation.x += d.rx * dt; m.rotation.z += d.rz * dt;
-    if (d.vy < 0 && m.position.y < 0.35 && Math.hypot(m.position.x, m.position.z) < safeR){
+    if (d.vy < 0 && m.position.y < 0.35){
       d.landed = true; d.vy = 0; d.vx *= 0.4; d.vz *= 0.4;
       m.position.y = 0.32; m.rotation.x = Math.round(m.rotation.x / Math.PI) * Math.PI;
     }
-    if (m.position.y < -35){ scene.remove(m); debris.splice(i, 1); }
+    if (m.position.y < -20){ scene.remove(m); debris.splice(i, 1); }
   }
-  while (debris.length > 30){ scene.remove(debris[0].mesh); debris.shift(); } // cap the junkyard
+  while (debris.length > 30){ const e = debris.shift();
+    if (e.body && world){ try { world.removeRigidBody(e.body); } catch (_) {} }
+    scene.remove(e.mesh); } // cap the junkyard
 }
 // ---------------- salvage (carnage economy) ----------------
 /* demolitions & KOs drop glowing chips; drive over one to patch +12 hull.
@@ -789,7 +859,8 @@ let salvageId = 0;
 const salvage = [];
 const salvGeo = new THREE.OctahedronGeometry(0.5);
 function spawnSalvage(x, z){
-  if (Math.hypot(x, z) > currentSafeRadius() - 1) return;   // don't drop chips over the void
+  x = THREE.MathUtils.clamp(x, -FIELD_W/2 + 2, FIELD_W/2 - 2);  // keep chips on the pitch
+  z = THREE.MathUtils.clamp(z, -FIELD_L/2 + 2, FIELD_L/2 - 2);
   const mesh = new THREE.Mesh(salvGeo,
     new THREE.MeshBasicMaterial({ color: 0x62f3a8, transparent: true, opacity: 0.9 }));
   mesh.position.set(x, 0.8, z);
@@ -891,7 +962,81 @@ function demolish(p){
 }
 
 // ---------------- bots ----------------
+/* WRECKBALL bot: closest teammate to the ball attacks (gets behind it, pushes
+   it at the enemy goal); the other defends goal-side. Wounded bots detour for
+   salvage. Wall-stuck bots reverse out. Demolitions happen by collision. */
 function stepBot(p, dt){
+  p.botT -= dt;
+  const pos = p.group.position;
+  const rot = p.body.rotation(); tmpQ.set(rot.x, rot.y, rot.z, rot.w);
+  const fwd = V3(0, 0, 1).applyQuaternion(tmpQ); fwd.y = 0; fwd.normalize();
+  const vel = p.body.linvel();
+  const spd = Math.hypot(vel.x, vel.z);
+  const inp = p.input;
+  inp.jump = false; inp.boost = false; inp.th = 1;
+  // unstick: wedged into a wall
+  if (spd < 1.2 && p.grounded) p.stuckT += dt; else p.stuckT = 0;
+  if (p.stuckT > 1.1){ inp.th = -1; inp.st = 1; if (p.stuckT > 2.2) p.stuckT = 0; return; }
+  const bp = BALL.mesh.position;
+  const bv = BALL.body ? BALL.body.linvel() : { x: 0, y: 0, z: 0 };
+  const atkZ = p.team === 0 ? 1 : -1;                 // team0 shoots +z
+  const pred = V3(bp.x + bv.x * 0.3, 0, bp.z + bv.z * 0.3);
+  // hurt + ball far → grab a nearby salvage chip
+  if (p.hull < 40 && salvage.length && pos.distanceTo(bp) > 18){
+    let chip = null, cd = 324;
+    for (const s of salvage){ const d2 = (s.x-pos.x)**2 + (s.z-pos.z)**2; if (d2 < cd){ cd = d2; chip = s; } }
+    if (chip){ steerTo(p, fwd, pos, V3(chip.x, 0, chip.z)); return; }
+  }
+  // role: closest living teammate to the ball attacks
+  let closest = true;
+  const myD = pos.distanceToSquared(bp);
+  for (const o of players)
+    if (o !== p && o.alive && o.team === p.team && o.group.position.distanceToSquared(bp) < myD * 0.92){ closest = false; break; }
+  const ballToGoal = V3(-pred.x * 0.25, 0, atkZ * FIELD_L/2 - pred.z);
+  ballToGoal.y = 0; ballToGoal.normalize();
+  let aim;
+  if (closest){
+    // strike point just behind the ball, on the line to their goal
+    aim = V3(pred.x - ballToGoal.x * (BALL_R + 2.4), 0, pred.z - ballToGoal.z * (BALL_R + 2.4));
+    // wrong side (I'm goal-side of the ball) → swing wide around it
+    const meToBall = V3(pred.x - pos.x, 0, pred.z - pos.z);
+    if (meToBall.dot(ballToGoal) < -0.5){
+      const side = Math.sign((pos.x - pred.x) || 1);
+      aim.set(pred.x - ballToGoal.x * 9 - ballToGoal.z * side * 7, 0,
+              pred.z - ballToGoal.z * 9 + ballToGoal.x * side * 7);
+    }
+  } else {
+    // defend: sit goal-side between our goal and the ball
+    const gz = -atkZ * FIELD_L/2;
+    aim = V3(pred.x * 0.35, 0, gz * 0.7 + pred.z * 0.3);
+    // ball threatening our goal → clear it (hit it from the goal side)
+    if (Math.abs(pred.z - gz) < 24){
+      const away = V3(pred.x, 0, pred.z - gz); away.normalize();
+      aim.set(pred.x - away.x * (BALL_R + 2.4), 0, pred.z - away.z * (BALL_R + 2.4));
+    }
+  }
+  aim.x = THREE.MathUtils.clamp(aim.x, -FIELD_W/2 + 2.5, FIELD_W/2 - 2.5);
+  aim.z = THREE.MathUtils.clamp(aim.z, -FIELD_L/2 + 2.5, FIELD_L/2 - 2.5);
+  const dot = steerTo(p, fwd, pos, aim);
+  const distBall = pos.distanceTo(bp);
+  inp.boost = p.boost > 20 && dot > 0.88 && (pos.distanceTo(aim) > 9 || (distBall < 10 && closest));
+  if (bp.y > 2.6 && distBall < 6 && p.botT <= 0){ inp.jump = true; p.botT = rnd(1, 2.5); }
+}
+function steerTo(p, fwd, pos, aim){
+  const dx = aim.x - pos.x, dz = aim.z - pos.z;
+  const dist = Math.hypot(dx, dz);
+  // ARRIVED: stop circling the hold point (a full-speed truck can't turn
+  // inside ~6m — chasing a nearby point = orbiting it forever)
+  if (dist < 2.4){ p.input.st = 0; p.input.th = 0.2; return 1; }
+  const ix = dx / dist, iz = dz / dist;
+  const cross = fwd.x * iz - fwd.z * ix;
+  const dot = fwd.x * ix + fwd.z * iz;
+  p.input.st = THREE.MathUtils.clamp(cross * 3.2, -1, 1) * (dot < -0.3 ? -1 : 1);
+  if (dot < -0.5) p.input.th = -1;
+  else if (dist < 8 && Math.abs(cross) > 0.5) p.input.th = 0.35; // ease off to tighten the turn
+  return dot;
+}
+function stepBotOld_UNUSED(p, dt){
   p.botT -= dt;
   const pos = p.group.position;
   const rot = p.body.rotation(); tmpQ.set(rot.x,rot.y,rot.z,rot.w);
@@ -983,8 +1128,9 @@ function currentSafeRadius(){
 // ---------------- game state ----------------
 const G = { mode: "menu", // menu | playing
   role: "solo",           // solo | host | guest
-  phase: "idle",          // countdown | fight | roundend | matchend
-  round: 0, t: 0, phaseT: 0, nextRing: 0, seed: 1, shake: 0,
+  phase: "idle",          // countdown | fight | goal | matchend
+  round: 0, t: 0, phaseT: 0, seed: 1, shake: 0,
+  score: [0, 0],          // team goals — first to WIN_GOALS
   slowT: 0 };             // hit-stop: brief slow-mo timer (seconds, real time)
 function me(){ return players.find(p => p.human && p.guestIdx === (G.role === "guest" ? myGuestIdx : -1)) || players[0]; }
 function shake(a){ G.shake = Math.min(1.6, G.shake + a); }
@@ -1001,12 +1147,14 @@ function feed(txt){ const d = document.createElement("div"); d.innerHTML = txt; 
   setTimeout(()=>{ d.style.transition = "opacity 1s"; d.style.opacity = 0; setTimeout(()=>d.remove(), 1000); }, 4200); }
 
 function startMatch(seed, roster){
-  // roster: [{name, color, human, guestIdx}]
-  G.seed = seed; G.round = 0;
+  // roster: [{name, human, guestIdx, team, slot}]
+  G.seed = seed; G.round = 0; G.score = [0, 0];
   newWorld();
   for (const p of players) scene.remove(p.group);
-  players = roster.map((r, i) => makePlayer(i, r.name, COLORS[i % COLORS.length], r.human, r.guestIdx));
-  buildArena(seed);
+  players = roster.map((r, i) =>
+    makePlayer(i, r.name, TEAM_COLORS[r.team][r.slot % 3], r.human, r.guestIdx, r.team, r.slot));
+  buildField();
+  createBall();
   document.getElementById("menu").classList.remove("show");
   document.getElementById("hostCard").classList.remove("show");
   document.getElementById("joinCard").classList.remove("show");
@@ -1015,26 +1163,52 @@ function startMatch(seed, roster){
   startRound();
   buildScoreHud();
 }
+// kickoff — world & field persist for the whole match; only wreckage is swept
 function startRound(){
   G.round++;
-  // rebuild tiles fresh each round; sweep last round's wreckage
   clearCarnage();
-  newWorldKeepPlayers();
-  buildArena(G.seed + G.round * 977);
-  players.forEach((p, i) => resetTruck(p, i, players.length));
-  G.phase = "countdown"; G.phaseT = 3.2; G.t = 0; G.nextRing = maxRing;
-  banner("ROUND " + G.round, 1400);
+  resetBall();
+  for (const p of players){
+    if (!p.alive) respawnPlayer(p, true);  // anyone dead at kickoff comes back now
+    resetTruck(p);
+  }
+  G.phase = "countdown"; G.phaseT = 3.2; G.t = 0;
+  banner(G.round === 1 ? "KICKOFF" : "KICKOFF " + G.score[0] + "–" + G.score[1], 1400);
   netEvent({ t: "round", n: G.round });
 }
-function newWorldKeepPlayers(){
-  // recreate world + re-add truck bodies (cleanest tile reset)
-  if (G.role === "guest") return;
-  newWorld();
-  for (const p of players){
-    const wasWins = p.wins;
-    const { body } = recreateBody(p);
-    p.body = body; p.wins = wasWins;
+function respawnPlayer(p, silent){
+  p.respawnT = null;
+  if (!p.body){ const { body } = recreateBody(p); p.body = body; }
+  repairTruck(p);
+  p.alive = true; p.group.visible = true; p.boost = 60;
+  resetTruck(p);
+  if (!silent){
+    const s = p.group.position;
+    emit(s.x, s.y + 1, s.z, p.color, 16, 8, .5);
+    if (p === me()) toast("BACK IN — fresh truck", 1000);
   }
+  buildScoreHud();
+}
+function scoreGoal(team){
+  G.score[team]++;
+  const scorer = BALL.lastTouch >= 0 ? players[BALL.lastTouch] : null;
+  let by = -1, own = false;
+  if (scorer){ by = scorer.id; own = scorer.team !== team; if (!own) scorer.wins++; }
+  const b = BALL.mesh.position;
+  emit(b.x, b.y, b.z, team === 0 ? 0x36e2ff : 0xff9b50, 46, 16, .9);
+  emit(b.x, b.y, b.z, 0xffffff, 16, 22, .4);
+  banner("GOAL! " + G.score[0] + "–" + G.score[1], 2000);
+  goalFeed(team, by, own);
+  sfx.win(); sfx.boom(); G.slowT = Math.max(G.slowT, 0.5);
+  G.phase = "goal"; G.phaseT = 2.4;
+  netEvent({ t: "goal", team, sc: [...G.score], by, own: own ? 1 : 0 });
+  buildScoreHud();
+}
+function goalFeed(team, by, own){
+  const col = pl => `<b style="color:#${pl.color.toString(16).padStart(6,"0")}">${pl.name}</b>`;
+  const p = by >= 0 ? players[by] : null;
+  feed(p ? (own ? `${col(p)} scored an OWN GOAL…` : `⚽ ${col(p)} SCORES!`)
+    : `⚽ GOAL for ${team === 0 ? "CYAN" : "ORANGE"}`);
 }
 function recreateBody(p){
   const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
@@ -1048,125 +1222,95 @@ function stepGame(dt){
   if (G.mode !== "playing") return;
   G.phaseT -= dt;
   if (G.phase === "countdown"){
-    if (G.phaseT <= 0){ G.phase = "fight"; banner("WRECK!", 800); sfx.go(); netEvent({ t: "fight" }); }
+    if (G.phaseT <= 0){ G.phase = "fight"; banner("GO!", 800); sfx.go(); netEvent({ t: "fight" }); }
     else { const n = Math.ceil(G.phaseT); if (n !== G._cd){ G._cd = n; if (n <= 3){ banner(String(n), 500); sfx.beep(); } } }
   }
   const authoritative = G.role !== "guest";
   if (authoritative){
     if (G.phase === "fight"){
       G.t += dt;
-      // crumble schedule
-      if (G.t > CRUMBLE_START && G.nextRing >= 0){
-        const due = Math.floor((G.t - CRUMBLE_START) / CRUMBLE_EVERY);
-        const targetRing = maxRing - due;
-        while (G.nextRing > targetRing && G.nextRing >= 0){ // ring 0 too: sudden death, no stalemates
-          crumbleRing(G.nextRing); netEvent({ t: "ring", r: G.nextRing }); G.nextRing--;
-        }
-      }
       for (const p of players) if (p.alive && !p.human) stepBot(p, dt);
     }
-    // physics (also during countdown/roundend so trucks settle / corpses fly)
-    if (G.phase === "fight" || G.phase === "roundend"){
+    // physics runs through fight & goal-celebration (ball keeps rolling)
+    if (G.phase === "fight" || G.phase === "goal"){
       for (const p of players) if (p.alive && p.body) stepTruck(p, dt);
+      stepBallKicks(dt);
       world.timestep = dt; world.step();
-      // sync meshes + KO check
       for (const p of players){
         if (!p.body) continue;
         const t = p.body.translation(), r = p.body.rotation();
         p.group.position.set(t.x, t.y, t.z);
         p.group.quaternion.set(r.x, r.y, r.z, r.w);
-        if (p.alive && t.y < -6 && t.y > KO_Y && p.rebound) doRebound(p);
-        if (p.alive && t.y < KO_Y) koPlayer(p);
+        // safety net: physics ejection through floor/walls → back to kickoff spot
+        if (t.y < -4 || Math.abs(t.x) > FIELD_W/2 + 10 || Math.abs(t.z) > FIELD_L/2 + 14) resetTruck(p);
       }
+      if (BALL.body){
+        const b = BALL.body.translation(), br = BALL.body.rotation();
+        BALL.mesh.position.set(b.x, b.y, b.z);
+        BALL.mesh.quaternion.set(br.x, br.y, br.z, br.w);
+        if (b.y < -4) resetBall(); // ball safety net
+        // GOAL: past the line, inside the mouth, under the bar (team0 shoots +z)
+        if (G.phase === "fight" && Math.abs(b.z) > FIELD_L/2 + 0.6
+            && Math.abs(b.x) < GOAL_W/2 + 0.8 && b.y < GOAL_H + 0.6)
+          scoreGoal(b.z > 0 ? 0 : 1);
+      }
+      // demolition respawns
+      for (const p of players)
+        if (!p.alive && p.respawnT != null && (p.respawnT -= dt) <= 0) respawnPlayer(p, false);
     } else if (G.phase === "countdown"){
       for (const p of players) if (p.body) stepTruck(p, dt); // suspension settles, no drive
-      // zero drive during countdown: fake by clearing inputs' effects — simplest: cancel horizontal vel
       for (const p of players) if (p.body){ const v = p.body.linvel(); p.body.setLinvel({x: v.x*0.8, y: v.y, z: v.z*0.8}, true); }
       world.timestep = dt; world.step();
       for (const p of players){ if (!p.body) continue;
         const t = p.body.translation(), r = p.body.rotation();
         p.group.position.set(t.x, t.y, t.z); p.group.quaternion.set(r.x, r.y, r.z, r.w); }
+      if (BALL.body){ const b = BALL.body.translation(); BALL.mesh.position.set(b.x, b.y, b.z); }
     }
-    // round end?
-    if (G.phase === "fight"){
-      const alive = players.filter(p => p.alive);
-      if (alive.length <= 1){
-        G.phase = "roundend"; G.phaseT = 2.4;
-        const w = alive[0];
-        if (w){ w.wins++; banner(w.name + " TAKES THE ROUND", 1800); sfx.win();
-          netEvent({ t: "roundwin", id: w.id }); }
-        else banner("DOUBLE WRECK", 1600);
-        buildScoreHud();
-      }
-    } else if (G.phase === "roundend" && G.phaseT <= 0){
-      const champ = players.find(p => p.wins >= WIN_ROUNDS);
-      if (champ) endMatch(champ); else startRound();
+    if (G.phase === "goal" && G.phaseT <= 0){
+      const w = G.score[0] >= WIN_GOALS ? 0 : G.score[1] >= WIN_GOALS ? 1 : -1;
+      if (w >= 0) endMatchTeam(w); else startRound();
     }
   } else {
     guestStep(dt);
   }
-  stepTiles(dt, authoritative);
   stepRams(dt, authoritative);
   stepSalvage(dt); // pickup is host-gated inside; spin/pulse runs everywhere
 }
-// REBOUND: one automatic save per round — the truck rockets back toward center.
-// Generous once; the second fall is final.
-function doRebound(p){
-  p.rebound = false;
-  const t = p.body.translation();
-  const T = 1.5; // ballistic time to land near center
-  const vy = (2 - t.y + 0.5 * GRAV * T * T) / T;
-  const vx = THREE.MathUtils.clamp(-t.x / T, -24, 24);
-  const vz = THREE.MathUtils.clamp(-t.z / T, -24, 24);
-  p.body.setLinvel({ x: vx, y: vy, z: vz }, true);
-  p.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
-  const rot = p.body.rotation(); tmpQ.set(rot.x, rot.y, rot.z, rot.w);
-  const f = V3(0, 0, 1).applyQuaternion(tmpQ);
-  const q = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), Math.atan2(f.x, f.z));
-  p.body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
-  emit(t.x, t.y, t.z, 0xffd166, 24, 12, .7);
-  emit(t.x, t.y, t.z, 0xff7733, 12, 8, .5);
-  sfx.go(); shake(p === me() ? 0.8 : 0);
-  if (p === me()) toast("REBOUND! — that was your one save this round", 1600);
-  netEvent({ t: "reb", id: p.id, x: +t.x.toFixed(1), y: +t.y.toFixed(1), z: +t.z.toFixed(1) });
-}
-function koPlayer(p, demolished = false){
-  p.alive = false;
-  if (p.body){ world.removeRigidBody(p.body); p.body = null; } // stop simulating corpses
+function koPlayer(p, demolished = true){ // demolition is the only death in WRECKBALL
+  p.alive = false; p.respawnT = 3;       // back in 3s — a power play, not an elimination
+  if (p.body){ world.removeRigidBody(p.body); p.body = null; p.chassisCol = null; }
   const pos = p.group.position;
-  emit(pos.x, Math.max(pos.y, -10), pos.z, p.color, 30, 14, .9);
-  emit(pos.x, Math.max(pos.y, -10), pos.z, 0xffffff, 12, 20, .4);
-  // credit the wreck if someone tagged them recently
+  emit(pos.x, Math.max(pos.y, -2), pos.z, p.color, 30, 14, .9);
+  emit(pos.x, Math.max(pos.y, -2), pos.z, 0xffffff, 12, 20, .4);
   const killer = (p.lastHitBy != null && G.t - p.lastHitT < 4) ? players[p.lastHitBy] : null;
-  koFeed(p, killer ? killer.id : -1, demolished);
+  koFeed(p, killer ? killer.id : -1);
   if (killer && killer.alive){
-    killer.boost = 100; // a confirmed wreck = full tank
-    if (killer === me()) toast(demolished ? "DEMOLISHED THEM — FULL BOOST" : "WRECKED THEM — FULL BOOST");
+    killer.boost = 100; // a confirmed demolition = full tank
+    if (killer === me()) toast("DEMOLISHED THEM — FULL BOOST");
   }
-  // ring-outs leave one salvage chip where they last stood (demolitions drop their own)
-  if (!demolished && p.safeX != null) spawnSalvage(p.safeX, p.safeZ);
   sfx.boom(); G.slowT = Math.max(G.slowT, 0.25);
   if (p === me()) shake(1.2);
   p.group.visible = false;
-  netEvent({ t: "ko", id: p.id, k: killer ? killer.id : -1, d: demolished ? 1 : 0 });
+  netEvent({ t: "ko", id: p.id, k: killer ? killer.id : -1, d: 1 });
   buildScoreHud();
 }
-function koFeed(p, killerId, demolished){
+function koFeed(p, killerId){
   const col = pl => `<b style="color:#${pl.color.toString(16).padStart(6,"0")}">${pl.name}</b>`;
   const k = killerId >= 0 ? players[killerId] : null;
-  feed(demolished ? (k ? `${col(k)} \u{1F4A5} DEMOLISHED ${col(p)}` : `${col(p)} was \u{1F4A5} DEMOLISHED`)
-    : (k ? `${col(k)} WRECKED ${col(p)}` : `${col(p)} fell into the void`));
+  feed(k ? `${col(k)} \u{1F4A5} DEMOLISHED ${col(p)}` : `${col(p)} was \u{1F4A5} DEMOLISHED`);
 }
-function endMatch(champ){
+function endMatchTeam(team){
   G.phase = "matchend";
-  netEvent({ t: "matchend", id: champ.id });
-  showResult(champ);
+  netEvent({ t: "matchend", team });
+  showResultTeam(team);
 }
-function showResult(champ){
-  const youWon = champ === me();
-  document.getElementById("resultTitle").textContent = youWon ? "YOU RULE THE COURT" : champ.name + " RULES THE COURT";
+function showResultTeam(team){
+  const mine = me() && me().team === team;
+  const tName = team === 0 ? "CYAN" : "ORANGE";
+  document.getElementById("resultTitle").textContent =
+    (mine ? "YOUR TEAM TAKES IT " : tName + " TAKES IT ") + G.score[0] + "–" + G.score[1];
   document.getElementById("resultBody").innerHTML =
-    players.map(p => `<b style="color:#${p.color.toString(16).padStart(6,"0")}">${p.name}</b> ${p.wins}`).join(" &middot; ");
+    players.map(p => `<b style="color:#${p.color.toString(16).padStart(6,"0")}">${p.name}</b> ${p.wins}⚽`).join(" &middot; ");
   document.getElementById("resultOverlay").classList.add("show");
 }
 
@@ -1177,11 +1321,12 @@ function buildScoreHud(){
   for (const p of players){
     const d = document.createElement("div");
     d.className = "sc" + (p.alive ? "" : " dead");
+    d.style.borderColor = "#" + TEAM_COLORS[p.team ?? 0][0].toString(16).padStart(6, "0");
     d.innerHTML = `<span class="d" style="background:#${p.color.toString(16).padStart(6,"0")}"></span>${p.name}<b>${p.wins}</b>`;
     scoreEl.appendChild(d);
   }
-  document.getElementById("alive").textContent = players.filter(p=>p.alive).length + "/" + players.length;
-  document.getElementById("round").textContent = G.round || "—";
+  document.getElementById("round").textContent = G.score[0] + "–" + G.score[1];
+  document.getElementById("alive").textContent = WIN_GOALS;
 }
 
 // ---------------- input ----------------
@@ -1260,7 +1405,11 @@ function stepCamera(dt){
     camera.position.z += rnd(-1,1)*G.shake*0.5;
   }
   G.shake *= Math.pow(0.05, dt);
-  camera.lookAt(p.x, p.y + 1.2, p.z);
+  // look at a blend of my truck and the ball so the play is always framed
+  if (BALL.mesh && G.mode === "playing")
+    camera.lookAt(p.x*0.62 + BALL.mesh.position.x*0.38, p.y*0.62 + BALL.mesh.position.y*0.38 + 1.1,
+      p.z*0.62 + BALL.mesh.position.z*0.38);
+  else camera.lookAt(p.x, p.y + 1.2, p.z);
   // FOV rush with speed
   let spd = 0;
   if (target.body){ const v = target.body.linvel(); spd = Math.hypot(v.x, v.z); }
@@ -1275,13 +1424,6 @@ function stepCamera(dt){
     hf.style.width = m.hull.toFixed(0) + "%";
     hf.style.background = m.hull < 35 ? "linear-gradient(90deg,#a82222,#ff5b5b)"
       : m.hull < 70 ? "linear-gradient(90deg,#a87a15,#ffd166)" : "linear-gradient(90deg,#1577a8,#36e2ff)";
-  }
-  // danger vignette: over the void, falling — you still have REBOUND or air-boost
-  if (m){
-    const y = m.group.position.y;
-    const off = Math.hypot(m.group.position.x, m.group.position.z) > currentSafeRadius() + 1;
-    document.getElementById("danger").style.opacity =
-      (m.alive && (y < -1.5 || (off && y < 1)) && y > KO_Y) ? Math.min(1, (-y) / 10 + 0.35) : 0;
   }
   // engine + boost audio follow MY truck
   if (AC && m){
@@ -1414,7 +1556,14 @@ function hostSnapshot(){
              v, a: p.alive ? 1 : 0, b: Math.round(p.boost), f: p.boosting ? 1 : 0, w: p.wins,
              h: Math.round(p.hull), L: p.lostMask };
   });
+  const bp = BALL.mesh ? BALL.mesh.position : { x: 0, y: 0, z: 0 };
+  const bq = BALL.mesh ? BALL.mesh.quaternion : { x: 0, y: 0, z: 0, w: 1 };
+  const bvl = BALL.body ? BALL.body.linvel() : { x: 0, y: 0, z: 0 };
   broadcast({ t: "snap", k: snapTick++, ph: G.phase, rd: G.round, tr: trucks,
+    sc: [G.score[0], G.score[1]],
+    B: { p: [+bp.x.toFixed(2), +bp.y.toFixed(2), +bp.z.toFixed(2)],
+         q: [+bq.x.toFixed(3), +bq.y.toFixed(3), +bq.z.toFixed(3), +bq.w.toFixed(3)],
+         v: [+bvl.x.toFixed(1), +bvl.y.toFixed(1), +bvl.z.toFixed(1)] },
     S: salvage.map(s => [s.id, +s.x.toFixed(1), +s.z.toFixed(1)]) });
 }
 
@@ -1453,11 +1602,16 @@ function guestOnMsg(m){
       if (m.rd !== G.round){ G.round = m.rd; buildScoreHud(); }
       break;
     }
-    case "round": G.round = m.n; guestResetRound(); banner("ROUND " + m.n, 1400); break;
-    case "fight": G.phase = "fight"; banner("WRECK!", 800); sfx.go(); break;
-    case "ring": crumbleRing(m.r); break;
+    case "round": G.round = m.n; guestResetRound(); banner("KICKOFF", 1400); break;
+    case "fight": G.phase = "fight"; banner("GO!", 800); sfx.go(); break;
+    case "goal": { G.score = [m.sc[0], m.sc[1]]; G.phase = "goal";
+      const b = BALL.mesh ? BALL.mesh.position : { x: 0, y: 1, z: 0 };
+      emit(b.x, b.y, b.z, m.team === 0 ? 0x36e2ff : 0xff9b50, 46, 16, .9);
+      banner("GOAL! " + G.score[0] + "–" + G.score[1], 2000);
+      goalFeed(m.team, m.by ?? -1, !!m.own);
+      sfx.win(); sfx.boom(); G.slowT = Math.max(G.slowT, 0.5);
+      buildScoreHud(); break; }
     case "dent": { const p = players[m.id]; if (p) deformHull(p, m.x, m.z, m.a); break; }
-    case "tilefall": { const t = tiles[m.i]; if (t && t.state < 2){ t.state = 2; t.vy = 0; } break; }
     case "ko": { const p = players[m.id]; if (p && p.alive){ p.alive = false;
       const pos = p.group.position; emit(pos.x, Math.max(pos.y,-10), pos.z, p.color, 30, 14, .9);
       if (m.d){ emit(pos.x, pos.y + 1, pos.z, 0xffaa33, 40, 16, .8); G.slowT = Math.max(G.slowT, 0.4); }
@@ -1466,25 +1620,26 @@ function guestOnMsg(m){
       p.group.visible = false; if (p === me()) shake(1.2); buildScoreHud(); } break; }
     case "salv": { emit(m.sx, 1, m.sz, 0x62f3a8, 10, 5, .5); sfx.salv();
       if (players[m.id] === me()) toast("SALVAGED", 800); break; }
-    case "reb": { emit(m.x, m.y, m.z, 0xffd166, 24, 12, .7); sfx.go();
-      if (players[m.id] === me()){ toast("REBOUND! — that was your one save this round", 1600); shake(0.8); } break; }
-    case "roundwin": { const p = players[m.id]; if (p){ p.wins++; banner(p.name + " TAKES THE ROUND", 1800); sfx.win(); buildScoreHud(); } break; }
-    case "matchend": { const p = players[m.id]; G.phase = "matchend"; if (p) showResult(p); break; }
+    case "matchend": { G.phase = "matchend"; showResultTeam(m.team); break; }
   }
 }
 function startMatchGuest(seed, roster){
-  G.seed = seed; G.round = 0;
+  G.seed = seed; G.round = 0; G.score = [0, 0];
   for (const p of players) scene.remove(p.group);
-  players = roster.map((r, i) => makePlayer(i, r.name, COLORS[i % COLORS.length], r.human, r.guestIdx));
-  buildArena(seed);
+  players = roster.map((r, i) =>
+    makePlayer(i, r.name, TEAM_COLORS[r.team][r.slot % 3], r.human, r.guestIdx, r.team, r.slot));
+  buildField();
+  createBall(); // mesh only — guests don't simulate
   ["menu","hostCard","joinCard","resultOverlay"].forEach(id => document.getElementById(id).classList.remove("show"));
   G.mode = "playing"; G.phase = "countdown";
   buildScoreHud();
 }
 function guestResetRound(){
+  document.getElementById("resultOverlay").classList.remove("show");
   clearCarnage();
-  buildArena(G.seed + G.round * 977);
-  for (const p of players){ p.alive = true; p.group.visible = true; repairTruck(p); }
+  BALL.mesh?.position.set(0, BALL_R + 0.2, 0);
+  // damage persists across kickoffs (host does the same); repairs arrive via snapshot
+  for (const p of players){ p.alive = true; p.group.visible = true; }
   G.phase = "countdown"; buildScoreHud();
 }
 function guestStep(dt){
@@ -1509,6 +1664,7 @@ function guestStep(dt){
         p.bodyMat.color.copy(c.lerp(new THREE.Color(0x1a1a1f), (1 - p.hull/100) * 0.7)); }
     }
     if (cur.L != null && cur.L !== p.lostMask){
+      if ((p.lostMask & ~cur.L) !== 0) repairTruck(p); // bits cleared = they respawned fresh
       for (const k in PIECE_BITS)
         if ((cur.L & PIECE_BITS[k]) && !(p.lostMask & PIECE_BITS[k])) loseP(p, k);
       p.lostMask = cur.L;
@@ -1516,6 +1672,20 @@ function guestStep(dt){
     if (p.wins !== cur.w){ p.wins = cur.w; buildScoreHud(); }
     if (p.alive && !cur.a){ p.alive = false; p.group.visible = false; buildScoreHud(); }
     if (!p.alive && cur.a){ p.alive = true; p.group.visible = true; buildScoreHud(); }
+  }
+  // ball interpolation + score sync
+  if (snapCur.B && BALL.mesh){
+    const cur = snapCur.B, prev = (snapPrev && snapPrev.B) ? snapPrev.B : cur;
+    BALL.mesh.position.set(
+      THREE.MathUtils.lerp(prev.p[0], cur.p[0], alpha),
+      THREE.MathUtils.lerp(prev.p[1], cur.p[1], alpha),
+      THREE.MathUtils.lerp(prev.p[2], cur.p[2], alpha));
+    const qa = new THREE.Quaternion(prev.q[0], prev.q[1], prev.q[2], prev.q[3]);
+    qa.slerp(new THREE.Quaternion(cur.q[0], cur.q[1], cur.q[2], cur.q[3]), alpha);
+    BALL.mesh.quaternion.copy(qa);
+  }
+  if (snapCur.sc && (snapCur.sc[0] !== G.score[0] || snapCur.sc[1] !== G.score[1])){
+    G.score = [snapCur.sc[0], snapCur.sc[1]]; buildScoreHud();
   }
   // mirror the host's salvage chips
   if (snapCur.S){
@@ -1544,19 +1714,21 @@ function refreshSlots(){
   const el = $("slots"); el.innerHTML = "";
   const mk = (name, colorIdx, status) => {
     const d = document.createElement("div"); d.className = "slot";
-    d.innerHTML = `<span class="d" style="background:#${COLORS[colorIdx].toString(16).padStart(6,"0")}"></span>${name}<span class="st">${status}</span>`;
+    const c = TEAM_COLORS[colorIdx % 2][(colorIdx >> 1) % 3];
+    d.innerHTML = `<span class="d" style="background:#${c.toString(16).padStart(6,"0")}"></span>${name}<span class="st">${status}</span>`;
     el.appendChild(d);
   };
   mk("YOU (host)", 0, "ready");
   guests.forEach((g, i) => mk("P" + (i+2), i+1, g.connected ? "connected" : "lost"));
   if (pendingGuest) mk("P" + (guests.length+2), guests.length+1, "invite pending…");
 }
+const assignTeams = roster => roster.map((r, i) => ({ ...r, team: i % 2, slot: i >> 1 }));
 $("soloBtn").onclick = () => {
   const total = parseInt($("botSel").value, 10);
   G.role = "solo";
   const roster = [{ name: "YOU", human: true, guestIdx: -1 }];
   for (let i = 1; i < total; i++) roster.push({ name: BOTNAMES[i-1], human: false, guestIdx: -1 });
-  startMatch((Math.random()*1e9)|0, roster);
+  startMatch((Math.random()*1e9)|0, assignTeams(roster));
 };
 $("touchTog").onclick = () => {
   const on = document.body.classList.toggle("touch");
@@ -1583,12 +1755,12 @@ $("replyBtn").onclick = async () => {
   catch (e){ $("joinState").textContent = "failed: " + e.message; }
 };
 $("startBtn").onclick = () => {
-  const total = Math.max(2, Math.min(6, 1 + guests.filter(g=>g.connected).length + 2)); // humans + 2 bots min... keep simple: humans + bots to 4
   G.role = "host";
-  const roster = [{ name: "YOU", human: true, guestIdx: -1 }];
+  let roster = [{ name: "YOU", human: true, guestIdx: -1 }];
   guests.forEach((g, i) => { if (g.connected) roster.push({ name: "P" + (i+2), human: true, guestIdx: g.idx }); });
   let bi = 0;
-  while (roster.length < Math.max(4, roster.length)) { roster.push({ name: BOTNAMES[bi++], human: false, guestIdx: -1 }); if (roster.length >= 4) break; }
+  while (roster.length < 4) roster.push({ name: BOTNAMES[bi++], human: false, guestIdx: -1 });
+  roster = assignTeams(roster); // humans alternate teams → 2 humans play head-to-head
   const seed = (Math.random()*1e9)|0;
   broadcast({ t: "start", seed, roster });
   startMatch(seed, roster);
@@ -1596,9 +1768,8 @@ $("startBtn").onclick = () => {
 $("resultBtn").onclick = () => {
   $("resultOverlay").classList.remove("show");
   if (G.role === "guest") return; // host restarts for everyone
-  for (const p of players) p.wins = 0;
-  G.round = 0;
-  netEvent({ t: "rematch" }); // guests just follow snapshots/rounds
+  for (const p of players){ p.wins = 0; repairTruck(p); }
+  G.round = 0; G.score = [0, 0];
   startRound(); buildScoreHud();
 };
 $("resultMenu").onclick = () => location.reload();
