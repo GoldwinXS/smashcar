@@ -85,7 +85,7 @@
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">Physics sumo-brawl &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v5</span></p>
+    <p class="tag">Physics sumo-brawl &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v6</span></p>
     <h1>WRECK COURT</h1>
     <p>Heavy trucks, one floating court, no guns. <b>Ram everyone else into the void.</b> The court crumbles from the rim inward — last truck standing takes the round. <b>First to 3 rounds wins.</b></p>
     <ul>
@@ -93,6 +93,7 @@
       <li><b>Phone:</b> hold the left pad to drive, slide to steer, pull down to reverse &middot; right-side <b>BOOST / JUMP / FLIP</b></li>
       <li>Hits are real physics — momentum wins. Boost into someone's side and they <i>fly</i>.</li>
       <li>Watch the red-shaking tiles: they're about to drop. You can ride a falling tile… briefly.</li>
+      <li><b>Carnage pays:</b> beat a truck to <b>0% hull</b> and it's &#128165; <b>DEMOLISHED</b> on the spot. Wrecks drop glowing <b style="color:#62f3a8">salvage</b> — drive over it to patch +12 hull. Dents and lost wheels are forever (this round).</li>
     </ul>
     <div class="row">
       <label class="lab" style="font-size:12px">Court size
@@ -285,6 +286,7 @@ const sfx = {
   rumble(v = 0.35){ noiseHit(v, 110, 0.8); },
   beep(){ blip(330, 0.09, "square", 0.18); },
   crunch(){ noiseHit(0.45, 1600, 0.28); blip(140, 0.18, "square", 0.3, -60); },
+  salv(){ blip(660, 0.09, "triangle", 0.25); setTimeout(() => blip(880, 0.12, "triangle", 0.25), 70); },
   go(){ blip(520, 0.2, "square", 0.3); },
   win(){ blip(392, 0.12, "triangle", 0.3); setTimeout(() => blip(523, 0.12, "triangle", 0.3), 120); setTimeout(() => blip(659, 0.3, "triangle", 0.35), 240); }
 };
@@ -510,6 +512,7 @@ function stepTruck(p, dt){
     }
   }
   p.grounded = groundHits >= 2;
+  if (p.grounded){ p.safeX = pos.x; p.safeZ = pos.z; } // last solid footing (salvage drop point)
   const inp = p.input;
 
   if (p.grounded){
@@ -538,10 +541,11 @@ function stepTruck(p, dt){
     // steering: lerp yaw angvel toward target (arcade-reliable, still shoved by hits)
     const spd = Math.hypot(vel.x, vel.z);
     const dir = (vel.x*f.x + vel.z*f.z) >= -0.5 ? 1 : -1;
-    // +angvel.y turns nose toward +X; st=+1 (D / stick-right) must turn right
-    let target = inp.st * 2.5 * steerWear * dir * Math.min(1, 0.35 + spd/10);
+    // chirality (verified on-screen, not just math): +angvel.y = turn LEFT.
+    // st=+1 (D / stick-right) must turn screen-right => NEGATIVE yaw.
+    let target = -inp.st * 2.5 * steerWear * dir * Math.min(1, 0.35 + spd/10);
     // asymmetric side damage drags the truck toward the crushed side
-    target += (p.dmg.r - p.dmg.l) * 0.007 * Math.min(1, spd/8);
+    target += (p.dmg.l - p.dmg.r) * 0.007 * Math.min(1, spd/8);
     const av = body.angvel();
     // flatten: damp pitch/roll wobble while upright (big hits still flip you past the gate)
     const flat = up.y > 0.7 ? 0.82 : 1;
@@ -569,12 +573,13 @@ function stepTruck(p, dt){
     // flat responsive air control (v14 lesson): yaw follows steer, pitch from throttle
     const av = body.angvel();
     body.setAngvel({ x: av.x + (inp.th*2.1 - av.x)*0.10,     // W = nose-down dive
-                     y: av.y + (inp.st*2.4 - av.y)*0.10, z: av.z*0.97 }, true);
+                     y: av.y + (-inp.st*2.4 - av.y)*0.10, z: av.z*0.97 }, true);
     // flip-dodge: second jump press in air
     if (inp.jump && !p.jumpHeld && p.canFlip){
       p.canFlip = false;
       const dodge = V3(fwd.x, 0, fwd.z).normalize().multiplyScalar(inp.th >= 0 ? 1 : -1);
-      if (Math.abs(inp.st) > 0.3){ dodge.copy(right).multiplyScalar(Math.sign(inp.st)); dodge.y = 0; dodge.normalize(); }
+      // local +X is the truck's LEFT; stick-right (st=+1) dodges right = -X
+      if (Math.abs(inp.st) > 0.3){ dodge.copy(right).multiplyScalar(-Math.sign(inp.st)); dodge.y = 0; dodge.normalize(); }
       body.applyImpulse({ x: dodge.x*mass*7.5, y: mass*1.6, z: dodge.z*mass*7.5 }, true);
       const flipAxis = V3().crossVectors(V3(0,1,0), dodge);
       body.applyTorqueImpulse({ x: flipAxis.x*mass*3.4, y: 0, z: flipAxis.z*mass*3.4 }, true);
@@ -676,10 +681,11 @@ const debris = [];
 function checkPieces(p){
   if (!p.lost.bull && p.dmg.f > 26) loseP(p, "bull");
   if (!p.lost.cab && 100 - p.hull > 62) loseP(p, "cab");
-  if (!p.lost.wheels[0] && p.dmg.l > 26) loseP(p, "w0"); // left crush pops left wheels
-  if (!p.lost.wheels[2] && p.dmg.l > 52) loseP(p, "w2");
-  if (!p.lost.wheels[1] && p.dmg.r > 26) loseP(p, "w1");
-  if (!p.lost.wheels[3] && p.dmg.r > 52) loseP(p, "w3");
+  // left crush pops LEFT wheels (local +X = indices 1,3), right crush pops right (0,2)
+  if (!p.lost.wheels[1] && p.dmg.l > 26) loseP(p, "w1");
+  if (!p.lost.wheels[3] && p.dmg.l > 52) loseP(p, "w3");
+  if (!p.lost.wheels[0] && p.dmg.r > 26) loseP(p, "w0");
+  if (!p.lost.wheels[2] && p.dmg.r > 52) loseP(p, "w2");
 }
 function loseP(p, kind){
   let mesh = null;
@@ -705,13 +711,76 @@ function loseP(p, kind){
   }
 }
 function stepDebris(dt){
+  const safeR = currentSafeRadius();
   for (let i = debris.length - 1; i >= 0; i--){
     const d = debris[i]; d.t += dt;
+    const m = d.mesh;
+    if (d.landed){
+      // wreckage litters the court until its tile crumbles away beneath it
+      if (Math.hypot(m.position.x, m.position.z) > safeR){ d.landed = false; d.vy = 0; }
+      else { d.vx *= 0.9; d.vz *= 0.9;
+        m.position.x += d.vx * dt; m.position.z += d.vz * dt; continue; }
+    }
     d.vy -= 16 * dt;
-    d.mesh.position.x += d.vx * dt; d.mesh.position.y += d.vy * dt; d.mesh.position.z += d.vz * dt;
-    d.mesh.rotation.x += d.rx * dt; d.mesh.rotation.z += d.rz * dt;
-    if (d.t > 4 || d.mesh.position.y < -35){ scene.remove(d.mesh); debris.splice(i, 1); }
+    m.position.x += d.vx * dt; m.position.y += d.vy * dt; m.position.z += d.vz * dt;
+    m.rotation.x += d.rx * dt; m.rotation.z += d.rz * dt;
+    if (d.vy < 0 && m.position.y < 0.35 && Math.hypot(m.position.x, m.position.z) < safeR){
+      d.landed = true; d.vy = 0; d.vx *= 0.4; d.vz *= 0.4;
+      m.position.y = 0.32; m.rotation.x = Math.round(m.rotation.x / Math.PI) * Math.PI;
+    }
+    if (m.position.y < -35){ scene.remove(m); debris.splice(i, 1); }
   }
+  while (debris.length > 30){ scene.remove(debris[0].mesh); debris.shift(); } // cap the junkyard
+}
+// ---------------- salvage (carnage economy) ----------------
+/* demolitions & KOs drop glowing chips; drive over one to patch +12 hull.
+   dents and lost wheels stay — you're patched, not pretty. */
+let salvageId = 0;
+const salvage = [];
+const salvGeo = new THREE.OctahedronGeometry(0.5);
+function spawnSalvage(x, z){
+  if (Math.hypot(x, z) > currentSafeRadius() - 1) return;   // don't drop chips over the void
+  const mesh = new THREE.Mesh(salvGeo,
+    new THREE.MeshBasicMaterial({ color: 0x62f3a8, transparent: true, opacity: 0.9 }));
+  mesh.position.set(x, 0.8, z);
+  scene.add(mesh);
+  salvage.push({ id: salvageId++, x, z, mesh });
+}
+function removeSalvage(i){ scene.remove(salvage[i].mesh); salvage[i].mesh.material.dispose(); salvage.splice(i, 1); }
+function healHull(p, amt){
+  const tot = p.dmg.f + p.dmg.b + p.dmg.l + p.dmg.r;
+  if (tot <= 0) return;
+  const k = Math.max(0, tot - amt) / tot;
+  p.dmg.f *= k; p.dmg.b *= k; p.dmg.l *= k; p.dmg.r *= k;
+  p.hull = Math.max(0, 100 - (p.dmg.f + p.dmg.b + p.dmg.l + p.dmg.r));
+  if (p.bodyMat){ const c = new THREE.Color(p.color);
+    p.bodyMat.color.copy(c.lerp(new THREE.Color(0x1a1a1f), (1 - p.hull/100) * 0.7)); }
+}
+function stepSalvage(dt){
+  // spin + pulse everywhere; pickup is host-authoritative
+  for (const s of salvage){ s.mesh.rotation.y += 2.2 * dt;
+    s.mesh.position.y = 0.8 + Math.sin(performance.now() * 0.004 + s.id) * 0.15; }
+  if (G.role === "guest" || G.phase !== "fight") return;
+  for (const p of players){
+    if (!p.alive || !p.body || p.hull >= 100) continue;
+    const pos = p.group.position;
+    for (let i = salvage.length - 1; i >= 0; i--){
+      const s = salvage[i];
+      if (Math.hypot(s.x - pos.x, s.z - pos.z) < 2.3){
+        healHull(p, 12);
+        emit(s.x, 1, s.z, 0x62f3a8, 10, 5, .5);
+        sfx.salv();
+        if (p === me()) toast("SALVAGED — hull " + Math.round(p.hull) + "%", 900);
+        netEvent({ t: "salv", id: p.id, sx: s.x, sz: s.z });
+        removeSalvage(i);
+      }
+    }
+  }
+}
+function clearCarnage(){
+  for (const d of debris) scene.remove(d.mesh);
+  debris.length = 0;
+  while (salvage.length) removeSalvage(0);
 }
 function repairTruck(p){
   p.hull = 100; p.dmg = { f: 0, b: 0, l: 0, r: 0 };
@@ -734,8 +803,8 @@ function applyDamage(p, closing, inX, inZ){
   let zone, mult;
   if (local.z > 0.5){ zone = "f"; mult = 0.6; }
   else if (local.z < -0.5){ zone = "b"; mult = 1.6; }
-  else if (local.x > 0){ zone = "r"; mult = 1.1; }
-  else { zone = "l"; mult = 1.1; }
+  else if (local.x > 0){ zone = "l"; mult = 1.1; } // local +X = truck's LEFT side
+  else { zone = "r"; mult = 1.1; }
   const dmg = Math.min(30, raw * 2.2 * mult);
   p.dmg[zone] += dmg;
   p.hull = Math.max(0, 100 - (p.dmg.f + p.dmg.b + p.dmg.l + p.dmg.r));
@@ -752,6 +821,18 @@ function applyDamage(p, closing, inX, inZ){
     const names = { f: "FRONT", b: "REAR", l: "LEFT SIDE", r: "RIGHT SIDE" };
     toast(`${names[zone]} ${p.hull < 35 ? "CRUSHED" : "DENTED"} — hull ${Math.round(p.hull)}%`, 900);
   }
+  if (p.hull <= 0 && p.alive) demolish(p);   // beaten to death: DEMOLITION
+}
+function demolish(p){
+  ["bull", "cab", "w0", "w1", "w2", "w3"].forEach(k => loseP(p, k)); // everything left tears off
+  const pos = p.group.position;
+  emit(pos.x, pos.y + 1, pos.z, 0xffaa33, 40, 16, .8);
+  emit(pos.x, pos.y + 1, pos.z, 0xffffff, 14, 22, .4);
+  emit(pos.x, pos.y + 1, pos.z, 0x333333, 20, 6, 1.2, -2);
+  for (let i = 0; i < 3; i++) spawnSalvage(pos.x + rnd(-2.5, 2.5), pos.z + rnd(-2.5, 2.5));
+  G.slowT = Math.max(G.slowT, 0.4);
+  sfx.crunch();
+  koPlayer(p, true);
 }
 
 // ---------------- bots ----------------
@@ -774,7 +855,7 @@ function stepBot(p, dt){
       inward.normalize();
       const cross = fwd.x*inward.z - fwd.z*inward.x;
       const dot = fwd.x*inward.x + fwd.z*inward.z;
-      inp.st = THREE.MathUtils.clamp(-cross*3, -1, 1);
+      inp.st = THREE.MathUtils.clamp(cross*3, -1, 1);
       inp.th = 0;
       inp.boost = dot > 0.55 && p.boost > 10 && futR > liveR - 4;
     }
@@ -785,11 +866,24 @@ function stepBot(p, dt){
     const inward = V3(-pos.x, 0, -pos.z).normalize();
     const cross = fwd.x*inward.z - fwd.z*inward.x;
     const dot = fwd.x*inward.x + fwd.z*inward.z;
-    inp.st = THREE.MathUtils.clamp(-cross*4, -1, 1) * (dot < -0.2 ? -1 : 1);
+    inp.st = THREE.MathUtils.clamp(cross*4, -1, 1) * (dot < -0.2 ? -1 : 1);
     const outSpeed = (vel.x*pos.x + vel.z*pos.z) / (selfR || 1);
     // carve at speed when already facing inward-ish; hard-brake when facing out
     inp.th = dot > 0.3 ? 0.6 : (outSpeed > 6 ? -1 : 0.2);
     return;
+  }
+  // badly hurt? limp to the nearest salvage chip instead of brawling
+  if (p.hull < 45 && salvage.length){
+    let chip = null, cd = 400; // within 20m
+    for (const s of salvage){ const dx = s.x - pos.x, dz = s.z - pos.z, d2 = dx*dx + dz*dz;
+      if (d2 < cd){ cd = d2; chip = s; } }
+    if (chip){
+      const cdir = V3(chip.x - pos.x, 0, chip.z - pos.z).normalize();
+      const ccross = fwd.x*cdir.z - fwd.z*cdir.x, cdot = fwd.x*cdir.x + fwd.z*cdir.z;
+      inp.st = THREE.MathUtils.clamp(ccross*3.2, -1, 1) * (cdot < -0.3 ? -1 : 1);
+      inp.th = cdot < -0.5 ? -1 : 1;
+      return;
+    }
   }
   // nearest living opponent still on the court — but wounded trucks smell like prey
   let tgt = null, best = 1e9;
@@ -802,7 +896,7 @@ function stepBot(p, dt){
     if (inward.length() < 5){ inp.th = 0; inp.st = 0; return; }
     inward.normalize();
     const cross = fwd.x*inward.z - fwd.z*inward.x;
-    inp.st = THREE.MathUtils.clamp(-cross*3, -1, 1); inp.th = 0.6; return;
+    inp.st = THREE.MathUtils.clamp(cross*3, -1, 1); inp.th = 0.6; return;
   }
   // intercept lead (v14 lesson: lead the target), aim clamped inside the court
   const tv = tgt.body ? tgt.body.linvel() : (tgt.netVel || {x:0,z:0});
@@ -814,7 +908,7 @@ function stepBot(p, dt){
   const dir = V3(aim.x - pos.x, 0, aim.z - pos.z).normalize();
   const cross = fwd.x*dir.z - fwd.z*dir.x;
   const dot = fwd.x*dir.x + fwd.z*dir.z;
-  inp.st = THREE.MathUtils.clamp(-cross*3.2, -1, 1) * (dot < -0.3 ? -1 : 1);
+  inp.st = THREE.MathUtils.clamp(cross*3.2, -1, 1) * (dot < -0.3 ? -1 : 1);
   if (dot < -0.5) inp.th = -1; // hard reverse turn
   // speed discipline: if momentum at 1.2s would cross the safe rim, stop pushing NOW
   // (stopping distance at boost speed exceeds the whole margin — prevention only)
@@ -868,7 +962,8 @@ function startMatch(seed, roster){
 }
 function startRound(){
   G.round++;
-  // rebuild tiles fresh each round
+  // rebuild tiles fresh each round; sweep last round's wreckage
+  clearCarnage();
   newWorldKeepPlayers();
   buildArena(G.seed + G.round * 977);
   players.forEach((p, i) => resetTruck(p, i, players.length));
@@ -956,8 +1051,9 @@ function stepGame(dt){
   }
   stepTiles(dt, authoritative);
   stepRams(dt, authoritative);
+  stepSalvage(dt); // pickup is host-gated inside; spin/pulse runs everywhere
 }
-function koPlayer(p){
+function koPlayer(p, demolished = false){
   p.alive = false;
   if (p.body){ world.removeRigidBody(p.body); p.body = null; } // stop simulating corpses
   const pos = p.group.position;
@@ -965,21 +1061,24 @@ function koPlayer(p){
   emit(pos.x, Math.max(pos.y, -10), pos.z, 0xffffff, 12, 20, .4);
   // credit the wreck if someone tagged them recently
   const killer = (p.lastHitBy != null && G.t - p.lastHitT < 4) ? players[p.lastHitBy] : null;
-  koFeed(p, killer ? killer.id : -1);
+  koFeed(p, killer ? killer.id : -1, demolished);
   if (killer && killer.alive){
     killer.boost = 100; // a confirmed wreck = full tank
-    if (killer === me()) toast("WRECKED THEM — FULL BOOST");
+    if (killer === me()) toast(demolished ? "DEMOLISHED THEM — FULL BOOST" : "WRECKED THEM — FULL BOOST");
   }
+  // ring-outs leave one salvage chip where they last stood (demolitions drop their own)
+  if (!demolished && p.safeX != null) spawnSalvage(p.safeX, p.safeZ);
   sfx.boom(); G.slowT = Math.max(G.slowT, 0.25);
   if (p === me()) shake(1.2);
   p.group.visible = false;
-  netEvent({ t: "ko", id: p.id, k: killer ? killer.id : -1 });
+  netEvent({ t: "ko", id: p.id, k: killer ? killer.id : -1, d: demolished ? 1 : 0 });
   buildScoreHud();
 }
-function koFeed(p, killerId){
+function koFeed(p, killerId, demolished){
   const col = pl => `<b style="color:#${pl.color.toString(16).padStart(6,"0")}">${pl.name}</b>`;
   const k = killerId >= 0 ? players[killerId] : null;
-  feed(k ? `${col(k)} WRECKED ${col(p)}` : `${col(p)} fell into the void`);
+  feed(demolished ? (k ? `${col(k)} \u{1F4A5} DEMOLISHED ${col(p)}` : `${col(p)} was \u{1F4A5} DEMOLISHED`)
+    : (k ? `${col(k)} WRECKED ${col(p)}` : `${col(p)} fell into the void`));
 }
 function endMatch(champ){
   G.phase = "matchend";
@@ -1133,8 +1232,11 @@ function stepVisuals(dt){
       const pos = p.group.position;
       emit(pos.x + rnd(-.5,.5), pos.y + 0.8, pos.z + rnd(-.5,.5),
         p.hull < 35 ? 0x181818 : 0x3a3a40, 1, 1.2, 1.1, -2.5); // rises
-      if (p.hull < 25 && Math.random() < 0.25)
-        emit(pos.x, pos.y + 0.5, pos.z, 0xff9b50, 1, 2.5, .35); // sparks when nearly dead
+      if (p.hull < 25){
+        if (Math.random() < 0.25) emit(pos.x, pos.y + 0.5, pos.z, 0xff9b50, 1, 2.5, .35); // sparks
+        if (Math.random() < 0.5) emit(pos.x + rnd(-.4,.4), pos.y + 0.6, pos.z + rnd(-.4,.4),
+          0xff7733, 1, 1.8, .4, -4); // BURNING
+      }
     }
   }
 }
@@ -1218,7 +1320,8 @@ function hostSnapshot(){
              v, a: p.alive ? 1 : 0, b: Math.round(p.boost), f: p.boosting ? 1 : 0, w: p.wins,
              h: Math.round(p.hull), L: p.lostMask };
   });
-  broadcast({ t: "snap", k: snapTick++, ph: G.phase, rd: G.round, tr: trucks });
+  broadcast({ t: "snap", k: snapTick++, ph: G.phase, rd: G.round, tr: trucks,
+    S: salvage.map(s => [s.id, +s.x.toFixed(1), +s.z.toFixed(1)]) });
 }
 
 // ---- guest side ----
@@ -1263,9 +1366,12 @@ function guestOnMsg(m){
     case "tilefall": { const t = tiles[m.i]; if (t && t.state < 2){ t.state = 2; t.vy = 0; } break; }
     case "ko": { const p = players[m.id]; if (p && p.alive){ p.alive = false;
       const pos = p.group.position; emit(pos.x, Math.max(pos.y,-10), pos.z, p.color, 30, 14, .9);
-      koFeed(p, m.k ?? -1);
+      if (m.d){ emit(pos.x, pos.y + 1, pos.z, 0xffaa33, 40, 16, .8); G.slowT = Math.max(G.slowT, 0.4); }
+      koFeed(p, m.k ?? -1, !!m.d);
       sfx.boom(); G.slowT = Math.max(G.slowT, 0.25);
       p.group.visible = false; if (p === me()) shake(1.2); buildScoreHud(); } break; }
+    case "salv": { emit(m.sx, 1, m.sz, 0x62f3a8, 10, 5, .5); sfx.salv();
+      if (players[m.id] === me()) toast("SALVAGED", 800); break; }
     case "roundwin": { const p = players[m.id]; if (p){ p.wins++; banner(p.name + " TAKES THE ROUND", 1800); sfx.win(); buildScoreHud(); } break; }
     case "matchend": { const p = players[m.id]; G.phase = "matchend"; if (p) showResult(p); break; }
   }
@@ -1280,6 +1386,7 @@ function startMatchGuest(seed, roster){
   buildScoreHud();
 }
 function guestResetRound(){
+  clearCarnage();
   buildArena(G.seed + G.round * 977);
   for (const p of players){ p.alive = true; p.group.visible = true; repairTruck(p); }
   G.phase = "countdown"; buildScoreHud();
@@ -1313,6 +1420,18 @@ function guestStep(dt){
     if (p.wins !== cur.w){ p.wins = cur.w; buildScoreHud(); }
     if (p.alive && !cur.a){ p.alive = false; p.group.visible = false; buildScoreHud(); }
     if (!p.alive && cur.a){ p.alive = true; p.group.visible = true; buildScoreHud(); }
+  }
+  // mirror the host's salvage chips
+  if (snapCur.S){
+    const ids = new Set(snapCur.S.map(a => a[0]));
+    for (let i = salvage.length - 1; i >= 0; i--) if (!ids.has(salvage[i].id)) removeSalvage(i);
+    const have = new Set(salvage.map(s => s.id));
+    for (const [id, x, z] of snapCur.S) if (!have.has(id)){
+      const mesh = new THREE.Mesh(salvGeo,
+        new THREE.MeshBasicMaterial({ color: 0x62f3a8, transparent: true, opacity: 0.9 }));
+      mesh.position.set(x, 0.8, z); scene.add(mesh);
+      salvage.push({ id, x, z, mesh });
+    }
   }
   if (snapCur.ph !== G.phase && (snapCur.ph === "fight" || snapCur.ph === "countdown")) G.phase = snapCur.ph;
   // send my input
