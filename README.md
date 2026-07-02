@@ -1,55 +1,49 @@
-# THE PASS
+# WRECKBALL
 
-**An AI cat-chef connection duel.** Place a dab of your sauce on any open
-tile. **You** (cyan) win the instant your sauce forms one unbroken line from
-the **left** edge to the **right**; the rival cat (orange) races to link
-**top** to **bottom**. It can never end in a draw — once the board fills,
-exactly one of you has crossed — so every tile you take also *blocks* the
-rival. Attack and defence are the same move.
+**Car-ball carnage.** Rocket-powered trucks, one giant ball, two goals — and
+full-contact demolition. Smash the ball into the enemy net. Smash the enemy
+while you're at it. First to **5 goals** wins. Nobody falls off, nobody's
+eliminated.
 
-## Why this core (the research)
+Built as a single self-contained HTML file with [Three.js](https://threejs.org)
+(rendering) and [Rapier](https://rapier.rs) (physics), loaded from CDNs — no
+build step, no install.
 
-After two prototypes whose endgames collapsed to a Sprague–Grundy/Nim
-**parity count** (a closed-form *shortcut* = "solved endgame", samey,
-low replayability), a cited research pass pointed to the opposite kind of
-math:
+## Play
 
-- **Connection games are PSPACE-complete** (Reisch 1981 for Hex; also
-  Havannah, TwixT, Slither) — there is **no polynomial-time solution and no
-  closed-form winning strategy**, so the whole board stays a fresh, hard
-  problem every game. ([Hex is PSPACE-complete](https://academic.timwylie.com/17CSCI4341/hex_acta.pdf))
-- Even though strategy-stealing *proves* a winner exists, **finding the move
-  is itself PSPACE-hard** — knowing the winner exists does not trivialise play
-  ([strategy-stealing is non-constructive, ITCS 2020](https://drops.dagstuhl.de/storage/00lipics/lipics-vol151-itcs2020/LIPIcs.ITCS.2020.21/LIPIcs.ITCS.2020.21.pdf)).
-- The draw-free guarantee (the Hex theorem) means outcomes are always clean.
+- **Local / vs bots:** open `wreck.html` (or just the site root) and hit **PLAY** — bots fill the empty seats.
+- **Online with friends:** **Host online** → generate an invite code → send it → paste their reply back. Pure peer-to-peer WebRTC, **no server**. Bots fill any remaining seats.
 
-**Honesty about originality:** this is the **Hex/Y connection-game family** —
-an obscure but real classic, not invented from scratch. The deepest *simple*
-replayable games are a small, well-explored set; the research's clear answer
-was "use a connection core," so this skins that proven core as a cat-chef
-duel rather than pretending to be a novel mechanic.
+### Controls
+- **Drive** W/S · **Steer** A/D · **Boost** Shift · **Jump** Space (again in air = flip-dodge) · **Flip upright** R · **Mute** M
+- **Phone:** hold the left pad to drive, slide to steer, pull down to reverse; right-side **BOOST / JUMP / FLIP**.
 
-## How to play
+### What makes it WRECKBALL (not just car soccer)
+- **Damage is real & physical** — hits crush visible dents into the bodywork, tear off bumpers and wheels (a lost wheel makes you sag and pull), and the collision shape itself deforms. A battered truck is slower and harder to steer.
+- 🔥 **HOT BALL** — hard strikes heat the ball up; a white-hot ball *wrecks* whatever it slams into. Playing the ball is always safe — standing in front of a screamer is not. Goals cool it off.
+- 🛡️ **WAR RIGS** — beaten trucks patch their hull with glowing **salvage**; healthy ones *bolt it on as armor* (heavier rams, plates that shear off when cracked).
+- 💥 **BATTLEFIELD PITCH** — demolitions and mega-shots blast craters into the floor. Late-game is played on the wreckage.
+- **Demolition = power play** — grind a truck to 0% hull and it's gone for 3 seconds while you attack the open net. It always comes back.
 
-- Click any open tile to place your sauce. You connect **left↔right**.
-- Leave **double-threats** (two ways to bridge a gap) — the rival can only
-  block one.
-- Board size selectable (6×6 → 9×9). You move first.
+## Run locally
 
-The AI is **flat Monte-Carlo** (random board completions always yield a unique
-winner — ideal for Hex) with a small centre-opening bias. Verified: it beats
-random play 8/8, ~20ms/move, and 0 draws across 200 random fills.
+Any static file server, e.g.:
 
-## Run / deploy
+```
+python -m http.server 8112
+```
 
-Single static file. `index.html`, or `python -m http.server 8000`.
-GitHub Pages: push → Settings → Pages → `main` / root (`.nojekyll` included).
+then open http://localhost:8112/ (or http://localhost:8112/wreck.html).
 
-## Earlier prototypes in this repo (kept; full history in git)
+## Deploy (GitHub Pages)
 
-- `simmer.html` — original "stir the pots" parity game (real depth but a
-  solved-parity endgame → samey, the reason for this pivot).
-- `linecook.html` — Dots & Boxes (fun + deep, but a known kids' game).
-- `signal.html` — Voronoi coverage (greedy-solvable once towers ≥ crowds).
-- `firewall.html` — tower-defense × tactics (maze+chokepoint dominant strategy).
-- `comet-court.html` — slingshot/gravity sumo.
+It's a static site, so Pages just works. Push the repo, then **Settings → Pages
+→ Source: Deploy from a branch → `master` / root**. The site root redirects to
+the game. (`.nojekyll` is included so nothing is filtered.)
+
+## Repo notes
+
+- `wreck.html` — **the game** (the version you play; iterated as v1…v13).
+- `index.html` — redirect to `wreck.html` so the site root lands on the game.
+- `wreck-sumo-v7.html` — the earlier "sumo ring-out" era of WRECK, before the soccer pivot.
+- `the-pass.html` and the other `*.html` files — earlier unrelated game prototypes, kept for history.

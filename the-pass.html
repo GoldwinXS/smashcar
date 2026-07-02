@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>THE PASS — an AI cat-chef connection duel</title>
+<style>
+  :root{--bg0:#05060f;--bg1:#0b1024;--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--rival:#ff9b50;--line:#233056;--panel:rgba(12,18,40,0.92);}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;min-height:100%;overflow:hidden;background:radial-gradient(120% 120% at 50% 0%,var(--bg1),var(--bg0));color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,sans-serif;user-select:none;touch-action:none;}
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px;}
+  #hud{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;display:flex;align-items:center;gap:8px;}
+  .pill .label{color:var(--muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
+  .pill.turn{font-weight:600;}
+  #banner{color:var(--muted);font-size:13px;min-height:18px;text-align:center;max-width:760px;}
+  #banner b{color:var(--ink);}
+  canvas{display:block;touch-action:none;}
+  #controls{display:flex;gap:10px;}
+  button{font:inherit;cursor:pointer;border-radius:11px;border:1px solid var(--line);background:#131c3c;color:var(--ink);padding:10px 18px;font-size:14px;transition:transform .08s,border-color .15s;}
+  button:hover{border-color:var(--you);} button:active{transform:translateY(1px);}
+  .btn-primary{background:linear-gradient(180deg,#1ea7c4,#1577a8);border-color:#36e2ff;font-weight:700;}
+  .overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,14,.74);backdrop-filter:blur(3px);z-index:9;padding:16px;}
+  .overlay.show{display:grid;}
+  .card{width:min(600px,94vw);max-height:92vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:0 24px 80px rgba(0,0,0,.6);}
+  .card h1{margin:0 0 4px;font-size:30px;letter-spacing:-.5px;}
+  .card .tag{color:var(--you);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 12px;}
+  .card p{color:var(--muted);line-height:1.55;margin:0 0 12px;font-size:15px;}
+  .card ul{color:var(--muted);line-height:1.55;margin:0 0 14px;padding-left:18px;font-size:14px;}
+  .card b{color:var(--ink);}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  .note{font-size:12px;color:var(--muted);border-left:2px solid var(--line);padding-left:12px;margin-top:4px;}
+  select{font:inherit;background:#131c3c;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:7px 10px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div class="pill" style="border-color:var(--you)"><span class="label" style="color:var(--you)">You</span> link left&ndash;right</div>
+    <div class="pill turn" id="turnPill">Your move</div>
+    <div class="pill" style="border-color:var(--rival)"><span class="label" style="color:var(--rival)">Rival</span> links top&ndash;bottom</div>
+  </div>
+  <div id="banner"></div>
+  <canvas id="board"></canvas>
+  <div id="controls"><button id="newBtn">New duel</button></div>
+</div>
+
+<div class="overlay show" id="menu">
+  <div class="card">
+    <p class="tag">AI cat-chef duel &middot; a connection game</p>
+    <h1>THE PASS</h1>
+    <p>Place a dab of your sauce on any open tile. <b>You</b> (cyan) win the instant your sauce forms one unbroken line from the <b>left</b> edge to the <b>right</b>. The rival cat (orange) is racing to link <b>top</b> to <b>bottom</b>.</p>
+    <ul>
+      <li><b>It can't end in a draw</b> — once the board fills, exactly one of you has crossed. So every tile you take also <i>blocks</i> the rival. Attack and defend are the same move.</li>
+      <li><b>No two games are alike:</b> there's no formula or endgame trick — you have to read the whole board, every time.</li>
+      <li><b>Watch for double-threats:</b> leave two ways to bridge a gap and the rival can only block one.</li>
+    </ul>
+    <p class="note">This is a <b>connection game</b> (the Hex/Y family) &mdash; the maths says these are the deepest <i>simple</i> games: <b>PSPACE-complete</b>, with no closed-form solution and no solved endgame, so they stay a fresh puzzle every game (the fix for the "samey" parity games before this). An honest, obscure classic, reskinned as ours.</p>
+    <div class="row">
+      <label style="color:var(--muted);font-size:14px">Board
+        <select id="sizeSel"><option value="6">6 × 6</option><option value="7" selected>7 × 7</option><option value="9">9 × 9</option><option value="10">10 × 10</option><option value="11">11 × 11</option><option value="12">12 × 12</option></select>
+      </label>
+      <button class="btn-primary" id="startBtn">Start the service</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="resultOverlay">
+  <div class="card">
+    <h1 id="resultTitle">Linked!</h1>
+    <p id="resultBody"></p>
+    <div class="row"><button class="btn-primary" id="resultBtn">Rematch</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   THE PASS — a Hex connection game (PSPACE-complete; no solved
+   endgame; draw-free). You (0) connect LEFT<->RIGHT; the AI (1)
+   connects TOP<->BOTTOM. Hex duality: blocking the rival and
+   building your own line are the same act. AI = flat Monte-Carlo
+   (random fills always yield a unique winner — perfect for MC).
+   ============================================================ */
+
+let cv, ctx, DPR = 1;
+let n = 7;                 // board is n x n rhombus of hexes
+let SIZE = 26, OX = 0, OY = 0;
+let owner = [];            // length n*n: -1 empty, 0 you, 1 rival
+
+const G = { phase: "menu", hover: -1, fx: [], winner: -1, winPath: null };
+
+const idx = (r, c) => r * n + c;
+const inb = (r, c) => r >= 0 && r < n && c >= 0 && c < n;
+// hex neighbours on a rhombus board
+const NB = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, 1], [1, -1]];
+function neighbors(i) {
+  const r = (i / n) | 0, c = i % n, out = [];
+  for (const [dr, dc] of NB) { const nr = r + dr, nc = c + dc; if (inb(nr, nc)) out.push(nr * n + nc); }
+  return out;
+}
+
+// ---- win check: does player p connect their two sides? --------
+// returns the connected path (array of indices) or null
+function connectionPath(own, p) {
+  // p=0: left col(c=0) -> right col(c=n-1); p=1: top row(r=0) -> bottom(r=n-1)
+  const start = [], N = n * n;
+  for (let k = 0; k < n; k++) start.push(p === 0 ? idx(k, 0) : idx(0, k));
+  const prev = new Int32Array(N).fill(-2); // -2 unvisited
+  const q = [];
+  for (const s of start) if (own[s] === p) { prev[s] = -1; q.push(s); }
+  let head = 0;
+  while (head < q.length) {
+    const i = q[head++], r = (i / n) | 0, c = i % n;
+    if ((p === 0 && c === n - 1) || (p === 1 && r === n - 1)) {
+      // reconstruct path
+      const path = []; let x = i; while (x !== -1) { path.push(x); x = prev[x]; } return path;
+    }
+    for (const j of neighbors(i)) if (own[j] === p && prev[j] === -2) { prev[j] = i; q.push(j); }
+  }
+  return null;
+}
+function connects(own, p) { // fast boolean (no path)
+  const N = n * n, seen = new Uint8Array(N), q = [];
+  for (let k = 0; k < n; k++) { const s = p === 0 ? idx(k, 0) : idx(0, k); if (own[s] === p) { seen[s] = 1; q.push(s); } }
+  let head = 0;
+  while (head < q.length) {
+    const i = q[head++], r = (i / n) | 0, c = i % n;
+    if ((p === 0 && c === n - 1) || (p === 1 && r === n - 1)) return true;
+    for (const j of neighbors(i)) if (own[j] === p && !seen[j]) { seen[j] = 1; q.push(j); }
+  }
+  return false;
+}
+
+// ---- flat Monte-Carlo AI (plays as player 1) ------------------
+function aiMove() {
+  const empties = [];
+  for (let i = 0; i < n * n; i++) if (owner[i] < 0) empties.push(i);
+  const totalBudget = 7000;
+  const per = Math.max(24, Math.round(totalBudget / empties.length));
+  // template of remaining empties for fast rollouts
+  const mid = (n - 1) / 2, maxD = Math.hypot(mid, mid) || 1;
+  let best = empties[0], bestScore = -1;
+  for (const cand of empties) {
+    const rest = empties.filter(e => e !== cand);
+    // after AI plays cand, it's YOUR turn: of `rest`, you take ceil(R/2), AI floor(R/2)
+    const R = rest.length, youCount = Math.ceil(R / 2);
+    let wins = 0;
+    for (let t = 0; t < per; t++) {
+      // shuffle rest (Fisher-Yates) into a scratch
+      for (let i = R - 1; i > 0; i--) { const j = (Math.random() * (i + 1)) | 0; const tmp = rest[i]; rest[i] = rest[j]; rest[j] = tmp; }
+      const own = owner.slice();
+      own[cand] = 1;
+      for (let i = 0; i < R; i++) own[rest[i]] = i < youCount ? 0 : 1;
+      if (connects(own, 1)) wins++;
+    }
+    // win rate + a small centre bias (only breaks near-ties; cures noisy
+    // empty-board play where every move looks ~50%)
+    const cr = (cand / n | 0), cc = cand % n;
+    const centerNorm = 1 - Math.hypot(cr - mid, cc - mid) / maxD;
+    const score = wins / per + 0.05 * centerNorm;
+    if (score > bestScore) { bestScore = score; best = cand; }
+  }
+  return best;
+}
+
+// ---- turn flow -------------------------------------------------
+function place(i, p) {
+  owner[i] = p; spawnFx(i, p);
+  const path = connectionPath(owner, p);
+  if (path) { G.winner = p; G.winPath = path; G.phase = "over"; updateHud(); showResult(); return true; }
+  return false;
+}
+function youPlay(i) {
+  if (G.phase !== "you" || owner[i] >= 0) return;
+  if (place(i, 0)) return;
+  G.hover = -1; G.phase = "ai"; updateHud();
+  setTimeout(() => { const m = aiMove(); if (place(m, 1)) return; G.phase = "you"; updateHud(); }, 320);
+}
+
+// ---- effects ---------------------------------------------------
+function spawnFx(i, p) {
+  const x = hx(i), y = hy(i), col = p === 0 ? "#36e2ff" : "#ff9b50";
+  for (let k = 0; k < 10; k++) { const a = Math.random() * Math.PI * 2, s = Math.random() * 4; G.fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: .04 + Math.random() * .03, r: 1.4 + Math.random() * 2, col }); }
+}
+
+// ---- geometry / sizing ----------------------------------------
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const maxW = Math.min(window.innerWidth - 24, 680), maxH = window.innerHeight - 180;
+  // rhombus extent: width ~ (n + n/2)*sqrt3*size ; height ~ (1.5n+0.5)*size
+  SIZE = Math.max(15, Math.floor(Math.min(maxW / ((n * 1.5 + 1) * Math.sqrt(3)), maxH / (n * 1.5 + 1))));
+  const w = Math.ceil((n * 1.5 + 1) * Math.sqrt(3) * SIZE) + 8, h = Math.ceil((n * 1.5 + 1) * SIZE) + 8;
+  cv.width = Math.floor(w * DPR); cv.height = Math.floor(h * DPR);
+  cv.style.width = w + "px"; cv.style.height = h + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  OX = Math.sqrt(3) * SIZE; OY = SIZE * 1.2;
+}
+window.addEventListener("resize", () => { if (G.phase !== "menu") resize(); });
+const hx = i => OX + ((i % n) + ((i / n | 0)) * 0.5) * Math.sqrt(3) * SIZE;
+const hy = i => OY + (i / n | 0) * 1.5 * SIZE;
+
+// ---- input -----------------------------------------------------
+function idxAt(px, py) { let best = -1, bd = SIZE * SIZE; for (let i = 0; i < n * n; i++) { const dx = px - hx(i), dy = py - hy(i); const d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } } return best; }
+function evtPos(e) { const rect = cv.getBoundingClientRect(); const p = (e.touches && e.touches[0]) || e; return { x: p.clientX - rect.left, y: p.clientY - rect.top }; }
+function onMove(e) { if (G.phase !== "you") { G.hover = -1; return; } const { x, y } = evtPos(e); const i = idxAt(x, y); G.hover = (i >= 0 && owner[i] < 0) ? i : -1; }
+function onDown(e) { if (G.phase !== "you") return; const { x, y } = evtPos(e); const i = idxAt(x, y); if (i >= 0) youPlay(i); }
+
+// ---- render ----------------------------------------------------
+function hexPath(cx, cy, s) { ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = Math.PI / 180 * (60 * k - 90); const x = cx + s * Math.cos(a), y = cy + s * Math.sin(a); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.closePath(); }
+function draw() {
+  if (!ctx) return;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (G.phase === "menu") return;
+  const s = SIZE * 0.92;
+  // colored side borders (which edges belong to whom)
+  drawSideMarkers();
+  for (let i = 0; i < n * n; i++) {
+    const cx = hx(i), cy = hy(i);
+    hexPath(cx, cy, s);
+    if (owner[i] === 0) ctx.fillStyle = "#1c6e96";
+    else if (owner[i] === 1) ctx.fillStyle = "#9a5a25";
+    else ctx.fillStyle = "#0e1830";
+    ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = "#27365e"; ctx.stroke();
+    if (owner[i] >= 0) { ctx.fillStyle = owner[i] === 0 ? "#7fe9ff" : "#ffc089"; ctx.beginPath(); ctx.arc(cx, cy, s * 0.42, 0, Math.PI * 2); ctx.fill(); }
+  }
+  // winning line highlight
+  if (G.winPath) {
+    ctx.strokeStyle = G.winner === 0 ? "#9affff" : "#ffd9a8"; ctx.lineWidth = 4; ctx.lineJoin = "round";
+    ctx.beginPath(); for (let k = 0; k < G.winPath.length; k++) { const i = G.winPath[k]; if (k) ctx.lineTo(hx(i), hy(i)); else ctx.moveTo(hx(i), hy(i)); } ctx.stroke();
+  }
+  // hover
+  if (G.hover >= 0) { hexPath(hx(G.hover), hy(G.hover), s); ctx.fillStyle = "rgba(54,226,255,0.25)"; ctx.fill(); ctx.strokeStyle = "#36e2ff"; ctx.lineWidth = 2; ctx.stroke(); }
+  for (const f of G.fx) { ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.col; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill(); }
+  ctx.globalAlpha = 1;
+}
+function drawSideMarkers() {
+  ctx.lineWidth = 5; ctx.lineCap = "round";
+  // your edges: left (c=0) and right (c=n-1) -> cyan
+  ctx.strokeStyle = "#36e2ff";
+  edgeLine(0, "L"); edgeLine(0, "R");
+  // rival edges: top (r=0) and bottom -> orange
+  ctx.strokeStyle = "#ff9b50";
+  edgeLine(1, "T"); edgeLine(1, "B");
+}
+function edgeLine(p, which) {
+  ctx.beginPath();
+  for (let k = 0; k < n; k++) {
+    let i;
+    if (which === "L") i = idx(k, 0); else if (which === "R") i = idx(k, n - 1);
+    else if (which === "T") i = idx(0, k); else i = idx(n - 1, k);
+    const x = hx(i), y = hy(i);
+    const off = SIZE * 1.05;
+    let ex = x, ey = y;
+    if (which === "L") ex -= off * 0.86, ey -= off * 0.0;
+    else if (which === "R") ex += off * 0.86;
+    else if (which === "T") ey -= off, ex += off * 0.0;
+    else ey += off;
+    if (k) ctx.lineTo(ex, ey); else ctx.moveTo(ex, ey);
+  }
+  ctx.stroke();
+}
+
+// ---- HUD / overlays -------------------------------------------
+const turnPill = document.getElementById("turnPill"), bannerEl = document.getElementById("banner");
+function updateHud() {
+  if (G.phase === "you") { turnPill.textContent = "Your move"; turnPill.style.color = "var(--you)"; bannerEl.innerHTML = "Build toward <b>left&ndash;right</b> — and notice you're blocking the rival's top&ndash;bottom line at the same time."; }
+  else if (G.phase === "ai") { turnPill.textContent = "Rival plating…"; turnPill.style.color = "var(--rival)"; }
+  else { turnPill.textContent = "Service over"; turnPill.style.color = "var(--muted)"; }
+}
+const resultOverlay = document.getElementById("resultOverlay"), resultTitle = document.getElementById("resultTitle"), resultBody = document.getElementById("resultBody");
+function showResult() {
+  const youWon = G.winner === 0;
+  resultTitle.textContent = youWon ? "You linked the pass!" : "The rival cat linked first";
+  resultBody.innerHTML = youWon ? "Your sauce crossed left to right in one unbroken line. The Capybara nods, almost."
+    : "Orange crossed top to bottom before you could bridge. The Capybara remains unmoved.";
+  setTimeout(() => resultOverlay.classList.add("show"), 700);
+}
+
+// ---- loop / boot ----------------------------------------------
+function loop() { for (const f of G.fx) { f.x += f.vx; f.y += f.vy; f.vx *= .9; f.vy *= .9; f.life -= f.decay; } G.fx = G.fx.filter(f => f.life > 0); draw(); requestAnimationFrame(loop); }
+function startGame() {
+  owner = new Array(n * n).fill(-1);
+  G.phase = "you"; G.hover = -1; G.fx = []; G.winner = -1; G.winPath = null;
+  resize(); updateHud();
+}
+function boot() {
+  cv = document.getElementById("board"); ctx = cv.getContext("2d");
+  cv.addEventListener("pointermove", onMove);
+  cv.addEventListener("pointerdown", onDown);
+  cv.addEventListener("pointerleave", () => { G.hover = -1; });
+  document.getElementById("startBtn").onclick = () => { n = parseInt(document.getElementById("sizeSel").value, 10); document.getElementById("menu").classList.remove("show"); startGame(); };
+  document.getElementById("newBtn").onclick = () => { document.getElementById("menu").classList.add("show"); G.phase = "menu"; };
+  document.getElementById("resultBtn").onclick = () => { resultOverlay.classList.remove("show"); startGame(); };
+  requestAnimationFrame(loop);
+}
+boot();
+</script>
+</body>
+</html>
