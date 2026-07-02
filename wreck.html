@@ -87,15 +87,16 @@
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">Car-ball carnage &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v10</span></p>
+    <p class="tag">Car-ball carnage &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v11</span></p>
     <h1>WRECKBALL</h1>
     <p>Rocket-powered trucks, one giant ball, two goals — <b>and full-contact demolition.</b> Smash the ball into the enemy goal. Smash the enemy while you're at it. <b>First to 5 goals wins.</b> Nobody falls off, nobody's eliminated.</p>
     <ul>
       <li><b>W/S</b> drive &middot; <b>A/D</b> steer &middot; <b>Shift</b> boost &middot; <b>Space</b> jump (again in air = flip-dodge) &middot; <b>R</b> flip upright</li>
       <li><b>Phone:</b> hold the left pad to drive, slide to steer, pull down to reverse &middot; right-side <b>BOOST / JUMP / FLIP</b></li>
       <li><b>Destruction is a power play:</b> ram enemies to crush real dents in, tear off their bumpers and wheels — a battered truck is slow and pulls sideways. Beat one to <b>0% hull</b> and it's &#128165; <b>DEMOLISHED</b> — gone for 3 seconds while you attack the open net.</li>
-      <li>Wrecks drop glowing <b style="color:#62f3a8">salvage</b> — drive over it to patch your hull. Damage sticks between goals; only demolition (or a new match) gives you a fresh truck.</li>
-      <li>Boost-flip into the ball for rocket shots. The ball is heavy — momentum matters.</li>
+      <li>Wrecks drop glowing <b style="color:#62f3a8">salvage</b> — hurt trucks patch their hull with it; <b>healthy trucks bolt it on as ARMOR</b> (heavier rams, plates shear off when cracked). Damage sticks between goals.</li>
+      <li>&#128293; <b>HOT BALL:</b> hard strikes heat it up — a white-hot ball <b>wrecks whatever it slams into</b>. Hitting the ball is always safe; standing in front of a screamer is not. Goals cool it off.</li>
+      <li>&#128165; Demolitions and mega-shots <b>blast craters in the pitch</b> — by the late game you're playing on a battlefield.</li>
     </ul>
     <div class="row">
       <label class="lab" style="font-size:12px">Match
@@ -360,7 +361,47 @@ let world = null;
 function newWorld(){ if (world) world.free(); world = new RAPIER.World({ x: 0, y: -GRAV, z: 0 }); }
 
 // ---------------- field (walled pitch, two goals) ----------------
-let fieldGroup = null;
+let fieldGroup = null, floorMesh = null, craterCount = 0;
+// BATTLEFIELD PITCH: punch a crater into the floor — visual depression +
+// physical rubble lips. Scars persist for the whole match (reset per match).
+function blastCrater(x, z, big){
+  if (!floorMesh || craterCount >= 14) return;
+  if (Math.abs(x) > FIELD_W/2 - 3 || Math.abs(z) > FIELD_L/2 - 3) return; // keep goalmouths honest
+  craterCount++;
+  const r = big ? rnd(4, 5.2) : rnd(2.6, 3.6), depth = big ? 0.42 : 0.3;
+  const pos = floorMesh.geometry.attributes.position;
+  for (let i = 0; i < pos.count; i++){
+    const d = Math.hypot(pos.getX(i) - x, pos.getZ(i) - z);
+    if (d > r) continue;
+    const k = Math.cos((d / r) * Math.PI * 0.5);
+    pos.setY(i, pos.getY(i) - depth * k * k);
+  }
+  pos.needsUpdate = true; floorMesh.geometry.computeVertexNormals();
+  // scorch decal
+  const decal = new THREE.Mesh(new THREE.CircleGeometry(r * 0.95, 20),
+    new THREE.MeshBasicMaterial({ color: 0x05070f, transparent: true, opacity: 0.62, depthWrite: false }));
+  decal.rotation.x = -Math.PI/2; decal.position.set(x, 0.03, z);
+  fieldGroup.add(decal);
+  // physical rubble lips around the rim (host only)
+  if (world && G.role !== "guest"){
+    const a0 = rnd(0, Math.PI);
+    for (let k = 0; k < 4; k++){
+      const a = a0 + k * Math.PI/2 + rnd(-0.3, 0.3);
+      const bx = x + Math.cos(a) * (r + 0.4), bz = z + Math.sin(a) * (r + 0.4);
+      const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(bx, 0.12, bz));
+      const q = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), -a);
+      body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(0.85, 0.16, 0.45).setFriction(0.7).setRestitution(0.25), body);
+      const rub = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.32, 0.9),
+        new THREE.MeshStandardMaterial({ color: 0x1c2544, roughness: .9, metalness: .2 }));
+      rub.position.set(bx, 0.12, bz); rub.quaternion.copy(q); fieldGroup.add(rub);
+    }
+  }
+  emit(x, 0.6, z, 0xffaa55, 22, 12, .7);
+  emit(x, 0.6, z, 0x333333, 14, 5, 1.1, -2);
+  sfx.rumble(0.6); shake(0.5);
+  netEvent({ t: "crater", x: +x.toFixed(1), z: +z.toFixed(1), b: big ? 1 : 0 });
+}
 // physH: optional physics height grown UPWARD from the visual piece's bottom.
 // (a blanket height inflation once sealed the goal mouths shut — never again)
 function wallBox(w, h, d, x, y, z, mat, physH){
@@ -395,8 +436,13 @@ function buildField(){
   fx.beginPath(); fx.arc(256, 384, 80, 0, Math.PI * 2); fx.stroke();
   const floorTex = new THREE.CanvasTexture(fc);
   const floorMat = new THREE.MeshStandardMaterial({ map: floorTex, roughness: .8, metalness: .25, emissive: 0x0a1128, emissiveIntensity: .5 });
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(W + 12, 1, L + 12), floorMat);
-  floor.position.y = -0.5; floor.receiveShadow = true; fieldGroup.add(floor);
+  // segmented, displaceable floor — craters get punched into it during the match
+  const floorGeo = new THREE.PlaneGeometry(W + 12, L + 12, 40, 56);
+  floorGeo.rotateX(-Math.PI/2);
+  floorGeo.userData.orig = floorGeo.attributes.position.array.slice();
+  floorMesh = new THREE.Mesh(floorGeo, floorMat);
+  floorMesh.receiveShadow = true; fieldGroup.add(floorMesh);
+  craterCount = 0;
   if (world){
     const fb = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.5, 0));
     world.createCollider(RAPIER.ColliderDesc.cuboid((W + 12)/2, 0.5, (L + 12)/2).setFriction(1.0), fb);
@@ -563,8 +609,8 @@ function buildArena(_seed){ buildField(); }
 const tiles = [];                                  // legacy: always empty
 function stepTiles(_dt, _auth){}
 // ---------------- ball ----------------
-const BALL = { body: null, mesh: null, lastTouch: -1 };
-const kickCd = new Map();
+const BALL = { body: null, mesh: null, lastTouch: -1, heat: 0 };
+const kickCd = new Map(), ballHitCd = new Map();
 function createBall(){
   if (!BALL.mesh){
     BALL.mesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 24, 18),
@@ -583,7 +629,7 @@ function createBall(){
   BALL.lastTouch = -1;
 }
 function resetBall(){
-  BALL.lastTouch = -1;
+  BALL.lastTouch = -1; BALL.heat = 0;
   if (BALL.body){
     BALL.body.setTranslation({ x: 0, y: BALL_R + 0.2, z: 0 }, true);
     BALL.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -611,6 +657,8 @@ function stepBallKicks(dt){
     emit(bp.x, bp.y, bp.z, 0xffffff, 10, 6, .4);
     sfx.thud(0.5);
   }
+  BALL.heat = Math.max(0, BALL.heat - dt * 0.045);   // hot ball cools over time
+  for (const [k, v] of ballHitCd){ if (v <= dt) ballHitCd.delete(k); else ballHitCd.set(k, v - dt); }
   for (const p of players){
     if (!p.alive || !p.body) continue;
     const t = p.body.translation();
@@ -621,8 +669,27 @@ function stepBallKicks(dt){
     const nx = dx/d, ny = dy/d, nz = dz/d;
     const closing = (v.x - bv.x)*nx + (v.y - bv.y)*ny + (v.z - bv.z)*nz;
     if (closing > 1) BALL.lastTouch = p.id;
+    // BALL SLAMS TRUCK (negative closing = ball approaching): only when the
+    // BALL's velocity dominates — striking/dribbling is always safe, being
+    // shot AT is not. Damage scales with speed and heat; never a straight
+    // kill unless they were already nearly dead (the finisher is earned).
+    if (closing < -13 && !ballHitCd.has(p.id)){
+      const ballTow = -(bv.x*nx + bv.y*ny + bv.z*nz);
+      const truckTow = v.x*nx + v.y*ny + v.z*nz;
+      if (ballTow > Math.abs(truckTow) * 1.3){
+        ballHitCd.set(p.id, 0.6);
+        const power = (-closing) * (0.45 + BALL.heat * 0.85);
+        applyDamage(p, power, -nx, -nz);
+        emit(t.x, t.y + 1, t.z, BALL.heat > 0.6 ? 0xffffff : 0xffaa55, 14, 8, .5);
+        sfx.thud(Math.min(1, (-closing) / 20));
+        if (p === me()){ shake(0.7); toast("SHOT DOWN — ball to the face", 900); }
+        if (-closing > 26) blastCrater(t.x, t.z, false);   // mega-shots scar the pitch
+      }
+    }
     if (closing < 4.5 || kickCd.has(p.id)) continue;
     kickCd.set(p.id, 0.25);
+    // striking the ball heats it up
+    BALL.heat = Math.min(1, BALL.heat + closing * 0.014);
     const m = BALL.body.mass();
     BALL.body.applyImpulse({ x: nx*m*closing*0.9, y: ny*m*closing*0.5 + m*2.2, z: nz*m*closing*0.9 }, true);
     emit(bp.x, bp.y, bp.z, 0xffffff, 8, 6, .35);
@@ -699,7 +766,7 @@ function makePlayer(id, name, color, human, guestIdx, team, slot){
   }
   return { id, name, color, human, guestIdx, team, slot, body, chassisCol, group, wheels, bodyMat, hullMesh, cabMesh, bullMesh,
     boost: 60, alive: true, wins: 0, respawnT: null, stuckT: 0, grounded: false, groundN: V3(0,1,0),
-    hull: 100, dmg: { f: 0, b: 0, l: 0, r: 0 },
+    hull: 100, dmg: { f: 0, b: 0, l: 0, r: 0 }, armor: 0,
     lostMask: 0, lost: { bull: false, cab: false, wheels: [false, false, false, false] },
     input: { th: 0, st: 0, jump: false, boost: false }, jumpHeld: false, canFlip: false,
     botT: rnd(0, 2), botSkill: rnd(0.75, 1.15) };
@@ -1056,15 +1123,16 @@ function stepSalvage(dt){
     s.mesh.position.y = 0.8 + Math.sin(performance.now() * 0.004 + s.id) * 0.15; }
   if (G.role === "guest" || G.phase !== "fight") return;
   for (const p of players){
-    if (!p.alive || !p.body || p.hull >= 100) continue;
+    if (!p.alive || !p.body) continue;
+    if (p.hull >= 100 && (p.armor || 0) >= 3) continue; // nothing to gain
     const pos = p.group.position;
     for (let i = salvage.length - 1; i >= 0; i--){
       const s = salvage[i];
       if (Math.hypot(s.x - pos.x, s.z - pos.z) < 2.3){
-        healHull(p, 12);
+        if (p.hull >= 100) addArmor(p);   // healthy scavengers build WAR RIGS
+        else { healHull(p, 12); if (p === me()) toast("SALVAGED — hull " + Math.round(p.hull) + "%", 900); }
         emit(s.x, 1, s.z, 0x62f3a8, 10, 5, .5);
         sfx.salv();
-        if (p === me()) toast("SALVAGED — hull " + Math.round(p.hull) + "%", 900);
         netEvent({ t: "salv", id: p.id, sx: s.x, sz: s.z });
         removeSalvage(i);
       }
@@ -1076,8 +1144,50 @@ function clearCarnage(){
   debris.length = 0;
   while (salvage.length) removeSalvage(0);
 }
+// WAR RIG armor: salvage at full hull bolts visible junk plating on (max 3).
+// Heavier = harder rams; plates soak damage and shear off as debris when cracked.
+function addArmor(p){
+  p.armor = (p.armor || 0) + 1;
+  const plate = new THREE.Group();
+  const junkMat = new THREE.MeshStandardMaterial({ color: 0x2a3350, roughness: .5, metalness: .8 });
+  const tint = new THREE.MeshStandardMaterial({ color: p.color, roughness: .4, metalness: .7 });
+  for (let i = 0; i < 3; i++){
+    const b = new THREE.Mesh(new THREE.BoxGeometry(rnd(0.5, 1.1), rnd(0.2, 0.45), rnd(0.5, 1.2)), i ? junkMat : tint);
+    b.position.set(rnd(-0.8, 0.8), 0.45 + p.armor * 0.28 + rnd(0, 0.15), rnd(-1.4, 1.0));
+    b.rotation.y = rnd(-0.4, 0.4); b.castShadow = true; plate.add(b);
+  }
+  const spike = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.7, 6), junkMat);
+  spike.position.set(rnd(-0.9, 0.9), 0.5 + p.armor * 0.28, rnd(-1.2, 1.6));
+  plate.add(spike);
+  p.group.add(plate);
+  (p.armorMeshes = p.armorMeshes || []).push(plate);
+  // extra mass (host): a small dense keel block per plate — rams hit harder
+  if (p.body && G.role !== "guest"){
+    const col = world.createCollider(RAPIER.ColliderDesc.cuboid(0.25, 0.25, 0.25)
+      .setTranslation(0, -0.2, 0).setDensity(26), p.body);
+    (p.armorCols = p.armorCols || []).push(col);
+  }
+  if (p === me()) toast("ARMOR BOLTED ON — " + p.armor + "/3", 1000);
+  sfx.crunch();
+}
+function shedArmor(p){
+  if (!p.armor) return;
+  p.armor--;
+  const plate = p.armorMeshes?.pop();
+  if (plate){
+    plate.updateWorldMatrix(true, false);
+    plate.getWorldPosition(tmpV);
+    const d = plate.clone(); d.position.copy(tmpV); d.quaternion.copy(p.group.quaternion);
+    p.group.remove(plate); scene.add(d);
+    debris.push({ mesh: d, vx: rnd(-4, 4), vy: rnd(5, 8), vz: rnd(-4, 4), rx: rnd(-6, 6), rz: rnd(-6, 6), t: 0, body: null });
+  }
+  if (p.armorCols?.length && world){ try { world.removeCollider(p.armorCols.pop(), true); } catch (_) {} }
+  if (p === me()) toast("ARMOR SHEARED OFF", 800);
+  sfx.crunch();
+}
 function repairTruck(p){
   p.hull = 100; p.dmg = { f: 0, b: 0, l: 0, r: 0 };
+  while (p.armor) shedArmorQuiet(p);   // fresh truck = no plating
   p.lostMask = 0; p.lost = { bull: false, cab: false, wheels: [false, false, false, false] };
   if (p.bodyMat) p.bodyMat.color.setHex(p.color);
   if (p.bullMesh) p.bullMesh.visible = true;
@@ -1090,6 +1200,12 @@ function repairTruck(p){
   if (geo.attributes.color){ geo.attributes.color.array.fill(1); geo.attributes.color.needsUpdate = true; }
   p.dentAccum = 0;
 }
+function shedArmorQuiet(p){ // repair-time removal, no debris theatrics
+  p.armor--;
+  const plate = p.armorMeshes?.pop();
+  if (plate) p.group.remove(plate);
+  if (p.armorCols?.length && world){ try { world.removeCollider(p.armorCols.pop(), true); } catch (_) {} }
+}
 function applyDamage(p, closing, inX, inZ){
   const raw = Math.max(0, closing - 4);
   if (raw <= 0) return;
@@ -1101,7 +1217,12 @@ function applyDamage(p, closing, inX, inZ){
   else if (local.z < -0.5){ zone = "b"; mult = 1.6; }
   else if (local.x > 0){ zone = "l"; mult = 1.1; } // local +X = truck's LEFT side
   else { zone = "r"; mult = 1.1; }
-  const dmg = Math.min(30, raw * 2.2 * mult);
+  let dmg = Math.min(30, raw * 2.2 * mult);
+  // armor plating soaks most of it — but a hard crack shears a plate off
+  if (p.armor > 0){
+    dmg *= 0.4;
+    if (dmg > 4.5) shedArmor(p);
+  }
   p.dmg[zone] += dmg;
   p.hull = Math.max(0, 100 - (p.dmg.f + p.dmg.b + p.dmg.l + p.dmg.r));
   // scorch tint scales with total damage
@@ -1129,6 +1250,7 @@ function demolish(p){
   emit(pos.x, pos.y + 1, pos.z, 0xffffff, 14, 22, .4);
   emit(pos.x, pos.y + 1, pos.z, 0x333333, 20, 6, 1.2, -2);
   spawnRing(pos.x, pos.y, pos.z, 0xff7733);
+  blastCrater(pos.x, pos.z, true);   // demolitions scar the pitch
   for (let i = 0; i < 3; i++) spawnSalvage(pos.x + rnd(-2.5, 2.5), pos.z + rnd(-2.5, 2.5));
   G.slowT = Math.max(G.slowT, 0.4);
   sfx.crunch();
@@ -1374,6 +1496,7 @@ function scoreGoal(team){
   spawnRing(b.x, b.y, b.z, team === 0 ? 0x36e2ff : 0xff9b50);
   banner("GOAL! " + G.score[0] + "–" + G.score[1], 2000);
   goalFeed(team, by, own);
+  BALL.heat = 0;   // scoring discharges the ball
   sfx.win(); sfx.boom(); G.slowT = Math.max(G.slowT, 0.5);
   G.phase = "goal"; G.phaseT = 2.4;
   netEvent({ t: "goal", team, sc: [...G.score], by, own: own ? 1 : 0 });
@@ -1644,8 +1767,17 @@ function stepVisuals(dt){
     const bp = BALL.mesh.position;
     const bSpd = bp.distanceTo(ballPrev) / Math.max(dt, 1e-4);
     if (bSpd > 10 && bSpd < 90 && Math.random() < 0.7)
-      emit(bp.x, bp.y, bp.z, 0xaaccff, 1, 1.5, .35, 2);
+      emit(bp.x, bp.y, bp.z, BALL.heat > 0.5 ? 0xffbb66 : 0xaaccff, 1, 1.5, .35, 2);
     ballPrev.copy(bp);
+    // HOT BALL: glow shifts white → orange → white-hot with heat
+    const h = BALL.heat;
+    const mat = BALL.mesh.material;
+    mat.emissive.setRGB(0.4 + h * 0.6, 0.45 - h * 0.15 + h * h * 0.7, 0.85 - h * 0.7 + h * h * 0.85);
+    mat.emissiveIntensity = 0.4 + h * 1.6;
+    const light = BALL.mesh.children[0];
+    if (light){ light.intensity = 26 + h * 70; light.color.setRGB(0.55 + h * 0.45, 0.65 - h * 0.2, 1 - h * 0.7); }
+    if (h > 0.55 && Math.random() < h * 0.6)
+      emit(bp.x + rnd(-1,1), bp.y + rnd(-1,1), bp.z + rnd(-1,1), 0xffcc55, 1, 2, .3, -3); // heat shimmer
   }
   for (const p of players){
     const flame = p.group.userData.flame;
@@ -1773,7 +1905,7 @@ function hostSnapshot(){
     return { p: [+t.x.toFixed(2), +t.y.toFixed(2), +t.z.toFixed(2)],
              q: [+q.x.toFixed(3), +q.y.toFixed(3), +q.z.toFixed(3), +q.w.toFixed(3)],
              v, a: p.alive ? 1 : 0, b: Math.round(p.boost), f: p.boosting ? 1 : 0, w: p.wins,
-             h: Math.round(p.hull), L: p.lostMask };
+             h: Math.round(p.hull), L: p.lostMask, A: p.armor || 0 };
   });
   const bp = BALL.mesh ? BALL.mesh.position : { x: 0, y: 0, z: 0 };
   const bq = BALL.mesh ? BALL.mesh.quaternion : { x: 0, y: 0, z: 0, w: 1 };
@@ -1782,7 +1914,8 @@ function hostSnapshot(){
     sc: [G.score[0], G.score[1]],
     B: { p: [+bp.x.toFixed(2), +bp.y.toFixed(2), +bp.z.toFixed(2)],
          q: [+bq.x.toFixed(3), +bq.y.toFixed(3), +bq.z.toFixed(3), +bq.w.toFixed(3)],
-         v: [+bvl.x.toFixed(1), +bvl.y.toFixed(1), +bvl.z.toFixed(1)] },
+         v: [+bvl.x.toFixed(1), +bvl.y.toFixed(1), +bvl.z.toFixed(1)],
+         h: +BALL.heat.toFixed(2) },
     S: salvage.map(s => [s.id, +s.x.toFixed(1), +s.z.toFixed(1)]) });
 }
 
@@ -1832,6 +1965,7 @@ function guestOnMsg(m){
       sfx.win(); sfx.boom(); G.slowT = Math.max(G.slowT, 0.5);
       buildScoreHud(); break; }
     case "dent": { const p = players[m.id]; if (p) deformHull(p, m.x, m.z, m.a); break; }
+    case "crater": blastCrater(m.x, m.z, !!m.b); break;
     case "ko": { const p = players[m.id]; if (p && p.alive){ p.alive = false;
       const pos = p.group.position; emit(pos.x, Math.max(pos.y,-10), pos.z, p.color, 30, 14, .9);
       if (m.d){ emit(pos.x, pos.y + 1, pos.z, 0xffaa33, 40, 16, .8); G.slowT = Math.max(G.slowT, 0.4); }
@@ -1889,6 +2023,10 @@ function guestStep(dt){
         if ((cur.L & PIECE_BITS[k]) && !(p.lostMask & PIECE_BITS[k])) loseP(p, k);
       p.lostMask = cur.L;
     }
+    if (cur.A != null){ // mirror armor plating
+      while ((p.armor || 0) < cur.A) addArmor(p);
+      while ((p.armor || 0) > cur.A) shedArmor(p);
+    }
     if (p.wins !== cur.w){ p.wins = cur.w; buildScoreHud(); }
     if (p.alive && !cur.a){ p.alive = false; p.group.visible = false; buildScoreHud(); }
     if (!p.alive && cur.a){ p.alive = true; p.group.visible = true; buildScoreHud(); }
@@ -1903,6 +2041,7 @@ function guestStep(dt){
     const qa = new THREE.Quaternion(prev.q[0], prev.q[1], prev.q[2], prev.q[3]);
     qa.slerp(new THREE.Quaternion(cur.q[0], cur.q[1], cur.q[2], cur.q[3]), alpha);
     BALL.mesh.quaternion.copy(qa);
+    if (cur.h != null) BALL.heat = cur.h;
   }
   if (snapCur.sc && (snapCur.sc[0] !== G.score[0] || snapCur.sc[1] !== G.score[1])){
     G.score = [snapCur.sc[0], snapCur.sc[1]]; buildScoreHud();
