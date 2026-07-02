@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8111"],
       "port": 8111
+    },
+    {
+      "name": "wreck-court",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8112"],
+      "port": 8112
     }
   ]
 }
