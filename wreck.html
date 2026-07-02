@@ -23,6 +23,7 @@
   #boostfill{height:100%;width:0;background:linear-gradient(90deg,#caa233,#ffd166);}
   .lab{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
   #banner{position:fixed;top:30%;left:0;right:0;text-align:center;font-size:52px;font-weight:900;letter-spacing:2px;text-shadow:0 4px 24px #000;pointer-events:none;opacity:0;transition:opacity .2s;}
+  #toast{position:fixed;top:44%;left:0;right:0;text-align:center;font-size:22px;font-weight:800;color:var(--boost);text-shadow:0 2px 12px #000;pointer-events:none;opacity:0;transition:opacity .18s;}
   #feed{position:fixed;left:12px;bottom:14px;display:flex;flex-direction:column-reverse;gap:3px;pointer-events:none;font-size:13px;text-shadow:0 1px 6px #000;}
   #feed div{opacity:.95;}
   .overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(3,5,14,.8);backdrop-filter:blur(3px);z-index:9;padding:16px;}
@@ -67,7 +68,9 @@
   <div class="pill"><span class="label">Round</span> <b id="round">—</b></div>
   <div class="pill"><span class="label">In court</span> <b id="alive">—</b></div>
   <div class="pill"><span class="label">Speed</span> <b id="spd">0</b></div>
+  <div class="pill" id="mutePill" style="pointer-events:auto;cursor:pointer">&#128266;</div>
 </div>
+<div id="toast"></div>
 <div id="score"></div>
 <div id="banner"></div>
 <div id="feed"></div>
@@ -81,7 +84,7 @@
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">Physics sumo-brawl &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v3</span></p>
+    <p class="tag">Physics sumo-brawl &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v4</span></p>
     <h1>WRECK COURT</h1>
     <p>Heavy trucks, one floating court, no guns. <b>Ram everyone else into the void.</b> The court crumbles from the rim inward — last truck standing takes the round. <b>First to 3 rounds wins.</b></p>
     <ul>
@@ -167,7 +170,7 @@ try {
 } catch (e) { fatal("Rapier failed to load: " + e.message); throw e; }
 
 // ---------------- constants ----------------
-const DT = 1 / 60, GRAV = 16;
+const DT = 1 / 60, GRAV = 20;   // heavier = less floaty; fastfall adds more when airborne
 const ARENA_R = 26, TILE = 3.3;
 const CRUMBLE_START = 8, CRUMBLE_EVERY = 6;   // seconds
 const KO_Y = -16, WIN_ROUNDS = 3;
@@ -230,6 +233,64 @@ scene.add(sun);
     new THREE.MeshBasicMaterial({ color: 0x3d1a7a, transparent: true, opacity: .55, fog: false, side: THREE.DoubleSide }));
   glow.rotation.x = -Math.PI/2; glow.position.y = -45.5; scene.add(glow);
 }
+
+// ---------------- audio (all synthesized, unlocked on first input) ----------------
+let AC = null, master = null, engOsc = null, engO2 = null, engGain = null, boostGain = null, noiseB = null;
+let muted = localStorage.getItem("wreckMute") === "1";
+function audioInit(){
+  if (AC) return;
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = muted ? 0 : 0.5; master.connect(AC.destination);
+    noiseB = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+    { const d = noiseB.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2-1; }
+    // engine: detuned saw+square through a lowpass, pitch follows speed
+    engGain = AC.createGain(); engGain.gain.value = 0;
+    const lp = AC.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 480;
+    engOsc = AC.createOscillator(); engOsc.type = "sawtooth"; engOsc.frequency.value = 50;
+    engO2 = AC.createOscillator(); engO2.type = "square"; engO2.frequency.value = 25.3;
+    engOsc.connect(lp); engO2.connect(lp); lp.connect(engGain); engGain.connect(master);
+    engOsc.start(); engO2.start();
+    // boost: looping noise through a bandpass
+    boostGain = AC.createGain(); boostGain.gain.value = 0;
+    const src = AC.createBufferSource(); src.buffer = noiseB; src.loop = true;
+    const bp = AC.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 900; bp.Q.value = 0.7;
+    src.connect(bp); bp.connect(boostGain); boostGain.connect(master); src.start();
+  } catch (e) { AC = null; }
+}
+function audioUnlock(){ audioInit(); if (AC && AC.state === "suspended") AC.resume(); }
+addEventListener("pointerdown", audioUnlock, { once: false });
+addEventListener("keydown", audioUnlock, { once: false });
+function blip(freq, dur, type = "sine", vol = 0.25, slide = 0){
+  if (!AC) return;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, AC.currentTime);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), AC.currentTime + dur);
+  g.gain.setValueAtTime(vol, AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
+  o.connect(g); g.connect(master); o.start(); o.stop(AC.currentTime + dur + 0.02);
+}
+function noiseHit(vol, freq, dur){
+  if (!AC) return;
+  const src = AC.createBufferSource(); src.buffer = noiseB;
+  const bp = AC.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = freq; bp.Q.value = 1.1;
+  const g = AC.createGain(); g.gain.setValueAtTime(vol, AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
+  src.connect(bp); bp.connect(g); g.connect(master); src.start(); src.stop(AC.currentTime + dur + 0.05);
+}
+const sfx = {
+  thud(i){ i = Math.min(1, i); noiseHit(0.12 + 0.5*i, 250 + 500*i, 0.25); blip(90, 0.22, "sine", 0.15 + 0.5*i, -55); },
+  boom(){ noiseHit(0.7, 600, 0.5); blip(55, 0.7, "sine", 0.6, -25); this.rumble(0.7); },
+  rumble(v = 0.35){ noiseHit(v, 110, 0.8); },
+  beep(){ blip(330, 0.09, "square", 0.18); },
+  go(){ blip(520, 0.2, "square", 0.3); },
+  win(){ blip(392, 0.12, "triangle", 0.3); setTimeout(() => blip(523, 0.12, "triangle", 0.3), 120); setTimeout(() => blip(659, 0.3, "triangle", 0.35), 240); }
+};
+function setMuted(m){ muted = m; localStorage.setItem("wreckMute", m ? "1" : "0");
+  if (master) master.gain.value = m ? 0 : 0.5;
+  const el = document.getElementById("mutePill"); if (el) el.textContent = m ? "\u{1F507}" : "\u{1F50A}"; }
+addEventListener("keydown", e => { if (e.code === "KeyM") setMuted(!muted); });
+if (muted){ const el = document.getElementById("mutePill"); if (el) el.textContent = "\u{1F507}"; }
 
 // ---------------- particles ----------------
 const PMAX = 1600;
@@ -308,6 +369,7 @@ function buildArena(seed){
 function crumbleRing(r){
   let any = false;
   for (const t of tiles) if (t.state === 0 && t.ring >= r){ t.state = 1; t.timer = 1.6; any = true; }
+  if (any) sfx.rumble(0.4);
   return any;
 }
 function stepTiles(dt, authoritative){
@@ -336,7 +398,7 @@ function stepTiles(dt, authoritative){
             input:{th,st,jump,boost}, jumpHeld, canFlip, grounded, groundN, botT, botSkill} */
 let players = [];
 const WHEEL_POS = [[-1.05,-0.42,1.5],[1.05,-0.42,1.5],[-1.05,-0.42,-1.5],[1.05,-0.42,-1.5]];
-const REST_LEN = 0.78, RIDE = 0.5;
+const REST_LEN = 0.66, RIDE = 0.5;  // shorter travel = planted, less pogo
 
 function truckMesh(color){
   const g = new THREE.Group();
@@ -377,7 +439,7 @@ function makePlayer(id, name, color, human, guestIdx){
     body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(0, 3, 0).setLinearDamping(0.12).setAngularDamping(1.4).setCcdEnabled(true));
     world.createCollider(RAPIER.ColliderDesc.cuboid(1.1, 0.38, 2.0)
-      .setFriction(0.35).setRestitution(0.45), body);
+      .setFriction(0.35).setRestitution(0.22), body); // low bounce: shoving matches, not pinball
     // low keel = stable, hard to flip accidentally, flips still possible from big hits
     world.createCollider(RAPIER.ColliderDesc.cuboid(0.7, 0.16, 1.2)
       .setTranslation(0, -0.34, 0).setDensity(3.2).setFriction(0.35), body);
@@ -391,6 +453,7 @@ function resetTruck(p, idx, count){
   const s = spawnPose(idx, count);
   p.alive = true; p.boost = 60; p.canFlip = false;
   p.input = { th: 0, st: 0, jump: false, boost: false, reset: false }; // no stale throttle into countdown
+  p.lastHitBy = null; p.lastHitT = -99;
   p.group.visible = true;
   if (p.body){
     p.body.setTranslation({ x: s.x, y: 1.6, z: s.z }, true);
@@ -428,8 +491,9 @@ function stepTruck(p, dt){
       // spring + damper along world up
       const ptVel = body.velocityAtPoint?.({x:anchor.x,y:anchor.y,z:anchor.z}) ?? vel;
       const relVy = ptVel.y;
-      let F = mass * GRAV * 0.55 * comp * 2.2 - relVy * mass * 0.9;
-      F = Math.max(0, Math.min(F, mass * GRAV * 1.4));
+      // stiffer spring + much stronger damping = planted, no pogo-wobble
+      let F = mass * GRAV * 0.62 * comp * 2.6 - relVy * mass * 1.6;
+      F = Math.max(0, Math.min(F, mass * GRAV * 2.0));
       body.applyImpulseAtPoint({ x: 0, y: F*dt, z: 0 }, { x: anchor.x, y: anchor.y, z: anchor.z }, true);
       gN.y += 1;
     }
@@ -441,7 +505,7 @@ function stepTruck(p, dt){
     // flatten forward onto ground plane
     const f = fwd.clone(); f.y = 0; f.normalize();
     // drive
-    const accel = inp.th > 0 ? 12.5 : 9;
+    const accel = inp.th > 0 ? 12.5 : 11;   // firmer brakes (saves overshoots — bots and you)
     const boosting = inp.boost && p.boost > 0.5 && inp.th >= 0;
     const mult = boosting ? 2.15 : 1;
     if (inp.th !== 0)
@@ -456,9 +520,12 @@ function stepTruck(p, dt){
     // steering: lerp yaw angvel toward target (arcade-reliable, still shoved by hits)
     const spd = Math.hypot(vel.x, vel.z);
     const dir = (vel.x*f.x + vel.z*f.z) >= -0.5 ? 1 : -1;
-    const target = -inp.st * 2.5 * dir * Math.min(1, 0.35 + spd/10);
+    // +angvel.y turns nose toward +X; st=+1 (D / stick-right) must turn right
+    const target = inp.st * 2.5 * dir * Math.min(1, 0.35 + spd/10);
     const av = body.angvel();
-    body.setAngvel({ x: av.x, y: av.y + (target - av.y)*0.22, z: av.z }, true);
+    // flatten: damp pitch/roll wobble while upright (big hits still flip you past the gate)
+    const flat = up.y > 0.7 ? 0.82 : 1;
+    body.setAngvel({ x: av.x*flat, y: av.y + (target - av.y)*0.22, z: av.z*flat }, true);
     // speed cap (soft)
     const cap = boosting ? BOOST_CAP : CRUISE;
     if (spd > cap){
@@ -467,19 +534,22 @@ function stepTruck(p, dt){
     }
     // jump
     if (inp.jump && !p.jumpHeld){
-      body.applyImpulse({ x: 0, y: mass*7.2, z: 0 }, true);
+      body.applyImpulse({ x: 0, y: mass*8.2, z: 0 }, true);
       p.canFlip = true;
     }
   } else {
+    // fastfall: extra gravity on the way down = snappy, not floaty
+    if (vel.y < 0) body.applyImpulse({ x: 0, y: -mass*GRAV*0.45*dt, z: 0 }, true);
     p.boosting = inp.boost && p.boost > 0.5;
     if (p.boosting){
       p.boost = Math.max(0, p.boost - 34*dt);
-      body.applyImpulse({ x: fwd.x*13*mass*dt, y: fwd.y*7*mass*dt, z: fwd.z*13*mass*dt }, true);
+      // strong air boost = launches are recoverable with skill (the save is the drama)
+      body.applyImpulse({ x: fwd.x*14*mass*dt, y: fwd.y*11*mass*dt + mass*5*dt, z: fwd.z*14*mass*dt }, true);
     }
     // flat responsive air control (v14 lesson): yaw follows steer, pitch from throttle
     const av = body.angvel();
-    body.setAngvel({ x: av.x + (-inp.th*2.1 - av.x)*0.10,
-                     y: av.y + (-inp.st*2.4 - av.y)*0.10, z: av.z*0.97 }, true);
+    body.setAngvel({ x: av.x + (inp.th*2.1 - av.x)*0.10,     // W = nose-down dive
+                     y: av.y + (inp.st*2.4 - av.y)*0.10, z: av.z*0.97 }, true);
     // flip-dodge: second jump press in air
     if (inp.jump && !p.jumpHeld && p.canFlip){
       p.canFlip = false;
@@ -524,12 +594,18 @@ function stepRams(dt, authoritative){
       if (closing < 5) continue;
       // pop: defender flies, attacker recoils less, both pop up (comedy).
       // impulse capped so big hits stay recoverable (air control + boost home)
-      const eff = Math.min(closing, 16);
+      const eff = Math.min(closing, 13);
       const aTowards = va.x*nx + va.z*nz, bTowards = -(vb.x*nx + vb.z*nz);
       const [atk, def, sgn] = aTowards >= bTowards ? [A, B, 1] : [B, A, -1];
       const am = atk.body.mass(), dm = def.body.mass();
-      def.body.applyImpulse({ x: sgn*nx*dm*eff*0.42, y: dm*eff*0.14, z: sgn*nz*dm*eff*0.42 }, true);
-      atk.body.applyImpulse({ x: -sgn*nx*am*eff*0.10, y: am*eff*0.10, z: -sgn*nz*am*eff*0.10 }, true);
+      def.body.applyImpulse({ x: sgn*nx*dm*eff*0.34, y: dm*eff*0.11, z: sgn*nz*dm*eff*0.34 }, true);
+      atk.body.applyImpulse({ x: -sgn*nx*am*eff*0.08, y: am*eff*0.08, z: -sgn*nz*am*eff*0.08 }, true);
+      // any contact earns the kill credit; only BIG hits refill boost
+      def.lastHitBy = atk.id; def.lastHitT = G.t;
+      if (closing > 8){
+        atk.boost = Math.min(100, atk.boost + 22);
+        if (atk === me()) toast("BIG HIT — +22 BOOST");
+      }
     } else if (!authoritative){
       // guest: estimate closing speed from interpolated velocities
       const va = A.netVel || {x:0,y:0,z:0}, vb = B.netVel || {x:0,y:0,z:0};
@@ -540,6 +616,8 @@ function stepRams(dt, authoritative){
     const mx = (pa.x+pb.x)/2, my = (pa.y+pb.y)/2 + .4, mz = (pa.z+pb.z)/2;
     emit(mx, my, mz, 0xffe58a, Math.min(26, 6 + closing*1.6), 6 + closing*0.7, .55);
     emit(mx, my, mz, 0xffffff, 6, 10, .3);
+    sfx.thud(closing / 14);
+    if (closing > 11) G.slowT = Math.max(G.slowT, 0.09);   // hit-stop on heavy contact
     if (A === me() || B === me()) shake(Math.min(1, closing/16));
   }
 }
@@ -577,7 +655,8 @@ function stepBot(p, dt){
     const dot = fwd.x*inward.x + fwd.z*inward.z;
     inp.st = THREE.MathUtils.clamp(-cross*4, -1, 1) * (dot < -0.2 ? -1 : 1);
     const outSpeed = (vel.x*pos.x + vel.z*pos.z) / (selfR || 1);
-    inp.th = (outSpeed > 4 && dot < 0.5) ? -1 : 0.5;
+    // carve at speed when already facing inward-ish; hard-brake when facing out
+    inp.th = dot > 0.3 ? 0.6 : (outSpeed > 6 ? -1 : 0.2);
     return;
   }
   // nearest living opponent STILL ON THE COURT (never chase a faller into the void)
@@ -604,8 +683,12 @@ function stepBot(p, dt){
   const dot = fwd.x*dir.x + fwd.z*dir.z;
   inp.st = THREE.MathUtils.clamp(-cross*3.2, -1, 1) * (dot < -0.3 ? -1 : 1);
   if (dot < -0.5) inp.th = -1; // hard reverse turn
-  // boost only for a kill run that stays well inside the court
-  inp.boost = dot > 0.93 && dist < 20 && dist > 5 && p.boost > 30 && futR < liveR - 8 && aimR < liveR - 8;
+  // speed discipline: if momentum at 1.2s would cross the safe rim, stop pushing NOW
+  // (stopping distance at boost speed exceeds the whole margin — prevention only)
+  const futR12 = Math.hypot(pos.x + vel.x*1.2, pos.z + vel.z*1.2);
+  if (futR12 > liveR - 4) inp.th = Math.min(inp.th, 0);
+  // boost only for SHORT kill runs (the hit itself is the payload; long runs = overshoot suicide)
+  inp.boost = dot > 0.93 && dist < 14 && dist > 6 && p.boost > 30 && futR12 < liveR - 10 && aimR < liveR - 8;
   // occasional jump when close head-on (chaos)
   if (dist < 6 && dot > 0.8 && p.botT <= 0){ inp.jump = true; p.botT = rnd(1.5, 4); }
 }
@@ -619,13 +702,18 @@ function currentSafeRadius(){
 const G = { mode: "menu", // menu | playing
   role: "solo",           // solo | host | guest
   phase: "idle",          // countdown | fight | roundend | matchend
-  round: 0, t: 0, phaseT: 0, nextRing: 0, seed: 1, shake: 0 };
+  round: 0, t: 0, phaseT: 0, nextRing: 0, seed: 1, shake: 0,
+  slowT: 0 };             // hit-stop: brief slow-mo timer (seconds, real time)
 function me(){ return players.find(p => p.human && p.guestIdx === (G.role === "guest" ? myGuestIdx : -1)) || players[0]; }
 function shake(a){ G.shake = Math.min(1.6, G.shake + a); }
 
 const bannerEl = document.getElementById("banner"), feedEl = document.getElementById("feed");
 function banner(txt, ms=1100){ bannerEl.textContent = txt; bannerEl.style.opacity = 1;
   clearTimeout(banner._t); banner._t = setTimeout(()=>bannerEl.style.opacity=0, ms); }
+const toastEl = document.getElementById("toast");
+function toast(txt, ms = 1000){ toastEl.textContent = txt; toastEl.style.opacity = 1;
+  clearTimeout(toast._t); toast._t = setTimeout(() => toastEl.style.opacity = 0, ms); }
+document.getElementById("mutePill").addEventListener("pointerdown", e => { e.stopPropagation(); audioUnlock(); setMuted(!muted); });
 function feed(txt){ const d = document.createElement("div"); d.innerHTML = txt; feedEl.prepend(d);
   while (feedEl.children.length > 5) feedEl.lastChild.remove();
   setTimeout(()=>{ d.style.transition = "opacity 1s"; d.style.opacity = 0; setTimeout(()=>d.remove(), 1000); }, 4200); }
@@ -668,7 +756,7 @@ function newWorldKeepPlayers(){
 function recreateBody(p){
   const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(0, 3, 0).setLinearDamping(0.12).setAngularDamping(1.4).setCcdEnabled(true));
-  world.createCollider(RAPIER.ColliderDesc.cuboid(1.1, 0.38, 2.0).setFriction(0.35).setRestitution(0.45), body);
+  world.createCollider(RAPIER.ColliderDesc.cuboid(1.1, 0.38, 2.0).setFriction(0.35).setRestitution(0.22), body);
   world.createCollider(RAPIER.ColliderDesc.cuboid(0.7, 0.16, 1.2).setTranslation(0,-0.34,0).setDensity(3.2).setFriction(0.35), body);
   return { body };
 }
@@ -677,8 +765,8 @@ function stepGame(dt){
   if (G.mode !== "playing") return;
   G.phaseT -= dt;
   if (G.phase === "countdown"){
-    if (G.phaseT <= 0){ G.phase = "fight"; banner("WRECK!", 800); netEvent({ t: "fight" }); }
-    else { const n = Math.ceil(G.phaseT); if (n !== G._cd){ G._cd = n; if (n <= 3) banner(String(n), 500); } }
+    if (G.phaseT <= 0){ G.phase = "fight"; banner("WRECK!", 800); sfx.go(); netEvent({ t: "fight" }); }
+    else { const n = Math.ceil(G.phaseT); if (n !== G._cd){ G._cd = n; if (n <= 3){ banner(String(n), 500); sfx.beep(); } } }
   }
   const authoritative = G.role !== "guest";
   if (authoritative){
@@ -721,7 +809,7 @@ function stepGame(dt){
       if (alive.length <= 1){
         G.phase = "roundend"; G.phaseT = 2.4;
         const w = alive[0];
-        if (w){ w.wins++; banner(w.name + " TAKES THE ROUND", 1800);
+        if (w){ w.wins++; banner(w.name + " TAKES THE ROUND", 1800); sfx.win();
           netEvent({ t: "roundwin", id: w.id }); }
         else banner("DOUBLE WRECK", 1600);
         buildScoreHud();
@@ -742,11 +830,23 @@ function koPlayer(p){
   const pos = p.group.position;
   emit(pos.x, Math.max(pos.y, -10), pos.z, p.color, 30, 14, .9);
   emit(pos.x, Math.max(pos.y, -10), pos.z, 0xffffff, 12, 20, .4);
-  feed(`<b style="color:#${p.color.toString(16).padStart(6,"0")}">${p.name}</b> fell into the void`);
+  // credit the wreck if someone tagged them recently
+  const killer = (p.lastHitBy != null && G.t - p.lastHitT < 4) ? players[p.lastHitBy] : null;
+  koFeed(p, killer ? killer.id : -1);
+  if (killer && killer.alive){
+    killer.boost = 100; // a confirmed wreck = full tank
+    if (killer === me()) toast("WRECKED THEM — FULL BOOST");
+  }
+  sfx.boom(); G.slowT = Math.max(G.slowT, 0.25);
   if (p === me()) shake(1.2);
   p.group.visible = false;
-  netEvent({ t: "ko", id: p.id });
+  netEvent({ t: "ko", id: p.id, k: killer ? killer.id : -1 });
   buildScoreHud();
+}
+function koFeed(p, killerId){
+  const col = pl => `<b style="color:#${pl.color.toString(16).padStart(6,"0")}">${pl.name}</b>`;
+  const k = killerId >= 0 ? players[killerId] : null;
+  feed(k ? `${col(k)} WRECKED ${col(p)}` : `${col(p)} fell into the void`);
 }
 function endMatch(champ){
   G.phase = "matchend";
@@ -840,7 +940,7 @@ function stepCamera(dt){
   const q = target.group.quaternion;
   const back = V3(0, 0, -1).applyQuaternion(q); back.y = 0;
   if (back.lengthSq() < 0.01) back.set(0,0,-1); back.normalize();
-  const want = V3(p.x + back.x*-9.5, p.y + 5.2, p.z + back.z*-9.5);
+  const want = V3(p.x + back.x*9.5, p.y + 5.2, p.z + back.z*9.5); // BEHIND the truck
   // keep camera above the court even during falls
   want.y = Math.max(want.y, -6);
   camPos.lerp(want, 1 - Math.pow(0.0012, dt));
@@ -861,6 +961,17 @@ function stepCamera(dt){
   document.getElementById("spd").textContent = Math.round(spd*3.6);
   const m = me();
   if (m) document.getElementById("boostfill").style.width = m.boost.toFixed(0) + "%";
+  // engine + boost audio follow MY truck
+  if (AC && m){
+    let mySpd = 0;
+    if (m.body){ const v = m.body.linvel(); mySpd = Math.hypot(v.x, v.z); }
+    else if (m.netVel) mySpd = Math.hypot(m.netVel.x, m.netVel.z);
+    const th = Math.abs(m.input?.th ?? 0);
+    engOsc.frequency.value = 45 + mySpd*3.2;
+    engO2.frequency.value = (45 + mySpd*3.2)/2 + 0.4;
+    engGain.gain.value = (m.alive && G.mode === "playing" && G.phase !== "matchend") ? 0.035 + th*0.05 : 0;
+    boostGain.gain.value = (m.alive && m.boosting) ? 0.2 : 0;
+  }
 }
 
 // visual extras per frame
@@ -998,14 +1109,15 @@ function guestOnMsg(m){
       break;
     }
     case "round": G.round = m.n; guestResetRound(); banner("ROUND " + m.n, 1400); break;
-    case "fight": G.phase = "fight"; banner("WRECK!", 800); break;
+    case "fight": G.phase = "fight"; banner("WRECK!", 800); sfx.go(); break;
     case "ring": crumbleRing(m.r); break;
     case "tilefall": { const t = tiles[m.i]; if (t && t.state < 2){ t.state = 2; t.vy = 0; } break; }
     case "ko": { const p = players[m.id]; if (p && p.alive){ p.alive = false;
       const pos = p.group.position; emit(pos.x, Math.max(pos.y,-10), pos.z, p.color, 30, 14, .9);
-      feed(`<b style="color:#${p.color.toString(16).padStart(6,"0")}">${p.name}</b> fell into the void`);
+      koFeed(p, m.k ?? -1);
+      sfx.boom(); G.slowT = Math.max(G.slowT, 0.25);
       p.group.visible = false; if (p === me()) shake(1.2); buildScoreHud(); } break; }
-    case "roundwin": { const p = players[m.id]; if (p){ p.wins++; banner(p.name + " TAKES THE ROUND", 1800); buildScoreHud(); } break; }
+    case "roundwin": { const p = players[m.id]; if (p){ p.wins++; banner(p.name + " TAKES THE ROUND", 1800); sfx.win(); buildScoreHud(); } break; }
     case "matchend": { const p = players[m.id]; G.phase = "matchend"; if (p) showResult(p); break; }
   }
 }
@@ -1130,6 +1242,9 @@ function tick(now, headless){
   let dt = (now - last) / 1000; last = now;
   if (dt <= 0) return;
   dt = Math.min(dt, 0.1);
+  // hit-stop: briefly slow the sim (host/solo). guests only slow FX — their
+  // interpolation clock must stay on real time.
+  if (G.slowT > 0){ G.slowT -= dt; if (G.role !== "guest") dt *= 0.25; }
   if (G.mode === "playing"){
     // read local input for host/solo player
     if (G.role !== "guest"){
