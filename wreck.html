@@ -88,7 +88,7 @@
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">Car-ball carnage &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v19</span></p>
+    <p class="tag">Car-ball carnage &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v20</span></p>
     <h1>SMASHCAR</h1>
     <p>Rocket-powered trucks, one giant ball, two goals — <b>and full-contact demolition.</b> Smash the ball into the enemy goal. Smash the enemy while you're at it. <b>First to 5 goals wins.</b> Nobody falls off, nobody's eliminated.</p>
     <ul>
@@ -1005,12 +1005,39 @@ let players = [];
 const WHEEL_POS = [[-1.05,-0.42,1.5],[1.05,-0.42,1.5],[-1.05,-0.42,-1.5],[1.05,-0.42,-1.5]];
 const REST_LEN = 0.66, RIDE = 0.5;  // shorter travel = planted, less pogo
 
+// materials shared across ALL trucks (built once) — only the body paint and
+// underglow are per-car; everything else is identical, so sharing them slashes
+// material/GC overhead at 5v5 (was ~60 materials/car)
+let SHM = null;
+function sharedMats(){
+  if (SHM) return SHM;
+  const M = THREE.MeshStandardMaterial, B = THREE.MeshBasicMaterial;
+  const add = { transparent: true, blending: THREE.AdditiveBlending, depthWrite: false };
+  SHM = {
+    dark: new M({ color: 0x10141f, roughness: .6, metalness: .4 }),
+    glass: new THREE.MeshPhysicalMaterial({ color: 0x0a1524, roughness: .08, metalness: .1, clearcoat: 1, transparent: true, opacity: 0.82 }),
+    trim: new M({ color: 0x0d1120, roughness: .5, metalness: .6 }),
+    chrome: new M({ color: 0xbcc6dc, metalness: .95, roughness: .18 }),
+    tip: new M({ color: 0x3a3f4a, metalness: .95, roughness: .25 }),
+    tyre: new M({ color: 0x0a0c12, roughness: .85, metalness: .1 }),
+    rim: new M({ color: 0x6a7590, roughness: .3, metalness: .9 }),
+    plate: new M({ color: 0x9fb8e8, roughness: .4, metalness: .85, emissive: 0x24406e, emissiveIntensity: .35 }),
+    head: new B({ color: 0xfff0c8 }), tail: new B({ color: 0xff3322 }),
+    pod: new B({ color: 0xbfe6ff }), hub: new B({ color: 0x9fb8e8 }),
+    stud: new M({ color: 0x2a3550, metalness: .9, roughness: .3 }),
+    plume: new B({ color: 0xff8a2a, opacity: .85, ...add }),
+    core: new B({ color: 0xbfe4ff, opacity: .95, ...add }),
+    halo: new B({ color: 0xffb347, opacity: .4, ...add })
+  };
+  return SHM;
+}
 function truckMesh(color){
+  const S = sharedMats();
   const g = new THREE.Group();
-  // clearcoat paint — car-showroom depth without mirror shine
+  // clearcoat paint — car-showroom depth without mirror shine (per-car: color + damage tint)
   const bodyMat = new THREE.MeshPhysicalMaterial({ color, roughness: .45, metalness: .6,
     clearcoat: .7, clearcoatRoughness: .25, envMapIntensity: 0.65 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x10141f, roughness: .6, metalness: .4 });
+  const dark = S.dark;
   // segmented hull so impacts can crush real dents into it;
   // vertex colors let scuffs darken exactly where the metal folded
   const hullGeo = new THREE.BoxGeometry(2.2, 0.75, 4.0, 4, 2, 7); // finer = chunkier crumple
@@ -1036,39 +1063,33 @@ function truckMesh(color){
   cabGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(cabGeo.attributes.position.count * 3).fill(1), 3));
   const cab = new THREE.Mesh(cabGeo, bodyMat);
   cab.position.set(0, 0.68, -0.25); cab.castShadow = true; g.add(cab);
-  const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x0a1524, roughness: .08, metalness: .1,
-    clearcoat: 1, transparent: true, opacity: 0.82 });
-  const trim = new THREE.MeshStandardMaterial({ color: 0x0d1120, roughness: .5, metalness: .6 });
+  const trim = S.trim;
   // windshield + wraparound side glass + rear window
-  const shield = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.5, 0.07), glassMat);
+  const shield = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.5, 0.07), S.glass);
   shield.position.set(0, 0.76, 0.55); shield.rotation.x = -0.5; g.add(shield);
-  const rear = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.46, 0.07), glassMat);
+  const rear = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.46, 0.07), S.glass);
   rear.position.set(0, 0.76, -1.02); rear.rotation.x = 0.5; g.add(rear);
   for (const sx of [-1, 1]){
-    const sw = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.42, 1.35), glassMat);
+    const sw = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.42, 1.35), S.glass);
     sw.position.set(sx * 0.92, 0.74, -0.25); g.add(sw);
   }
   // hood grille (slats)
   for (let i = -2; i <= 2; i++){
     const slat = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.04, 0.05), trim);
-    slat.position.set(0, 0.12 + i * 0.0, 1.72 + i * 0.0); slat.position.y = 0.06; slat.position.z = 1.55 + i * 0.09;
-    g.add(slat);
+    slat.position.set(0, 0.06, 1.55 + i * 0.09); g.add(slat);
   }
   // headlights + taillights (bloom-friendly)
   for (const sx of [-1, 1]){
-    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.06),
-      new THREE.MeshBasicMaterial({ color: 0xfff0c8 }));
+    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.06), S.head);
     hl.position.set(sx * 0.62, 0.14, 1.9); g.add(hl);
-    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.14, 0.05),
-      new THREE.MeshBasicMaterial({ color: 0xff3322 }));
+    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.14, 0.05), S.tail);
     tl.position.set(sx * 0.62, 0.16, -1.98); g.add(tl);
   }
   // roof light bar (glowing pods)
   const bar = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.24), trim);
   bar.position.set(0, 1.06, 0.05); g.add(bar);
   for (let i = -2; i <= 2; i++){
-    const pod = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.16),
-      new THREE.MeshBasicMaterial({ color: 0xbfe6ff }));
+    const pod = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.16), S.pod);
     pod.position.set(i * 0.3, 1.12, 0.05); g.add(pod);
   }
   // rear spoiler
@@ -1080,10 +1101,9 @@ function truckMesh(color){
   }
   // exhaust stacks
   for (const sx of [-1, 1]){
-    const ex = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.8, 10), dark);
+    const ex = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.8, 8), dark);
     ex.position.set(sx * 0.62, 0.85, -1.2); g.add(ex);
-    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 0.12, 10),
-      new THREE.MeshStandardMaterial({ color: 0x3a3f4a, metalness: .95, roughness: .25 }));
+    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 0.12, 8), S.tip);
     tip.position.set(sx * 0.62, 1.26, -1.2); g.add(tip);
   }
   const bull = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.5, 0.3), dark);
@@ -1097,42 +1117,35 @@ function truckMesh(color){
     flare.position.set(wx * 1.06, -0.08, wz); g.add(flare);
   }
   // chrome side trim strips + front splitter
-  const chrome = new THREE.MeshStandardMaterial({ color: 0xbcc6dc, metalness: .95, roughness: .18 });
   for (const sx of [-1, 1]){
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 3.2), chrome);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 3.2), S.chrome);
     strip.position.set(sx * 1.11, -0.02, -0.1); g.add(strip);
   }
-  const splitter = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.08, 0.5), chrome);
+  const splitter = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.08, 0.5), S.chrome);
   splitter.position.set(0, -0.34, 1.85); g.add(splitter);
-  // detailed wheels: tyre + rim + hub
+  // detailed wheels: tyre + rim + hub (shared geometries + materials)
   const wheels = [];
-  const tyreMat = new THREE.MeshStandardMaterial({ color: 0x0a0c12, roughness: .85, metalness: .1 });
-  const rimMat = new THREE.MeshStandardMaterial({ color: 0x6a7590, roughness: .3, metalness: .9 });
-  const wGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.44, 18); wGeo.rotateZ(Math.PI/2);
-  const rimGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.46, 8); rimGeo.rotateZ(Math.PI/2);
-  const hubGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.48, 8); hubGeo.rotateZ(Math.PI/2);
+  if (!truckMesh._wGeo){
+    truckMesh._wGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.44, 16).rotateZ(Math.PI/2);
+    truckMesh._rimGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.46, 8).rotateZ(Math.PI/2);
+    truckMesh._hubGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.48, 6).rotateZ(Math.PI/2);
+  }
   for (const [x,,z] of WHEEL_POS){
     const w = new THREE.Group();
-    const tyre = new THREE.Mesh(wGeo, tyreMat); tyre.castShadow = true; w.add(tyre);
-    w.add(new THREE.Mesh(rimGeo, rimMat));
-    w.add(new THREE.Mesh(hubGeo, new THREE.MeshBasicMaterial({ color: 0x9fb8e8 })));
+    const tyre = new THREE.Mesh(truckMesh._wGeo, S.tyre); tyre.castShadow = true; w.add(tyre);
+    w.add(new THREE.Mesh(truckMesh._rimGeo, S.rim));
+    w.add(new THREE.Mesh(truckMesh._hubGeo, S.hub));
     w.position.set(x*1.06, -0.42, z); g.add(w); wheels.push(w);
   }
   // boost flame — layered afterburner: blue-white core + orange plume + glow,
-  // twin nozzles behind the exhausts (hidden by default)
+  // twin nozzles behind the exhausts (hidden by default; shared materials)
   const flame = new THREE.Group(); flame.visible = false;
-  const plumeMat = new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: .85,
-    blending: THREE.AdditiveBlending, depthWrite: false });
-  const coreMat = new THREE.MeshBasicMaterial({ color: 0xbfe4ff, transparent: true, opacity: .95,
-    blending: THREE.AdditiveBlending, depthWrite: false });
-  const glowMat2 = new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: .4,
-    blending: THREE.AdditiveBlending, depthWrite: false });
   for (const sx of [-1, 1]){
-    const plume = new THREE.Mesh(new THREE.ConeGeometry(0.24, 1.9, 12), plumeMat);
+    const plume = new THREE.Mesh(new THREE.ConeGeometry(0.24, 1.9, 12), S.plume);
     plume.rotation.x = Math.PI/2; plume.position.set(sx * 0.62, 0.12, -2.25); flame.add(plume);
-    const core = new THREE.Mesh(new THREE.ConeGeometry(0.12, 1.15, 10), coreMat);
+    const core = new THREE.Mesh(new THREE.ConeGeometry(0.12, 1.15, 10), S.core);
     core.rotation.x = Math.PI/2; core.position.set(sx * 0.62, 0.12, -1.9); flame.add(core);
-    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 8), glowMat2);
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 8), S.halo);
     halo.position.set(sx * 0.62, 0.12, -1.55); flame.add(halo);
   }
   // flickering light so the afterburner actually lights the ground + blooms
@@ -1159,16 +1172,14 @@ function truckMesh(color){
   g.userData.underglow = glow;
   // ARMOR PLATES (SHIELD powerup) — bolted at fixed mounts all around the
   // truck, hidden until granted. index: 0 front 1 rear 2 left 3 right 4 roof
-  const plateMat = new THREE.MeshStandardMaterial({ color: 0x9fb8e8, roughness: .4, metalness: .85,
-    emissive: 0x24406e, emissiveIntensity: .35 });
   const plates = [];
+  if (!truckMesh._studGeo) truckMesh._studGeo = new THREE.SphereGeometry(0.07, 6, 5);
   const mkPlate = (w, h, d, x, y, z, ry) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), plateMat);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), S.plate);
     m.position.set(x, y, z); if (ry) m.rotation.y = ry; m.castShadow = true; m.visible = false;
-    // riveted look: 4 studs
+    // riveted look: 4 studs (shared geo + material — cheap, and only drawn when the plate shows)
     for (const ox of [-0.35, 0.35]) for (const oz of [-0.35, 0.35]){
-      const stud = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5),
-        new THREE.MeshStandardMaterial({ color: 0x2a3550, metalness: .9, roughness: .3 }));
+      const stud = new THREE.Mesh(truckMesh._studGeo, S.stud);
       stud.position.set(ox * w * 0.9, h * 0.5, oz * d * 0.9); m.add(stud);
     }
     g.add(m); plates.push(m); return m;
@@ -2002,8 +2013,17 @@ function startMatch(seed, roster){
   document.getElementById("joinCard").classList.remove("show");
   document.getElementById("resultOverlay").classList.remove("show");
   G.mode = "playing";
+  warmup();
   startRound();
   buildScoreHud();
+}
+// pre-compile all shaders + warm the post pipeline so the first rendered
+// frames of a match don't hitch while the GPU compiles car/plate/FX programs
+function warmup(){
+  try {
+    renderer.compile(scene, camera);
+    if (composer) composer.render(); else renderer.render(scene, camera);
+  } catch (_) {}
 }
 // kickoff — world & field persist for the whole match; only wreckage is swept
 function startRound(){
@@ -2393,15 +2413,18 @@ function stepVisuals(dt){
       ug.material.opacity = p.boosting ? 0.6 : 0.32;
       ug.material.color.setHex(p.overT > 0 ? 0xffd166 : p.color); // overdrive burns gold
     }
-    // boost ribbon
+    // boost ribbon — only shuffle the geometry while it's actually showing
     if (!p.trail) p.trail = makeTrail();
-    { const a = p.trail.line.geometry.attributes.position;
-      tmpV.set(0, -0.1, -2.2).applyQuaternion(p.group.quaternion).add(p.group.position);
-      if (!p.trail.init){ for (let i = 0; i < p.trail.N; i++) a.setXYZ(i, tmpV.x, tmpV.y, tmpV.z); p.trail.init = true; }
-      for (let i = p.trail.N - 1; i > 0; i--) a.setXYZ(i, a.getX(i-1), a.getY(i-1), a.getZ(i-1));
-      a.setXYZ(0, tmpV.x, tmpV.y, tmpV.z); a.needsUpdate = true;
-      const mat = p.trail.line.material;
+    { const mat = p.trail.line.material;
       mat.opacity = (p.boosting && p.alive) ? Math.min(0.85, mat.opacity + dt * 6) : mat.opacity * Math.pow(0.02, dt);
+      if (mat.opacity > 0.01){
+        const a = p.trail.line.geometry.attributes.position;
+        tmpV.set(0, -0.1, -2.2).applyQuaternion(p.group.quaternion).add(p.group.position);
+        if (!p.trail.init){ for (let i = 0; i < p.trail.N; i++) a.setXYZ(i, tmpV.x, tmpV.y, tmpV.z); p.trail.init = true; }
+        for (let i = p.trail.N - 1; i > 0; i--) a.setXYZ(i, a.getX(i-1), a.getY(i-1), a.getZ(i-1));
+        a.setXYZ(0, tmpV.x, tmpV.y, tmpV.z); a.needsUpdate = true;
+        p.trail.line.visible = true;
+      } else { p.trail.init = false; p.trail.line.visible = false; }
     }
     // wheel spin
     let spd = 6;
@@ -2598,6 +2621,7 @@ function startMatchGuest(seed, roster){
   ["menu","hostCard","joinCard","resultOverlay"].forEach(id => document.getElementById(id).classList.remove("show"));
   G.mode = "playing"; G.phase = "countdown";
   sfxGraceUntil = performance.now() + 900; // swallow the join-backlog audio burst
+  warmup();
   buildScoreHud();
 }
 function guestResetRound(){
