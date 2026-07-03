@@ -87,7 +87,7 @@
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">Car-ball carnage &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v13</span></p>
+    <p class="tag">Car-ball carnage &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v14</span></p>
     <h1>WRECKBALL</h1>
     <p>Rocket-powered trucks, one giant ball, two goals — <b>and full-contact demolition.</b> Smash the ball into the enemy goal. Smash the enemy while you're at it. <b>First to 5 goals wins.</b> Nobody falls off, nobody's eliminated.</p>
     <ul>
@@ -108,23 +108,20 @@
       <button id="hostBtn">Host online</button>
       <button id="joinBtn">Join a friend</button>
       <button id="touchTog">&#128241; Touch pad</button>
-      <span class="lab" style="font-size:11px">online = copy-paste invite codes, no server</span>
+      <span class="lab" style="font-size:11px">online = one 4-digit code, that's it</span>
     </div>
   </div>
 </div>
 
 <div class="overlay" id="hostCard">
   <div class="card">
-    <p class="tag">Hosting &middot; you are cyan</p>
-    <h1>Court lobby</h1>
-    <div id="slots"></div>
-    <div class="row"><button id="inviteBtn">Generate invite code</button><span class="lab" id="invState" style="font-size:11px"></span></div>
-    <p class="lab" style="margin:4px 0 2px">1 &middot; Send this code to your friend</p>
-    <textarea id="offerOut" readonly placeholder="click Generate invite code…"></textarea>
-    <p class="lab" style="margin:8px 0 2px">2 &middot; Paste their reply code here</p>
-    <textarea id="answerIn" placeholder="paste reply code…"></textarea>
-    <div class="row" style="margin-top:8px">
-      <button id="acceptBtn">Connect player</button>
+    <p class="tag">Hosting &middot; friends join with the code</p>
+    <h1>Match lobby</h1>
+    <p style="margin:2px 0 0">Your game code:</p>
+    <div id="hostCode" style="font-size:64px;font-weight:900;letter-spacing:14px;color:var(--you);text-align:center;margin:6px 0 4px;font-variant-numeric:tabular-nums">····</div>
+    <p class="lab" id="invState" style="text-align:center;font-size:12px">contacting signaling…</p>
+    <div id="slots" style="margin-top:10px"></div>
+    <div class="row" style="margin-top:10px">
       <button class="btn-primary" id="startBtn">START (bots fill empty seats)</button>
       <button id="hostBack">Back</button>
     </div>
@@ -133,15 +130,17 @@
 
 <div class="overlay" id="joinCard">
   <div class="card">
-    <p class="tag">Joining a friend's court</p>
+    <p class="tag">Joining a friend's match</p>
     <h1>Join</h1>
-    <p class="lab" style="margin:4px 0 2px">1 &middot; Paste your friend's invite code</p>
-    <textarea id="offerIn" placeholder="paste invite code…"></textarea>
-    <div class="row" style="margin-top:8px"><button id="replyBtn">Generate reply code</button><span class="lab" id="joinState" style="font-size:11px"></span></div>
-    <p class="lab" style="margin:4px 0 2px">2 &middot; Send this reply back to them</p>
-    <textarea id="answerOut" readonly placeholder="reply code appears here…"></textarea>
+    <p>Type the 4-digit code your friend reads you:</p>
+    <div class="row">
+      <input id="codeIn" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="0000"
+        style="font:inherit;font-size:40px;font-weight:900;letter-spacing:12px;width:200px;text-align:center;background:#0c1330;color:var(--ink);border:1px solid var(--line);border-radius:11px;padding:8px" />
+      <button class="btn-primary" id="joinGo">JOIN</button>
+    </div>
+    <p class="lab" id="joinState" style="font-size:12px;min-height:16px"></p>
+    <p class="lab" id="joinWait" style="font-size:13px;color:var(--you)"></p>
     <div class="row" style="margin-top:8px"><button id="joinBack">Back</button></div>
-    <p class="lab" id="joinWait" style="font-size:12px"></p>
   </div>
 </div>
 
@@ -176,11 +175,11 @@ try {
 
 // ---------------- constants ----------------
 const DT = 1 / 60, GRAV = 20;   // heavier = less floaty; fastfall adds more when airborne
-const FIELD_W = 46, FIELD_L = 72;             // walled pitch — nobody falls off, ever
-const GOAL_W = 18, GOAL_H = 5.4, GOAL_DEPTH = 4.5;  // generous mouths — scoring should feel possible
-const BALL_R = 2.2, WIN_GOALS = 5;
+const FIELD_W = 60, FIELD_L = 96;             // BIG pitch — high octane needs room
+const GOAL_W = 22, GOAL_H = 6, GOAL_DEPTH = 5;
+const BALL_R = 2.4, WIN_GOALS = 5;
 const KO_Y = -16, WIN_ROUNDS = 3;             // (legacy consts, mostly unused post-pivot)
-const CRUISE = 15, BOOST_CAP = 28;
+const CRUISE = 19, BOOST_CAP = 36;            // faster cruise, screaming boost
 const TEAM_COLORS = [[0x36e2ff, 0x2ea8ff, 0x62f3a8], [0xff9b50, 0xff5b5b, 0xff7ad9]];
 const BOTNAMES = ["TOAST", "BISCUIT", "CRUMB", "SCONE", "MUFFIN", "BAGEL"];
 
@@ -226,13 +225,30 @@ const camera = new THREE.PerspectiveCamera(66, 1, 0.1, 500);
 let composer = null;
 try {
   const base = "https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/";
-  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+  const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { ShaderPass }, { OutputPass }] = await Promise.all([
     import(base + "EffectComposer.js"), import(base + "RenderPass.js"),
-    import(base + "UnrealBloomPass.js"), import(base + "OutputPass.js")]);
+    import(base + "UnrealBloomPass.js"), import(base + "ShaderPass.js"), import(base + "OutputPass.js")]);
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight),
     IS_TOUCH ? 0.45 : 0.65, 0.5, 0.82)); // strength, radius, threshold
+  // cinematic finish: edge chromatic aberration + vignette
+  composer.addPass(new ShaderPass({
+    uniforms: { tDiffuse: { value: null } },
+    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }",
+    fragmentShader: [
+      "uniform sampler2D tDiffuse; varying vec2 vUv;",
+      "void main(){",
+      "  vec2 c = vUv - 0.5; float d = length(c);",
+      "  float ab = 0.004 * d;",
+      "  vec3 col;",
+      "  col.r = texture2D(tDiffuse, vUv + c*ab).r;",
+      "  col.g = texture2D(tDiffuse, vUv).g;",
+      "  col.b = texture2D(tDiffuse, vUv - c*ab).b;",
+      "  col *= 1.0 - smoothstep(0.5, 0.95, d) * 0.38;",
+      "  gl_FragColor = vec4(col, 1.0);",
+      "}"].join("\n")
+  }));
   composer.addPass(new OutputPass());
 } catch (e) { composer = null; }
 function onResize(){ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
@@ -269,7 +285,10 @@ function audioInit(){
   if (AC) return;
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
-    master = AC.createGain(); master.gain.value = muted ? 0 : 0.5; master.connect(AC.destination);
+    master = AC.createGain(); master.connect(AC.destination);
+    // ramp in — a cold start at full gain pops/glitches (worst for joiners)
+    master.gain.setValueAtTime(0, AC.currentTime);
+    if (!muted) master.gain.linearRampToValueAtTime(0.5, AC.currentTime + 0.7);
     noiseB = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
     { const d = noiseB.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2-1; }
     // engine: detuned saw+square through a lowpass, pitch follows speed
@@ -289,8 +308,9 @@ function audioInit(){
 function audioUnlock(){ audioInit(); if (AC && AC.state === "suspended") AC.resume(); }
 addEventListener("pointerdown", audioUnlock, { once: false });
 addEventListener("keydown", audioUnlock, { once: false });
+let sfxGraceUntil = 0; // suppress the backlog burst a joiner hears at match start
 function blip(freq, dur, type = "sine", vol = 0.25, slide = 0){
-  if (!AC) return;
+  if (!AC || performance.now() < sfxGraceUntil) return;
   const o = AC.createOscillator(), g = AC.createGain();
   o.type = type; o.frequency.setValueAtTime(freq, AC.currentTime);
   if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), AC.currentTime + dur);
@@ -299,7 +319,7 @@ function blip(freq, dur, type = "sine", vol = 0.25, slide = 0){
   o.connect(g); g.connect(master); o.start(); o.stop(AC.currentTime + dur + 0.02);
 }
 function noiseHit(vol, freq, dur){
-  if (!AC) return;
+  if (!AC || performance.now() < sfxGraceUntil) return;
   const src = AC.createBufferSource(); src.buffer = noiseB;
   const bp = AC.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = freq; bp.Q.value = 1.1;
   const g = AC.createGain(); g.gain.setValueAtTime(vol, AC.currentTime);
@@ -363,10 +383,94 @@ function newWorld(){ if (world) world.free(); world = new RAPIER.World({ x: 0, y
 // ---------------- field (walled pitch, two goals) ----------------
 let fieldGroup = null, floorMesh = null, craterCount = 0;
 const embers = []; // cooling crater rims
+const walls = [];  // destructible panels: {i, mesh, body, hp, x, z, broken}
+const goalMouths = []; // pulsing glow planes
+const WALL_HP = 55;
+function addWallPanel(w, h, d, x, y, z, mat){
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat.clone()); // own material for battering
+  mesh.position.set(x, y, z); fieldGroup.add(mesh);
+  let body = null;
+  if (world && G.role !== "guest"){
+    body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, (y - h/2) + 6, z));
+    world.createCollider(RAPIER.ColliderDesc.cuboid(w/2, 6, d/2).setFriction(0.2).setRestitution(0.5), body);
+  }
+  walls.push({ i: walls.length, mesh, body, hp: WALL_HP, x, z, broken: false });
+}
+function batterWall(w){
+  const k = 1 - Math.max(0, w.hp) / WALL_HP;
+  w.mesh.material.emissiveIntensity = 0.7 * (1 - k * 0.85);
+  w.mesh.material.color.setHex(0x1c2b55).lerp(new THREE.Color(0x0c0f1c), k * 0.8);
+  w.mesh.rotation.z = (Math.random() - 0.5) * 0.1 * k;
+  w.mesh.rotation.x = (Math.random() - 0.5) * 0.08 * k;
+}
+function damageWallAt(x, z, amt, fx, fy, fz){
+  let best = null, bd = 36;
+  for (const w of walls){ if (w.broken) continue;
+    const d = (w.x - x)**2 + (w.z - z)**2; if (d < bd){ bd = d; best = w; } }
+  if (!best) return;
+  best.hp -= amt;
+  emit(fx, fy + 0.8, fz, 0xffe58a, 10, 7, .4);
+  sfx.thud(Math.min(1, amt / 40));
+  batterWall(best);
+  netEvent({ t: "wallD", i: best.i, hp: best.hp });
+  if (best.hp <= 0) breakWall(best);
+}
+function breakWall(w){
+  if (w.broken) return;
+  w.broken = true;
+  if (w.body && world){ try { world.removeRigidBody(w.body); } catch (_) {} w.body = null; }
+  // the panel tears free and tumbles away as debris — the gap stays all match
+  const d = w.mesh.clone(); d.position.copy(w.mesh.position); d.quaternion.copy(w.mesh.quaternion);
+  fieldGroup.remove(w.mesh); scene.add(d);
+  const inw = Math.abs(w.x) > FIELD_W/2 - 1 ? -Math.sign(w.x) : 0;
+  const inz = inw === 0 ? -Math.sign(w.z) : 0;
+  debris.push({ mesh: d, vx: inw * rnd(4, 8), vy: rnd(4, 7), vz: inz * rnd(4, 8),
+    rx: rnd(-3, 3), rz: rnd(-3, 3), t: 0, body: null });
+  emit(w.x, 2, w.z, 0xffaa55, 24, 10, .7);
+  spawnRing(w.x, 1.5, w.z, 0xffd166);
+  sfx.crunch(); sfx.rumble(0.5); shake(0.4);
+  feed("a wall panel was <b style='color:#ffd166'>TORN OFF THE ARENA</b>");
+  netEvent({ t: "wallb", i: w.i });
+}
+function stepWalls(dt){
+  if (G.role === "guest" || G.phase !== "fight") return;
+  for (const p of players){
+    p.wallCd = Math.max(0, (p.wallCd || 0) - dt);
+    if (!p.alive || !p.body || p.wallCd > 0) continue;
+    const t = p.body.translation(), v = p.body.linvel();
+    const sp = Math.hypot(v.x, v.z);
+    if (sp < 12) continue;
+    let hit = null;
+    if (Math.abs(t.x) > FIELD_W/2 - 2.4 && Math.sign(v.x) === Math.sign(t.x) && Math.abs(v.x) > 9)
+      hit = { x: Math.sign(t.x) * (FIELD_W/2 + 0.5), z: t.z };
+    else if (Math.abs(t.z) > FIELD_L/2 - 2.4 && Math.sign(v.z) === Math.sign(t.z) && Math.abs(v.z) > 9
+      && Math.abs(t.x) > GOAL_W/2 + 1)
+      hit = { x: t.x, z: Math.sign(t.z) * (FIELD_L/2 + 0.5) };
+    if (!hit) continue;
+    p.wallCd = 0.5;
+    damageWallAt(hit.x, hit.z, (sp - 8) * 2.4, t.x, t.y, t.z);
+    const n = V3(t.x - hit.x, 0, t.z - hit.z).normalize();
+    applyDamage(p, sp * 0.45, n.x, n.z);   // hitting a wall that hard hurts you too
+    if (p === me()) shake(Math.min(0.8, sp / 30));
+  }
+  BALL.wallCd = Math.max(0, (BALL.wallCd || 0) - dt);
+  if (BALL.body && !BALL.wallCd){
+    const b = BALL.body.translation(), bv = BALL.body.linvel();
+    const bs = Math.hypot(bv.x, bv.z);
+    if (bs > 17){
+      if (Math.abs(b.x) > FIELD_W/2 - BALL_R - 0.8 && Math.sign(bv.x) === Math.sign(b.x)){
+        BALL.wallCd = 0.4; damageWallAt(Math.sign(b.x) * (FIELD_W/2 + 0.5), b.z, bs * 1.5, b.x, b.y, b.z);
+      } else if (Math.abs(b.z) > FIELD_L/2 - BALL_R - 0.8 && Math.sign(bv.z) === Math.sign(b.z)
+        && Math.abs(b.x) > GOAL_W/2 + 1){
+        BALL.wallCd = 0.4; damageWallAt(b.x, Math.sign(b.z) * (FIELD_L/2 + 0.5), bs * 1.5, b.x, b.y, b.z);
+      }
+    }
+  }
+}
 // BATTLEFIELD PITCH: punch a crater into the floor — visual depression +
 // physical rubble lips. Scars persist for the whole match (reset per match).
 function blastCrater(x, z, big){
-  if (!floorMesh || craterCount >= 14) return;
+  if (!floorMesh || craterCount >= 22) return;
   if (Math.abs(x) > FIELD_W/2 - 3 || Math.abs(z) > FIELD_L/2 - 3) return; // keep goalmouths honest
   craterCount++;
   const r = big ? rnd(5.5, 7) : rnd(3.6, 4.6), depth = big ? 0.85 : 0.6;
@@ -389,19 +493,17 @@ function blastCrater(x, z, big){
       blending: THREE.AdditiveBlending, depthWrite: false }));
   ember.rotation.x = -Math.PI/2; ember.position.set(x, 0.06, z);
   fieldGroup.add(ember); embers.push({ m: ember, t: 0 });
-  // physical rubble lips around the rim (host only)
-  if (world && G.role !== "guest"){
-    const a0 = rnd(0, Math.PI);
+  // rubble around the rim — VISUAL only (physical curbs made driving feel
+  // broken near craters; the scar look stays, the jolts go)
+  { const a0 = rnd(0, Math.PI);
     for (let k = 0; k < 4; k++){
       const a = a0 + k * Math.PI/2 + rnd(-0.3, 0.3);
       const bx = x + Math.cos(a) * (r + 0.4), bz = z + Math.sin(a) * (r + 0.4);
-      const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(bx, 0.12, bz));
-      const q = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), -a);
-      body.setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }, true);
-      world.createCollider(RAPIER.ColliderDesc.cuboid(0.85, 0.16, 0.45).setFriction(0.7).setRestitution(0.25), body);
-      const rub = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.32, 0.9),
+      const rub = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.26, 0.9),
         new THREE.MeshStandardMaterial({ color: 0x1c2544, roughness: .9, metalness: .2 }));
-      rub.position.set(bx, 0.12, bz); rub.quaternion.copy(q); fieldGroup.add(rub);
+      rub.position.set(bx, 0.1, bz);
+      rub.rotation.y = -a; rub.rotation.z = rnd(-0.15, 0.15);
+      fieldGroup.add(rub);
     }
   }
   emit(x, 0.6, z, 0xffaa55, 22, 12, .7);
@@ -460,15 +562,41 @@ function buildField(){
   mid.rotation.x = -Math.PI/2; mid.position.y = 0.02; fieldGroup.add(mid);
   const circ = new THREE.Mesh(new THREE.RingGeometry(6.6, 7, 48), lineMat);
   circ.rotation.x = -Math.PI/2; circ.position.y = 0.02; fieldGroup.add(circ);
-  // walls (visual low, physics tall so the ball stays in)
+  // DESTRUCTIBLE wall panels — they scorch, buckle, and BREAK under heavy
+  // impacts. An invisible, invincible outer shell 1.5m behind keeps everyone
+  // contained no matter how much of the arena gets torn apart.
+  walls.length = 0; goalMouths.length = 0;
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x1c2b55, roughness: .5, metalness: .5,
     emissive: 0x14224a, emissiveIntensity: .7, transparent: true, opacity: 0.85 });
-  wallBox(1, 3.2, L + 2, -HW - 0.5, 1.6, 0, wallMat, 12);        // left  (tall physics)
-  wallBox(1, 3.2, L + 2,  HW + 0.5, 1.6, 0, wallMat, 12);        // right (tall physics)
+  const PANEL = 8;
+  const nSide = Math.ceil((L + 2) / PANEL);
+  for (const sx of [-1, 1]) for (let i = 0; i < nSide; i++){
+    const z0 = -(L + 2)/2 + PANEL * (i + 0.5);
+    addWallPanel(PANEL - 0.35, 3.2, 1, sx * (HW + 0.5), 1.6, z0, wallMat);
+  }
   const sideW = (W - GOAL_W) / 2;
-  for (const s of [-1, 1]){ // end walls with goal mouths
-    wallBox(sideW, 3.2, 1, -(GOAL_W + sideW)/2, 1.6, s*(HL + 0.5), wallMat, 12);
-    wallBox(sideW, 3.2, 1,  (GOAL_W + sideW)/2, 1.6, s*(HL + 0.5), wallMat, 12);
+  for (const s of [-1, 1]) for (const side of [-1, 1]) for (let k = 0; k < 2; k++){
+    const w = sideW / 2 - 0.25;
+    const cx = GOAL_W/2 + sideW/4 + k * sideW/2;
+    addWallPanel(w, 3.2, 1, side * cx, 1.6, s * (HL + 0.5), wallMat);
+  }
+  // invincible shell (invisible, taller, just outside the panels)
+  if (world){
+    const shell = (hx, hy, hz, x, z) => {
+      const b = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, hy, z));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setFriction(0.2).setRestitution(0.4), b);
+    };
+    shell(0.5, 8, (L + 10)/2, -HW - 2.2, 0);
+    shell(0.5, 8, (L + 10)/2,  HW + 2.2, 0);
+    for (const s of [-1, 1]) shell((W + 10)/2, 8, 0.5, 0, s * (HL + GOAL_DEPTH + 2.6));
+  }
+  // wall-top light strips (stadium rim glow)
+  const stripMat = new THREE.MeshBasicMaterial({ color: 0x36e2ff, transparent: true, opacity: 0.55 });
+  for (const sx of [-1, 1]){
+    const st = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, L + 2), stripMat);
+    st.position.set(sx * (HW + 0.5), 3.3, 0); fieldGroup.add(st);
+  }
+  for (const s of [-1, 1]){ // end walls with goal mouths (crossbar/pocket stay solid)
     // crossbar: physics starts AT the bar and grows upward — the mouth below stays open
     wallBox(GOAL_W + 2, 1.2, 1, 0, GOAL_H + 0.6, s*(HL + 0.5), wallMat, 8);
     // goal pocket (net box) so the ball stays put after a score
@@ -480,7 +608,7 @@ function buildField(){
     const glowMat = new THREE.MeshBasicMaterial({ color: s > 0 ? 0xff9b50 : 0x36e2ff, transparent: true, opacity: 0.55 });
     const mouth = new THREE.Mesh(new THREE.PlaneGeometry(GOAL_W, GOAL_H), glowMat);
     mouth.position.set(0, GOAL_H/2, s*(HL + 0.02)); if (s > 0) mouth.rotation.y = Math.PI;
-    fieldGroup.add(mouth);
+    fieldGroup.add(mouth); goalMouths.push(mouth);
   }
   // ---- RL-style shell: slanted skirts, cut corners, containment ceiling ----
   const rampMat = new THREE.MeshStandardMaterial({ color: 0x22335f, roughness: .55, metalness: .45,
@@ -497,20 +625,27 @@ function buildField(){
       rampBox(segW, 0.5, 3.2, cx, 0.85, s * (HL - 1.15), V3(1, 0, 0), -s * TILT, rampMat);
     }
   }
-  // cut corners (45° diagonal walls, tall physics)
+  // cut corners: diagonal walls WITH slanted skirts — no vertical pockets to
+  // get wedged into. yaw chosen so local +z always points outward.
   for (const sx of [-1, 1]) for (const sz of [-1, 1]){
     const cx = sx * (HW - 4), cz = sz * (HL - 4);
-    rampBox(14, 3.2, 1, cx, 1.6, cz, V3(0, 1, 0), sx * sz * Math.PI/4, wallMat, 12);
+    const yaw = Math.atan2(sx, sz);
+    rampBox(15, 3.2, 1, cx, 1.6, cz, V3(0, 1, 0), yaw, wallMat, 12);
+    const ox = sx / Math.SQRT2, oz = sz / Math.SQRT2;
+    rampBox(13, 0.5, 3.2, cx - ox * 1.3, 0.85, cz - oz * 1.3, V3(0, 1, 0), yaw, rampMat, 0, V3(1, 0, 0), -TILT);
   }
   // invisible ceiling: fully contained, Rocket-League style
   if (world){
-    const cb = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 17, 0));
+    const cb = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 21, 0));
     world.createCollider(RAPIER.ColliderDesc.cuboid((W + 12)/2, 0.5, (L + 12)/2).setRestitution(0.3), cb);
   }
 }
-// a rotated wall/ramp piece: visual box + matching fixed collider
-function rampBox(w, h, d, x, y, z, axis, angle, mat, physH){
+// a rotated wall/ramp piece: visual box + matching fixed collider.
+// optional second rotation (axis2/angle2) applies in the LOCAL frame — used
+// for corner skirts that need yaw + tilt.
+function rampBox(w, h, d, x, y, z, axis, angle, mat, physH, axis2, angle2){
   const q = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+  if (axis2) q.multiply(new THREE.Quaternion().setFromAxisAngle(axis2, angle2));
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   mesh.position.set(x, y, z); mesh.quaternion.copy(q);
   mesh.receiveShadow = true; fieldGroup.add(mesh);
@@ -541,18 +676,22 @@ function buildStadium(){
   const headMat = new THREE.MeshBasicMaterial({ color: 0xdfeaff });
   const coneMat = new THREE.MeshBasicMaterial({ color: 0x9db8ff, transparent: true, opacity: 0.06,
     blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  // beam geometry: apex at origin, base 24 below — aim by pointing local -Y at the pitch
-  const beamGeo = new THREE.ConeGeometry(9, 24, 20, 1, true);
-  beamGeo.translate(0, -12, 0);
+  // unit beam: apex at origin, length 1 downward — scaled per tower so every
+  // beam actually REACHES its floor target (no more beams ending mid-air)
+  const beamGeo = new THREE.ConeGeometry(1, 1, 20, 1, true);
+  beamGeo.translate(0, -0.5, 0);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]){
     const x = sx * (HW + 7), z = sz * (HL + 7);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 17, 8), poleMat);
     pole.position.set(x, 8.5, z); g.add(pole);
     const head = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 1.2), headMat);
     head.position.set(x, 17.2, z); head.lookAt(0, 0, 0); g.add(head);
+    const headP = V3(x, 17.2, z), target = V3(x * 0.3, 0, z * 0.3);
+    const len = headP.distanceTo(target);
     const cone = new THREE.Mesh(beamGeo, coneMat);
-    cone.position.set(x, 17.2, z);
-    cone.quaternion.setFromUnitVectors(V3(0, -1, 0), V3(-x * 0.8, -17.2, -z * 0.8).normalize());
+    cone.position.copy(headP);
+    cone.scale.set(len * 0.4, len, len * 0.4);
+    cone.quaternion.setFromUnitVectors(V3(0, -1, 0), target.sub(headP).normalize());
     g.add(cone);
   }
   // two real spotlights (no shadows) from opposite towers for punchy highlights
@@ -572,7 +711,7 @@ function buildStadium(){
     cx.fillText(txt, 256, 50);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.1),
       new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }));
-    const side = i % 2 ? 1 : -1, slot = (Math.floor(i / 2) - 1) * 24;
+    const side = i % 2 ? 1 : -1, slot = (Math.floor(i / 2) - 1) * 32;
     m.position.set(side * (HW + 1.1), 4.6, slot);
     m.rotation.y = side > 0 ? -Math.PI/2 : Math.PI/2;
     g.add(m);
@@ -629,11 +768,16 @@ function createBall(){
         emissive: 0x6677dd, emissiveIntensity: .4 }));
     BALL.mesh.castShadow = true;
     BALL.mesh.add(new THREE.PointLight(0x88aaff, 26, 26)); // the ball lights the pitch
+    // rim-glow shell (back-face additive halo)
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(BALL_R * 1.16, 24, 18),
+      new THREE.MeshBasicMaterial({ color: 0x88aaff, transparent: true, opacity: 0.16,
+        side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+    BALL.mesh.add(shell); BALL.shellMat = shell.material;
     scene.add(BALL.mesh);
   }
   if (world && G.role !== "guest"){
     BALL.body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
-      .setTranslation(0, BALL_R + 2, 0).setLinearDamping(0.3).setAngularDamping(0.7).setCcdEnabled(true));
+      .setTranslation(0, BALL_R + 2, 0).setLinearDamping(0.22).setAngularDamping(0.6).setCcdEnabled(true));
     world.createCollider(RAPIER.ColliderDesc.ball(BALL_R)
       .setDensity(0.16).setFriction(0.5).setRestitution(0.72), BALL.body);
   }
@@ -718,11 +862,26 @@ const REST_LEN = 0.66, RIDE = 0.5;  // shorter travel = planted, less pogo
 
 function truckMesh(color){
   const g = new THREE.Group();
-  const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: .52, metalness: .55, envMapIntensity: 0.65 });
+  // clearcoat paint — car-showroom depth without mirror shine
+  const bodyMat = new THREE.MeshPhysicalMaterial({ color, roughness: .45, metalness: .6,
+    clearcoat: .7, clearcoatRoughness: .25, envMapIntensity: 0.65 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x10141f, roughness: .6, metalness: .4 });
   // segmented hull so impacts can crush real dents into it;
   // vertex colors let scuffs darken exactly where the metal folded
   const hullGeo = new THREE.BoxGeometry(2.2, 0.75, 4.0, 4, 2, 7); // finer = chunkier crumple
+  // CHAMFERED NOSE: angled sides on the hood front so the ball can be
+  // steered off the nose corners instead of pinballing off a square edge
+  { const pos = hullGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++){
+      const z = pos.getZ(i);
+      if (z > 1.1){
+        const maxX = 1.1 - (z - 1.1) * 0.72;
+        pos.setX(i, THREE.MathUtils.clamp(pos.getX(i), -maxX, maxX));
+        if (pos.getY(i) > 0.3) pos.setY(i, 0.3 - (z - 1.1) * 0.12); // hood rakes down too
+      }
+    }
+    hullGeo.computeVertexNormals();
+  }
   hullGeo.userData.orig = hullGeo.attributes.position.array.slice();
   hullGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(hullGeo.attributes.position.count * 3).fill(1), 3));
   bodyMat.vertexColors = true;
@@ -732,8 +891,24 @@ function truckMesh(color){
   cabGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(cabGeo.attributes.position.count * 3).fill(1), 3));
   const cab = new THREE.Mesh(cabGeo, bodyMat);
   cab.position.set(0, 0.68, -0.25); cab.castShadow = true; g.add(cab);
-  const bull = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.5, 0.35), dark);
-  bull.position.set(0, -0.1, 2.05); g.add(bull);
+  // windshield
+  const shield = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.55, 0.08),
+    new THREE.MeshPhysicalMaterial({ color: 0x0a1524, roughness: .1, metalness: .1,
+      clearcoat: 1, transparent: true, opacity: 0.85 }));
+  shield.position.set(0, 0.74, 0.6); shield.rotation.x = -0.42; g.add(shield);
+  // headlights (bloom-friendly)
+  for (const sx of [-1, 1]){
+    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 0.06),
+      new THREE.MeshBasicMaterial({ color: 0xfff0c8 }));
+    hl.position.set(sx * 0.32, 0.12, 1.96); g.add(hl);
+  }
+  // exhaust stacks
+  for (const sx of [-1, 1]){
+    const ex = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.8, 8), dark);
+    ex.position.set(sx * 0.6, 0.85, -1.25); g.add(ex);
+  }
+  const bull = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.5, 0.3), dark);
+  bull.position.set(0, -0.1, 2.0); g.add(bull);
   const wheels = [];
   const wGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.42, 14);
   wGeo.rotateZ(Math.PI/2);
@@ -766,7 +941,7 @@ function truckMesh(color){
 }
 
 // kickoff spots per team (team 0 defends -z, shoots +z), mirrored for team 1
-const KICKOFF = [[[0, -11], [-9, -17], [9, -17]], [[0, 11], [9, 17], [-9, 17]]];
+const KICKOFF = [[[0, -14], [-12, -23], [12, -23]], [[0, 14], [12, 23], [-12, 23]]];
 function spawnPose(p){
   const [x, z] = KICKOFF[p.team][p.slot % 3];
   return { x, z, yaw: Math.atan2(-x, -z) }; // face the ball at center
@@ -779,8 +954,7 @@ function makePlayer(id, name, color, human, guestIdx, team, slot){
   if (world){
     body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(0, 3, 0).setLinearDamping(0.12).setAngularDamping(1.4).setCcdEnabled(true));
-    chassisCol = world.createCollider(RAPIER.ColliderDesc.cuboid(1.1, 0.38, 2.0)
-      .setFriction(0.35).setRestitution(0.22), body); // low bounce: shoving matches, not pinball
+    chassisCol = world.createCollider(chassisDescFrom(hullMesh), body); // hull-matching (chamfered nose is REAL)
     // low keel = stable, hard to flip accidentally, flips still possible from big hits
     world.createCollider(RAPIER.ColliderDesc.cuboid(0.7, 0.16, 1.2)
       .setTranslation(0, -0.34, 0).setDensity(3.2).setFriction(0.35), body);
@@ -825,25 +999,36 @@ function stepTruck(p, dt){
   const mass = body.mass();
 
   // --- suspension: 4 raycasts straight down from wheel anchors ---
-  // a torn-off wheel = no suspension at that corner: the truck sags and drags
-  let groundHits = 0; const gN = V3();
+  // a torn-off wheel keeps a short, soft "grinding stub": the truck sags and
+  // scrapes but STAYS DRIVABLE — you fight the drag, you don't get beached
+  let groundHits = 0, draggingCorners = 0; const gN = V3();
   for (let wi = 0; wi < WHEEL_POS.length; wi++){
-    if (p.lost.wheels[wi]) continue;
+    const lostW = p.lost.wheels[wi];
+    const rest = lostW ? REST_LEN * 0.6 : REST_LEN;
     const [wx, wy, wz] = WHEEL_POS[wi];
     const anchor = V3(wx, wy, wz).applyQuaternion(tmpQ).add(V3(pos.x, pos.y, pos.z));
     const ray = new RAPIER.Ray({ x: anchor.x, y: anchor.y, z: anchor.z }, rayDir);
-    const hit = world.castRay(ray, REST_LEN, true, undefined, undefined, undefined, body);
+    const hit = world.castRay(ray, rest, true, undefined, undefined, undefined, body);
     if (hit){
       groundHits++;
-      const comp = (REST_LEN - hit.toi) / REST_LEN;         // 0..1
+      if (lostW) draggingCorners++;
+      const comp = (rest - hit.toi) / rest;                 // 0..1
       // spring + damper along world up
       const ptVel = body.velocityAtPoint?.({x:anchor.x,y:anchor.y,z:anchor.z}) ?? vel;
       const relVy = ptVel.y;
       // stiffer spring + much stronger damping = planted, no pogo-wobble
-      let F = mass * GRAV * 0.62 * comp * 2.6 - relVy * mass * 1.6;
+      let F = (mass * GRAV * 0.62 * comp * 2.6 - relVy * mass * 1.6) * (lostW ? 0.55 : 1);
       F = Math.max(0, Math.min(F, mass * GRAV * 2.0));
       body.applyImpulseAtPoint({ x: 0, y: F*dt, z: 0 }, { x: anchor.x, y: anchor.y, z: anchor.z }, true);
       gN.y += 1;
+    }
+  }
+  // grinding corners drag against motion — resistance you drive THROUGH
+  if (draggingCorners > 0){
+    const hs = Math.hypot(vel.x, vel.z);
+    if (hs > 0.5){
+      const k = Math.min(1, hs / 6) * draggingCorners * 2.4 * mass * dt / hs;
+      body.applyImpulse({ x: -vel.x * k, y: 0, z: -vel.z * k }, true);
     }
   }
   p.grounded = groundHits >= 2;
@@ -859,13 +1044,13 @@ function stepTruck(p, dt){
     const wear = (0.62 + 0.38 * health) * (1 - 0.08 * lostW);      // engine power
     const steerWear = (0.68 + 0.32 * health) * (1 - 0.12 * lostW); // steering authority
     // drive
-    const accel = (inp.th > 0 ? 12.5 : 11) * wear;
+    const accel = (inp.th > 0 ? 15.5 : 13) * wear;
     const boosting = inp.boost && p.boost > 0.5;    // boost is ITS OWN thrust — no throttle needed
     if (inp.th !== 0)
       body.applyImpulse({ x: f.x*inp.th*accel*mass*dt, y: 0, z: f.z*inp.th*accel*mass*dt }, true);
     if (boosting){
       p.boost = Math.max(0, p.boost - 34*dt);
-      body.applyImpulse({ x: f.x*15*wear*mass*dt, y: 0, z: f.z*15*wear*mass*dt }, true);
+      body.applyImpulse({ x: f.x*19*wear*mass*dt, y: 0, z: f.z*19*wear*mass*dt }, true);
     }
     else p.boost = Math.min(100, p.boost + 11*dt);
     p.boosting = boosting;
@@ -873,9 +1058,12 @@ function stepTruck(p, dt){
     const latSpeed = vel.x*right.x + vel.z*right.z;
     const grip = 0.14 * (0.62 + 0.38 * health);
     body.applyImpulse({ x: -right.x*latSpeed*mass*grip, y: 0, z: -right.z*latSpeed*mass*grip }, true);
-    // steering: lerp yaw angvel toward target (arcade-reliable, still shoved by hits)
+    // steering: lerp yaw angvel toward target (arcade-reliable, still shoved by hits).
+    // reverse-steering only flips when the player INTENDS reverse (throttle back
+    // AND actually rolling backwards) — being shoved backwards mid-fight must
+    // never invert the controls.
     const spd = Math.hypot(vel.x, vel.z);
-    const dir = (vel.x*f.x + vel.z*f.z) >= -0.5 ? 1 : -1;
+    const dir = (inp.th < 0 && (vel.x*f.x + vel.z*f.z) < 0.5) ? -1 : 1;
     // chirality (verified on-screen, not just math): +angvel.y = turn LEFT.
     // st=+1 (D / stick-right) must turn screen-right => NEGATIVE yaw.
     let target = -inp.st * 2.5 * steerWear * dir * Math.min(1, 0.35 + spd/10);
@@ -1297,7 +1485,13 @@ function stepBot(p, dt){
   const bp = BALL.mesh.position;
   const bv = BALL.body ? BALL.body.linvel() : { x: 0, y: 0, z: 0 };
   const atkZ = p.team === 0 ? 1 : -1;                 // team0 shoots +z
-  const pred = V3(bp.x + bv.x * 0.3, 0, bp.z + bv.z * 0.3);
+  // ITERATIVE INTERCEPT: aim where the ball WILL be when I can reach it
+  const pred = V3(bp.x, 0, bp.z);
+  { const mySpd = Math.max(10, spd);
+    for (let it = 0; it < 2; it++){
+      const tt = Math.min(1.2, pos.distanceTo(pred) / mySpd);
+      pred.set(bp.x + bv.x * tt, 0, bp.z + bv.z * tt);
+    } }
   // hurt + ball far → grab a nearby salvage chip
   if (p.hull < 40 && salvage.length && pos.distanceTo(bp) > 18){
     let chip = null, cd = 324;
@@ -1305,10 +1499,13 @@ function stepBot(p, dt){
     if (chip){ steerTo(p, fwd, pos, V3(chip.x, 0, chip.z)); return; }
   }
   // role: closest living teammate to the ball attacks
-  let closest = true;
-  const myD = pos.distanceToSquared(bp);
-  for (const o of players)
-    if (o !== p && o.alive && o.team === p.team && o.group.position.distanceToSquared(bp) < myD * 0.92){ closest = false; break; }
+  // teammates ranked by distance-to-ball: 0 attacks, 1 holds midfield, 2 plays deep
+  const mates = [];
+  for (const o of players) if (o.alive && o.team === p.team) mates.push(o);
+  mates.sort((a, b) => a.group.position.distanceToSquared(bp) - b.group.position.distanceToSquared(bp));
+  const rank = mates.indexOf(p);
+  const closest = rank <= 0;
+  const gzOut = -atkZ * FIELD_L/2;
   const ballToGoal = V3(-pred.x * 0.25, 0, atkZ * FIELD_L/2 - pred.z);
   ballToGoal.y = 0; ballToGoal.normalize();
   let aim;
@@ -1322,10 +1519,19 @@ function stepBot(p, dt){
       aim.set(pred.x - ballToGoal.x * 9 - ballToGoal.z * side * 7, 0,
               pred.z - ballToGoal.z * 9 + ballToGoal.x * side * 7);
     }
+    // CORNER BALL near our own goal: never push it across our net —
+    // clear it along the wall, upfield
+    if (Math.abs(pred.z - gzOut) < 14 && Math.abs(pred.x) > FIELD_W/2 - 9){
+      const clearDir = V3(Math.sign(pred.x) * 0.35, 0, atkZ).normalize();
+      aim.set(pred.x - clearDir.x * (BALL_R + 2.4), 0, pred.z - clearDir.z * (BALL_R + 2.4));
+    }
   } else {
     // defend: sit goal-side between our goal and the ball
-    const gz = -atkZ * FIELD_L/2;
-    aim = V3(pred.x * 0.35, 0, gz * 0.7 + pred.z * 0.3);
+    const gz = gzOut;
+    // midfielder shades halfway to the ball; deep man parks in front of the net
+    aim = rank === 1
+      ? V3(pred.x * 0.5, 0, gz * 0.45 + pred.z * 0.55)
+      : V3(pred.x * 0.3, 0, gz * 0.82 + pred.z * 0.18);
     // ball threatening our goal → clear it (hit it from the goal side)
     if (Math.abs(pred.z - gz) < 24){
       const away = V3(pred.x, 0, pred.z - gz); away.normalize();
@@ -1336,8 +1542,11 @@ function stepBot(p, dt){
   aim.z = THREE.MathUtils.clamp(aim.z, -FIELD_L/2 + 2.5, FIELD_L/2 - 2.5);
   const dot = steerTo(p, fwd, pos, aim);
   const distBall = pos.distanceTo(bp);
-  inp.boost = p.boost > 20 && dot > 0.88 && (pos.distanceTo(aim) > 9 || (distBall < 10 && closest));
-  if (bp.y > 2.6 && distBall < 6 && p.botT <= 0){ inp.jump = true; p.botT = rnd(1, 2.5); }
+  inp.boost = p.boost > 20 && dot > 0.88 && (pos.distanceTo(aim) > 10 || (distBall < 12 && closest));
+  // aerials: pop up for a reachable airborne ball you're actually facing
+  if (bp.y > 2.2 && bp.y < 5.2 && distBall < 7.5 && dot > 0.6 && p.botT <= 0){
+    inp.jump = true; p.botT = rnd(0.9, 2.2);
+  }
 }
 function steerTo(p, fwd, pos, aim){
   const dx = aim.x - pos.x, dz = aim.z - pos.z;
@@ -1529,10 +1738,19 @@ function goalFeed(team, by, own){
   feed(p ? (own ? `${col(p)} scored an OWN GOAL…` : `⚽ ${col(p)} SCORES!`)
     : `⚽ GOAL for ${team === 0 ? "CYAN" : "ORANGE"}`);
 }
+// chassis collider = convex hull of the (chamfered, possibly dented) hull mesh;
+// mesh local space == collider space, so nose angles are physically real
+function chassisDescFrom(hullMesh){
+  let desc = null;
+  if (RAPIER.ColliderDesc.convexHull && hullMesh)
+    desc = RAPIER.ColliderDesc.convexHull(new Float32Array(hullMesh.geometry.attributes.position.array));
+  if (!desc) desc = RAPIER.ColliderDesc.cuboid(1.1, 0.38, 2.0);
+  return desc.setFriction(0.35).setRestitution(0.22);
+}
 function recreateBody(p){
   const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
     .setTranslation(0, 3, 0).setLinearDamping(0.12).setAngularDamping(1.4).setCcdEnabled(true));
-  p.chassisCol = world.createCollider(RAPIER.ColliderDesc.cuboid(1.1, 0.38, 2.0).setFriction(0.35).setRestitution(0.22), body);
+  p.chassisCol = world.createCollider(chassisDescFrom(p.hullMesh), body);
   world.createCollider(RAPIER.ColliderDesc.cuboid(0.7, 0.16, 1.2).setTranslation(0,-0.34,0).setDensity(3.2).setFriction(0.35), body);
   return { body };
 }
@@ -1594,6 +1812,7 @@ function stepGame(dt){
   }
   stepRams(dt, authoritative);
   stepSalvage(dt); // pickup is host-gated inside; spin/pulse runs everywhere
+  stepWalls(dt);   // wall slams (host-gated inside)
 }
 function koPlayer(p, demolished = true){ // demolition is the only death in WRECKBALL
   p.alive = false; p.respawnT = 3;       // back in 3s — a power play, not an elimination
@@ -1714,7 +1933,7 @@ function stepCamera(dt){
   const q = target.group.quaternion;
   const back = V3(0, 0, -1).applyQuaternion(q); back.y = 0;
   if (back.lengthSq() < 0.01) back.set(0,0,-1); back.normalize();
-  const want = V3(p.x + back.x*9.5, p.y + 5.2, p.z + back.z*9.5); // BEHIND the truck
+  const want = V3(p.x + back.x*11, p.y + 5.8, p.z + back.z*11); // BEHIND the truck
   // keep camera above the court even during falls
   want.y = Math.max(want.y, -6);
   camPos.lerp(want, 1 - Math.pow(0.0012, dt));
@@ -1734,7 +1953,7 @@ function stepCamera(dt){
   let spd = 0;
   if (target.body){ const v = target.body.linvel(); spd = Math.hypot(v.x, v.z); }
   else if (target.netVel) spd = Math.hypot(target.netVel.x, target.netVel.z);
-  const wantFov = 66 + Math.min(18, spd*0.55);
+  const wantFov = 66 + Math.min(24, spd*0.5);
   camera.fov += (wantFov - camera.fov)*0.08; camera.updateProjectionMatrix();
   document.getElementById("spd").textContent = Math.round(spd*3.6);
   const m = me();
@@ -1807,6 +2026,11 @@ function stepVisuals(dt){
     mat.emissiveIntensity = 0.4 + h * 1.6;
     const light = BALL.mesh.children[0];
     if (light){ light.intensity = 26 + h * 70; light.color.setRGB(0.55 + h * 0.45, 0.65 - h * 0.2, 1 - h * 0.7); }
+    if (BALL.shellMat){ BALL.shellMat.opacity = 0.14 + h * 0.35;
+      BALL.shellMat.color.setRGB(0.53 + h * 0.47, 0.66 - h * 0.25, 1 - h * 0.75); }
+    // goal mouths breathe
+    const pulse = 0.45 + Math.sin(performance.now() * 0.003) * 0.14;
+    for (const gm of goalMouths) gm.material.opacity = pulse;
     if (h > 0.55 && Math.random() < h * 0.6)
       emit(bp.x + rnd(-1,1), bp.y + rnd(-1,1), bp.z + rnd(-1,1), 0xffcc55, 1, 2, .3, -3); // heat shimmer
   }
@@ -1860,73 +2084,55 @@ function stepVisuals(dt){
 }
 
 /* ============================================================
-   NETCODE — host-authoritative over WebRTC DataChannels.
-   Copy-paste signaling (deflate+base64url compressed SDP).
-   host: sim + sends snapshots (20 Hz) + events. guests: send
-   inputs (30 Hz), interpolate snapshots.
+   NETCODE — host-authoritative over PeerJS (WebRTC + free cloud
+   signaling). ONE speakable 4-digit code: host reads it out,
+   guest types it. host: sim + snapshots (20 Hz) + events.
+   guests: send inputs (30 Hz), interpolate snapshots.
    ============================================================ */
-const guests = [];          // host: [{pc, dc, idx(guest number), connected, lastInput}]
-let hostConn = null;        // guest: {pc, dc}
-let myGuestIdx = -1;        // guest: which guest slot I am (0-based); player id = 1+idx
+const guests = [];          // host: [{conn, idx, connected, lastInput}]
+let hostConn = null;        // guest: DataConnection to host
+let myGuestIdx = -1;        // guest: which guest slot I am (0-based)
 let snapTick = 0;
+let peer = null, PeerLib = null;
 
-async function sdpEncode(desc){
-  const raw = JSON.stringify({ t: desc.type, s: desc.sdp });
-  const cs = new CompressionStream("deflate-raw");
-  const w = cs.writable.getWriter(); w.write(new TextEncoder().encode(raw)); w.close();
-  const buf = new Uint8Array(await new Response(cs.readable).arrayBuffer());
-  let b = ""; for (const x of buf) b += String.fromCharCode(x);
-  return btoa(b).replaceAll("+","-").replaceAll("/","_");
+async function loadPeer(){
+  if (PeerLib) return PeerLib;
+  const m = await import("https://esm.sh/peerjs@1.5.5?bundle-deps");
+  PeerLib = m.default || m.Peer;
+  return PeerLib;
 }
-async function sdpDecode(code){
-  const b = atob(code.trim().replaceAll("-","+").replaceAll("_","/"));
-  const buf = new Uint8Array(b.length); for (let i=0;i<b.length;i++) buf[i] = b.charCodeAt(i);
-  const ds = new DecompressionStream("deflate-raw");
-  const w = ds.writable.getWriter(); w.write(buf); w.close();
-  const raw = await new Response(ds.readable).text();
-  const o = JSON.parse(raw); return { type: o.t, sdp: o.s };
-}
-function newPC(){ return new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] }); }
-function iceDone(pc){
-  return new Promise(res => {
-    if (pc.iceGatheringState === "complete") return res();
-    const to = setTimeout(res, 3500);
-    pc.addEventListener("icegatheringstatechange", () => {
-      if (pc.iceGatheringState === "complete"){ clearTimeout(to); res(); } });
-  });
-}
-function send(dc, obj){ if (dc && dc.readyState === "open") dc.send(JSON.stringify(obj)); }
-function broadcast(obj){ for (const g of guests) if (g.connected) send(g.dc, obj); }
+function send(conn, obj){ try { if (conn && conn.open) conn.send(obj); } catch (_) {} }
+function broadcast(obj){ for (const g of guests) if (g.connected) send(g.conn, obj); }
 function netEvent(obj){ if (G.role === "host") broadcast(obj); }
-function netTileEvent(i){ if (G.role === "host") broadcast({ t: "tilefall", i }); }
+function netTileEvent(_i){ /* legacy no-op */ }
 
 // ---- host side ----
-let pendingGuest = null;
-async function hostGenerateInvite(){
-  const pc = newPC();
-  const dc = pc.createDataChannel("game");
-  const g = { pc, dc, idx: guests.length, connected: false, lastInput: { th:0,st:0,jump:false,boost:false } };
-  pendingGuest = g;
-  dc.onopen = () => {
-    g.connected = true;
-    send(dc, { t: "welcome", idx: g.idx });
-    refreshSlots();
-  };
-  dc.onmessage = ev => hostOnMsg(g, JSON.parse(ev.data));
-  dc.onclose = () => { g.connected = false; refreshSlots(); };
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  await iceDone(pc);
-  return sdpEncode(pc.localDescription);
+async function startHosting(attempt = 0){
+  try {
+    const Peer = await loadPeer();
+    const code = String(1000 + Math.floor(Math.random() * 9000));
+    if (peer) { try { peer.destroy(); } catch (_) {} }
+    peer = new Peer("wreckball-" + code);
+    peer.on("open", () => {
+      $("hostCode").textContent = code;
+      $("invState").textContent = "read this code to your friends";
+    });
+    peer.on("error", e => {
+      if (e.type === "unavailable-id" && attempt < 4) return startHosting(attempt + 1); // code taken → reroll
+      $("invState").textContent = "signaling error: " + e.type + " (retry Host)";
+    });
+    peer.on("connection", conn => {
+      const g = { conn, idx: guests.length, connected: false,
+        lastInput: { th: 0, st: 0, jump: false, boost: false } };
+      conn.on("open", () => { g.connected = true; send(conn, { t: "welcome", idx: g.idx }); refreshSlots(); });
+      conn.on("data", m => hostOnMsg(g, m));
+      conn.on("close", () => { g.connected = false; refreshSlots(); });
+      guests.push(g);
+    });
+  } catch (e) { $("invState").textContent = "couldn't load PeerJS: " + e.message; }
 }
 function hostOnMsg(g, m){
-  if (m.t === "in") g.lastInput = m.i;
-}
-async function hostAcceptAnswer(code){
-  if (!pendingGuest) throw new Error("generate an invite first");
-  const desc = await sdpDecode(code);
-  await pendingGuest.pc.setRemoteDescription(desc);
-  guests.push(pendingGuest); pendingGuest = null;
+  if (m && m.t === "in") g.lastInput = m.i;
 }
 function hostSnapshot(){
   const trucks = players.map(p => {
@@ -1952,21 +2158,23 @@ function hostSnapshot(){
 
 // ---- guest side ----
 let snapPrev = null, snapCur = null, snapCurAt = 0, snapInterval = 55;
-async function guestFromOffer(code){
-  const pc = newPC();
-  hostConn = { pc, dc: null };
-  pc.ondatachannel = ev => {
-    hostConn.dc = ev.channel;
-    hostConn.dc.onmessage = e => guestOnMsg(JSON.parse(e.data));
-    hostConn.dc.onopen = () => { document.getElementById("joinWait").textContent = "Connected! Waiting for host to start…"; };
-    hostConn.dc.onclose = () => { fatal("Host disconnected."); };
-  };
-  const desc = await sdpDecode(code);
-  await pc.setRemoteDescription(desc);
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-  await iceDone(pc);
-  return sdpEncode(pc.localDescription);
+async function joinWithCode(code){
+  const Peer = await loadPeer();
+  if (peer) { try { peer.destroy(); } catch (_) {} }
+  peer = new Peer();
+  $("joinState").textContent = "connecting…";
+  peer.on("open", () => {
+    hostConn = peer.connect("wreckball-" + code.trim(), { reliable: true });
+    hostConn.on("open", () => { $("joinState").textContent = "";
+      $("joinWait").textContent = "Connected! Waiting for the host to start…"; });
+    hostConn.on("data", m => guestOnMsg(m));
+    hostConn.on("close", () => { $("joinWait").textContent = "Host disconnected."; });
+    hostConn.on("error", e => { $("joinState").textContent = "connection error: " + (e.type || e.message); });
+  });
+  peer.on("error", e => {
+    $("joinState").textContent = e.type === "peer-unavailable"
+      ? "no game with that code — check the digits" : "error: " + e.type;
+  });
 }
 function guestOnMsg(m){
   switch (m.t){
@@ -1997,6 +2205,9 @@ function guestOnMsg(m){
       buildScoreHud(); break; }
     case "dent": { const p = players[m.id]; if (p) deformHull(p, m.x, m.z, m.a); break; }
     case "crater": blastCrater(m.x, m.z, !!m.b); break;
+    case "fresh": { for (const p of players){ p.wins = 0; repairTruck(p); } G.score = [0, 0]; buildScoreHud(); break; }
+    case "wallD": { const w = walls[m.i]; if (w && !w.broken){ w.hp = m.hp; batterWall(w); } break; }
+    case "wallb": { const w = walls[m.i]; if (w) breakWall(w); break; }
     case "ko": { const p = players[m.id]; if (p && p.alive){ p.alive = false;
       const pos = p.group.position; emit(pos.x, Math.max(pos.y,-10), pos.z, p.color, 30, 14, .9);
       if (m.d){ emit(pos.x, pos.y + 1, pos.z, 0xffaa33, 40, 16, .8); G.slowT = Math.max(G.slowT, 0.4); }
@@ -2017,6 +2228,7 @@ function startMatchGuest(seed, roster){
   createBall(); // mesh only — guests don't simulate
   ["menu","hostCard","joinCard","resultOverlay"].forEach(id => document.getElementById(id).classList.remove("show"));
   G.mode = "playing"; G.phase = "countdown";
+  sfxGraceUntil = performance.now() + 900; // swallow the join-backlog audio burst
   buildScoreHud();
 }
 function guestResetRound(){
@@ -2094,7 +2306,7 @@ function guestStep(dt){
   guestStep._acc = (guestStep._acc || 0) + dt;
   if (guestStep._acc > 1/30){
     guestStep._acc = 0;
-    send(hostConn?.dc, { t: "in", i: readLocalInput() });
+    send(hostConn, { t: "in", i: readLocalInput() });
   }
 }
 
@@ -2110,7 +2322,6 @@ function refreshSlots(){
   };
   mk("YOU (host)", 0, "ready");
   guests.forEach((g, i) => mk("P" + (i+2), i+1, g.connected ? "connected" : "lost"));
-  if (pendingGuest) mk("P" + (guests.length+2), guests.length+1, "invite pending…");
 }
 const assignTeams = roster => roster.map((r, i) => ({ ...r, team: i % 2, slot: i >> 1 }));
 $("soloBtn").onclick = () => {
@@ -2124,26 +2335,13 @@ $("touchTog").onclick = () => {
   const on = document.body.classList.toggle("touch");
   $("touchTog").style.borderColor = on ? "var(--you)" : "var(--line)";
 };
-$("hostBtn").onclick = () => { $("menu").classList.remove("show"); $("hostCard").classList.add("show"); refreshSlots(); };
-$("joinBtn").onclick = () => { $("menu").classList.remove("show"); $("joinCard").classList.add("show"); };
+$("hostBtn").onclick = () => { $("menu").classList.remove("show"); $("hostCard").classList.add("show"); refreshSlots(); startHosting(); };
+$("joinBtn").onclick = () => { $("menu").classList.remove("show"); $("joinCard").classList.add("show"); setTimeout(() => $("codeIn").focus(), 50); };
 $("hostBack").onclick = () => { $("hostCard").classList.remove("show"); $("menu").classList.add("show"); };
 $("joinBack").onclick = () => { $("joinCard").classList.remove("show"); $("menu").classList.add("show"); };
-$("inviteBtn").onclick = async () => {
-  $("invState").textContent = "generating…";
-  try { $("offerOut").value = await hostGenerateInvite(); $("invState").textContent = "send it!"; refreshSlots(); }
-  catch (e){ $("invState").textContent = "failed: " + e.message; }
-};
-$("offerOut").onclick = e => { e.target.select(); document.execCommand?.("copy"); };
-$("answerOut").onclick = e => { e.target.select(); document.execCommand?.("copy"); };
-$("acceptBtn").onclick = async () => {
-  try { await hostAcceptAnswer($("answerIn").value); $("answerIn").value = ""; $("invState").textContent = "connecting…"; }
-  catch (e){ $("invState").textContent = "failed: " + e.message; }
-};
-$("replyBtn").onclick = async () => {
-  $("joinState").textContent = "generating…";
-  try { $("answerOut").value = await guestFromOffer($("offerIn").value); $("joinState").textContent = "send it back!"; }
-  catch (e){ $("joinState").textContent = "failed: " + e.message; }
-};
+$("joinGo").onclick = () => { const c = $("codeIn").value.trim(); if (c.length === 4) joinWithCode(c); else $("joinState").textContent = "enter the 4 digits"; };
+$("codeIn").addEventListener("keydown", e => { if (e.key === "Enter") $("joinGo").onclick(); e.stopPropagation(); });
+$("codeIn").addEventListener("keyup", e => e.stopPropagation());
 $("startBtn").onclick = () => {
   G.role = "host";
   let roster = [{ name: "YOU", human: true, guestIdx: -1 }];
@@ -2160,6 +2358,7 @@ $("resultBtn").onclick = () => {
   if (G.role === "guest") return; // host restarts for everyone
   for (const p of players){ p.wins = 0; repairTruck(p); }
   G.round = 0; G.score = [0, 0];
+  netEvent({ t: "fresh" }); // guests: repair ALL trucks (dents/tint too, not just pieces)
   startRound(); buildScoreHud();
 };
 $("resultMenu").onclick = () => location.reload();
