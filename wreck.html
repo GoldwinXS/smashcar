@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>WRECKBALL — car-ball carnage</title>
+<title>SMASHCAR — car-ball carnage</title>
 <style>
   :root{--ink:#e8f0ff;--muted:#8aa0c8;--you:#36e2ff;--boost:#ffd166;--line:#233056;--panel:rgba(12,18,40,0.9);}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -70,8 +70,8 @@
   <div class="pill"><span class="label">Score</span> <b id="round">0–0</b></div>
   <div class="pill"><span class="label">First to</span> <b id="alive">5</b></div>
   <div class="pill"><span class="label">Speed</span> <b id="spd">0</b></div>
-  <div class="pill" id="mutePill" style="pointer-events:auto;cursor:pointer">&#128266;</div>
-  <div class="pill" id="musicPill" style="pointer-events:auto;cursor:pointer">&#127925;</div>
+  <div class="pill" id="mutePill" style="pointer-events:auto;cursor:pointer"></div>
+  <div class="pill" id="musicPill" style="pointer-events:auto;cursor:pointer"><span data-ic="music"></span></div>
 </div>
 <div id="toast"></div>
 <div id="danger"></div>
@@ -88,16 +88,16 @@
 
 <div class="overlay show" id="menu">
   <div class="card">
-    <p class="tag">Car-ball carnage &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v17</span></p>
-    <h1>WRECKBALL</h1>
+    <p class="tag">Car-ball carnage &middot; real rigid bodies &middot; P2P &middot; <span id="ver">v18</span></p>
+    <h1>SMASHCAR</h1>
     <p>Rocket-powered trucks, one giant ball, two goals — <b>and full-contact demolition.</b> Smash the ball into the enemy goal. Smash the enemy while you're at it. <b>First to 5 goals wins.</b> Nobody falls off, nobody's eliminated.</p>
     <ul>
       <li><b>W/S</b> drive &middot; <b>A/D</b> steer &middot; <b>Shift</b> boost &middot; <b>Space</b> jump (again in air = flip-dodge) &middot; <b>R</b> flip upright</li>
       <li><b>Phone:</b> hold the left pad to drive, slide to steer, pull down to reverse &middot; right-side <b>BOOST / JUMP / FLIP</b></li>
-      <li><b>Destruction is a power play:</b> ram enemies to crush real dents in, tear off their bumpers and wheels — a battered truck is slow and pulls sideways. Beat one to <b>0% hull</b> and it's &#128165; <b>DEMOLISHED</b> — gone for 3 seconds while you attack the open net.</li>
+      <li><b>Destruction is a power play:</b> ram enemies to crush real dents in, tear off their bumpers and wheels — a battered truck is slow and pulls sideways. Beat one to <b>0% hull</b> and it's <span data-ic="burst"></span> <b>DEMOLISHED</b> — gone for 3 seconds while you attack the open net.</li>
       <li><b>Powerup pads</b> spawn around the court: <b style="color:#62f3a8">REPAIR</b>, <b style="color:#ffd166">OVERDRIVE</b> (8s of raw speed), <b style="color:#9fb8e8">SHIELD</b> (bolts armor plates all around your truck that soak hits and shear off when cracked). Wrecks drop <b style="color:#62f3a8">salvage</b> to patch your hull. Everyone gets a fresh truck at every kickoff.</li>
-      <li>&#128293; <b>HOT BALL:</b> hard strikes heat it up — a white-hot ball <b>wrecks whatever it slams into</b>. Hitting the ball is always safe; standing in front of a screamer is not. Goals cool it off.</li>
-      <li>&#128165; Demolitions and mega-shots <b>blast craters in the pitch</b> — by the late game you're playing on a battlefield.</li>
+      <li><span data-ic="flame"></span> <b>HOT BALL:</b> hard strikes heat it up — a white-hot ball <b>wrecks whatever it slams into</b>. Hitting the ball is always safe; standing in front of a screamer is not. Goals cool it off.</li>
+      <li><span data-ic="burst"></span> Demolitions and mega-shots <b>blast craters in the pitch</b> — by the late game you're playing on a battlefield.</li>
     </ul>
     <div class="row">
       <label class="lab" style="font-size:12px">Match
@@ -108,7 +108,7 @@
     <div class="row">
       <button id="hostBtn">Host online</button>
       <button id="joinBtn">Join a friend</button>
-      <button id="touchTog">&#128241; Touch pad</button>
+      <button id="touchTog"><span data-ic="phone"></span> Touch pad</button>
       <span class="lab" style="font-size:11px">online = one 4-digit code, that's it</span>
     </div>
   </div>
@@ -167,6 +167,24 @@ import * as THREE from "three";
 const errEl = document.getElementById("err");
 const fatal = (m) => { errEl.textContent += m + "\n"; };
 window.addEventListener("error", e => fatal("ERR: " + e.message));
+
+// ---------------- SVG icons (no emoji anywhere) ----------------
+const ICON = {
+  vol:   '<path d="M4 9v6h4l5 5V4L8 9z"/><path d="M16 8a5 5 0 0 1 0 8" fill="none" stroke="currentColor" stroke-width="2"/>',
+  mute:  '<path d="M4 9v6h4l5 5V4L8 9z"/><path d="M15 9l6 6M21 9l-6 6" stroke="currentColor" stroke-width="2"/>',
+  music: '<path d="M9 18V6l10-2v12" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="6.5" cy="18" r="2.4"/><circle cx="16.5" cy="16" r="2.4"/>',
+  phone: '<rect x="7" y="3" width="10" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><line x1="10.5" y1="18" x2="13.5" y2="18" stroke="currentColor" stroke-width="2"/>',
+  burst: '<path d="M12 1l2.1 5 4.6-2.6-2 4.9 5 1.1-5 1.1 2 4.9-4.6-2.6L12 23l-2.1-5-4.6 2.6 2-4.9-5-1.1 5-1.1-2-4.9 4.6 2.6z"/>',
+  flame: '<path d="M12 2c1.2 4 5 5 5 9.5A5 5 0 0 1 7 11.5c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-4.5-1-8z"/>',
+  ball:  '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 6.4l3.3 2.4-1.25 4h-4.1l-1.25-4z"/>',
+  bolt:  '<path d="M13 2L4 14h6l-1 8 9-12h-6z"/>',
+  shield:'<path d="M12 2l8 3v6c0 5-3.4 9-8 11-4.6-2-8-6-8-11V5z"/>'
+};
+function ic(name, em = 1){
+  return `<svg viewBox="0 0 24 24" width="${em}em" height="${em}em" fill="currentColor" style="display:inline-block;vertical-align:-0.15em;margin:0 .08em">${ICON[name] || ""}</svg>`;
+}
+// fill any <span data-ic="name"> placeholders in the static markup
+document.querySelectorAll("[data-ic]").forEach(el => el.innerHTML = ic(el.dataset.ic, +(el.dataset.em || 1)));
 
 let RAPIER;
 try {
@@ -449,11 +467,11 @@ const crowd = {
 };
 function setMuted(m){ muted = m; localStorage.setItem("wreckMute", m ? "1" : "0");
   if (master) master.gain.value = m ? 0 : 0.5;
-  const el = document.getElementById("mutePill"); if (el) el.textContent = m ? "\u{1F507}" : "\u{1F50A}"; }
+  const el = document.getElementById("mutePill"); if (el) el.innerHTML = ic(m ? "mute" : "vol"); }
 function setMusic(on){ MUSIC.on = on; localStorage.setItem("wreckMusic", on ? "1" : "0");
   const el = document.getElementById("musicPill"); if (el) el.style.opacity = on ? 1 : 0.4; }
 addEventListener("keydown", e => { if (e.code === "KeyM") setMuted(!muted); });
-if (muted){ const el = document.getElementById("mutePill"); if (el) el.textContent = "\u{1F507}"; }
+{ const el = document.getElementById("mutePill"); if (el) el.innerHTML = ic(muted ? "mute" : "vol"); }
 
 // ---------------- particles ----------------
 const PMAX = 1600;
@@ -774,9 +792,10 @@ function buildStadium(){
   const headMat = new THREE.MeshBasicMaterial({ color: 0xdfeaff });
   const coneMat = new THREE.MeshBasicMaterial({ color: 0x9db8ff, transparent: true, opacity: 0.06,
     blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  // unit beam: apex at origin, length 1 downward — scaled per tower so every
-  // beam actually REACHES its floor target (no more beams ending mid-air)
-  const beamGeo = new THREE.ConeGeometry(1, 1, 20, 1, true);
+  // unit beam: apex at origin, length 1 downward. aimed STEEPLY down with the
+  // wide end pushed BELOW the floor, so the cone's base is hidden by the pitch
+  // (you only ever see the beam, never its flat bottom)
+  const beamGeo = new THREE.ConeGeometry(1, 1, 24, 1, true);
   beamGeo.translate(0, -0.5, 0);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]){
     const x = sx * (HW + 7), z = sz * (HL + 7);
@@ -784,11 +803,11 @@ function buildStadium(){
     pole.position.set(x, 8.5, z); g.add(pole);
     const head = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.2, 1.2), headMat);
     head.position.set(x, 17.2, z); head.lookAt(0, 0, 0); g.add(head);
-    const headP = V3(x, 17.2, z), target = V3(x * 0.3, 0, z * 0.3);
+    const headP = V3(x, 17.2, z), target = V3(x * 0.14, -6, z * 0.14); // steeper + ends under the floor
     const len = headP.distanceTo(target);
     const cone = new THREE.Mesh(beamGeo, coneMat);
     cone.position.copy(headP);
-    cone.scale.set(len * 0.4, len, len * 0.4);
+    cone.scale.set(len * 0.32, len, len * 0.32); // narrower flare = more of a beam
     cone.quaternion.setFromUnitVectors(V3(0, -1, 0), target.sub(headP).normalize());
     g.add(cone);
   }
@@ -799,7 +818,7 @@ function buildStadium(){
     sp.target.position.set(0, 0, 0); g.add(sp); g.add(sp.target);
   }
   // glowing ad boards along the side walls
-  const ads = ["WRECKBALL", "CRUMB COLA", "RAPIER PHYSICS", "TOAST INSURANCE", "VOID AIRLINES", "SALVAGE & SONS"];
+  const ads = ["SMASHCAR", "CRUMB COLA", "RAPIER PHYSICS", "TOAST INSURANCE", "VOID AIRLINES", "SALVAGE & SONS"];
   ads.forEach((txt, i) => {
     const c = document.createElement("canvas"); c.width = 512; c.height = 96;
     const cx = c.getContext("2d");
@@ -842,7 +861,7 @@ function updateScoreboard(){
   c.strokeStyle = "#36e2ff"; c.lineWidth = 3; c.strokeRect(4, 4, 504, 184);
   c.textAlign = "center"; c.textBaseline = "middle";
   c.font = "bold 22px 'Segoe UI',sans-serif"; c.fillStyle = "#8aa0c8";
-  c.fillText("W R E C K B A L L", 256, 30);
+  c.fillText("S M A S H C A R", 256, 30);
   c.font = "900 96px 'Segoe UI',sans-serif";
   c.fillStyle = "#36e2ff"; c.fillText(String(G.score[0]), 140, 105);
   c.fillStyle = "#e8f0ff"; c.fillText("–", 256, 100);
@@ -877,7 +896,7 @@ function createBall(){
     BALL.body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(0, BALL_R + 2, 0).setLinearDamping(0.22).setAngularDamping(0.6).setCcdEnabled(true));
     world.createCollider(RAPIER.ColliderDesc.ball(BALL_R)
-      .setDensity(0.16).setFriction(0.5).setRestitution(0.86), BALL.body); // BOUNCY
+      .setDensity(0.16).setFriction(0.5).setRestitution(0.93), BALL.body); // extra BOUNCY
   }
   BALL.lastTouch = -1;
 }
@@ -1058,10 +1077,24 @@ function truckMesh(color){
     w.add(new THREE.Mesh(hubGeo, new THREE.MeshBasicMaterial({ color: 0x9fb8e8 })));
     w.position.set(x*1.06, -0.42, z); g.add(w); wheels.push(w);
   }
-  // boost flame (hidden by default)
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.5, 10),
-    new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: .9 }));
-  flame.rotation.x = -Math.PI/2; flame.position.set(0, -0.05, -2.6); flame.visible = false; g.add(flame);
+  // boost flame — layered afterburner: blue-white core + orange plume + glow,
+  // twin nozzles behind the exhausts (hidden by default)
+  const flame = new THREE.Group(); flame.visible = false;
+  const plumeMat = new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: .85,
+    blending: THREE.AdditiveBlending, depthWrite: false });
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0xbfe4ff, transparent: true, opacity: .95,
+    blending: THREE.AdditiveBlending, depthWrite: false });
+  const glowMat2 = new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: .4,
+    blending: THREE.AdditiveBlending, depthWrite: false });
+  for (const sx of [-1, 1]){
+    const plume = new THREE.Mesh(new THREE.ConeGeometry(0.24, 1.7, 12), plumeMat);
+    plume.rotation.x = Math.PI/2; plume.position.set(sx * 0.62, 0.12, -2.15); flame.add(plume);
+    const core = new THREE.Mesh(new THREE.ConeGeometry(0.12, 1.05, 10), coreMat);
+    core.rotation.x = Math.PI/2; core.position.set(sx * 0.62, 0.12, -1.85); flame.add(core);
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8), glowMat2);
+    halo.position.set(sx * 0.62, 0.12, -1.55); flame.add(halo);
+  }
+  g.add(flame);
   g.userData.flame = flame;
   // team-color underglow: soft radial light pool (no hard-edged rectangle)
   if (!truckMesh._glowTex){
@@ -1968,8 +2001,8 @@ function scoreGoal(team){
 function goalFeed(team, by, own){
   const col = pl => `<b style="color:#${pl.color.toString(16).padStart(6,"0")}">${pl.name}</b>`;
   const p = by >= 0 ? players[by] : null;
-  feed(p ? (own ? `${col(p)} scored an OWN GOAL…` : `⚽ ${col(p)} SCORES!`)
-    : `⚽ GOAL for ${team === 0 ? "CYAN" : "ORANGE"}`);
+  feed(p ? (own ? `${col(p)} scored an OWN GOAL…` : `${ic("ball")} ${col(p)} SCORES!`)
+    : `${ic("ball")} GOAL for ${team === 0 ? "CYAN" : "ORANGE"}`);
 }
 // chassis collider = convex hull of the (chamfered, possibly dented) hull mesh;
 // mesh local space == collider space, so nose angles are physically real
@@ -2070,7 +2103,7 @@ function koPlayer(p, demolished = true){ // demolition is the only death in WREC
 function koFeed(p, killerId){
   const col = pl => `<b style="color:#${pl.color.toString(16).padStart(6,"0")}">${pl.name}</b>`;
   const k = killerId >= 0 ? players[killerId] : null;
-  feed(k ? `${col(k)} \u{1F4A5} DEMOLISHED ${col(p)}` : `${col(p)} was \u{1F4A5} DEMOLISHED`);
+  feed(k ? `${col(k)} ${ic("burst")} DEMOLISHED ${col(p)}` : `${col(p)} was ${ic("burst")} DEMOLISHED`);
 }
 function endMatchTeam(team){
   G.phase = "matchend";
@@ -2083,7 +2116,7 @@ function showResultTeam(team){
   document.getElementById("resultTitle").textContent =
     (mine ? "YOUR TEAM TAKES IT " : tName + " TAKES IT ") + G.score[0] + "–" + G.score[1];
   document.getElementById("resultBody").innerHTML =
-    players.map(p => `<b style="color:#${p.color.toString(16).padStart(6,"0")}">${p.name}</b> ${p.wins}⚽`).join(" &middot; ");
+    players.map(p => `<b style="color:#${p.color.toString(16).padStart(6,"0")}">${p.name}</b> ${p.wins}${ic("ball")}`).join(" &middot; ");
   document.getElementById("resultOverlay").classList.add("show");
 }
 
@@ -2200,9 +2233,9 @@ function stepCamera(dt){
       : m.hull < 70 ? "linear-gradient(90deg,#a87a15,#ffd166)" : "linear-gradient(90deg,#1577a8,#36e2ff)";
     const ap = document.getElementById("armorPips");
     let fx = "";
-    if (m.overT > 0) fx += `<b style="color:#ffd166">⚡ ${Math.ceil(m.overT)}s</b> `;
+    if (m.overT > 0) fx += `<b style="color:#ffd166">${ic("bolt")} ${Math.ceil(m.overT)}s</b> `;
     const plates = armorPlatesFrom(m.armorMask || 0);
-    if (plates > 0) fx += `<b style="color:#9fb8e8">\u{1F6E1} ${plates}</b>`;
+    if (plates > 0) fx += `<b style="color:#9fb8e8">${ic("shield")} ${plates}</b>`;
     ap.innerHTML = fx;
   }
   // engine + boost audio follow MY truck
@@ -2296,7 +2329,9 @@ function stepVisuals(dt){
   for (const p of players){
     const flame = p.group.userData.flame;
     if (flame){ flame.visible = !!p.boosting && p.alive;
-      if (flame.visible){ flame.scale.setScalar(rnd(0.8,1.25)); } }
+      if (flame.visible){ // flicker length + slight width jitter per nozzle
+        flame.scale.set(rnd(0.85, 1.15), rnd(0.85, 1.15), rnd(0.9, 1.35));
+      } }
     const ug = p.group.userData.underglow;
     if (ug){
       ug.material.opacity = p.boosting ? 0.6 : 0.32;
@@ -2316,8 +2351,12 @@ function stepVisuals(dt){
     let spd = 6;
     if (p.body){ const v = p.body.linvel(); spd = Math.hypot(v.x, v.z); }
     for (const w of p.wheels) w.rotation.x += spd*dt*1.8;
-    // boost trail
-    if (p.boosting && p.alive && Math.random() < 0.5){
+    // boost trail — richer sparks streaming from the twin nozzles
+    if (p.boosting && p.alive){
+      for (const sx of [-1, 1]) if (Math.random() < 0.7){
+        tmpV.set(sx * 0.62, 0.12, -2.5).applyQuaternion(p.group.quaternion).add(p.group.position);
+        emit(tmpV.x, tmpV.y, tmpV.z, Math.random() < 0.4 ? 0xbfe4ff : 0xff8a2a, 1, 4, .3, 6);
+      }
       const pos = p.group.position;
       emit(pos.x, pos.y, pos.z, 0xffd166, 1, 3, .3);
     }
@@ -2374,7 +2413,7 @@ async function startHosting(attempt = 0){
     const Peer = await loadPeer();
     const code = String(1000 + Math.floor(Math.random() * 9000));
     if (peer) { try { peer.destroy(); } catch (_) {} }
-    peer = new Peer("wreckball-" + code);
+    peer = new Peer("smashcar-" + code);
     peer.on("open", () => {
       $("hostCode").textContent = code;
       $("invState").textContent = "read this code to your friends";
@@ -2428,7 +2467,7 @@ async function joinWithCode(code){
   peer = new Peer();
   $("joinState").textContent = "connecting…";
   peer.on("open", () => {
-    hostConn = peer.connect("wreckball-" + code.trim(), { reliable: true });
+    hostConn = peer.connect("smashcar-" + code.trim(), { reliable: true });
     hostConn.on("open", () => { $("joinState").textContent = "";
       $("joinWait").textContent = "Connected! Waiting for the host to start…"; });
     hostConn.on("data", m => guestOnMsg(m));
